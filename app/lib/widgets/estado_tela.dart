@@ -49,6 +49,7 @@ class _EstadoTelaState<T> extends State<EstadoTela<T>> {
     });
     try {
       final r = await widget.carregar();
+      if (r.dados is! T) throw ErroApi(200, 'Resposta inesperada do servidor');
       if (mounted) setState(() => _r = r);
     } catch (e) {
       if (mounted) setState(() => _erro = e);

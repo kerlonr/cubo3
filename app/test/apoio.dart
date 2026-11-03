@@ -13,6 +13,9 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// GETs que devolvem objeto (o resto das listagens devolve lista).
+const objetos = {'/api/estoque', '/api/painel', '/api/empresa/config'};
+
 http.Response json(Object? corpo, [int status = 200]) =>
     http.Response.bytes(utf8.encode(jsonEncode(corpo)), status, headers: {'content-type': 'application/json'});
 
@@ -63,7 +66,10 @@ class Ambiente {
             return v is http.Response ? v : json(v);
           }
           if (r.url.path == '/api/eu') return json(euJson(papel: papel));
-          if (r.method == 'GET') return json(r.url.path.split('/').length > 3 ? {} : []);
+          if (r.method == 'GET') {
+            final objeto = r.url.pathSegments.length > 2 || objetos.contains(r.url.path);
+            return json(objeto ? {} : []);
+          }
           return json(r.method == 'PUT' || r.method == 'POST' ? jsonDecode(r.body.isEmpty ? '{}' : r.body) : {'ok': true});
         }),
         Uri.parse('https://teste'),
