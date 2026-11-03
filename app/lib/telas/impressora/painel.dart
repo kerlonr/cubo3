@@ -4,7 +4,7 @@ import '../../api/modelos.dart';
 import '../../tema.dart';
 import '../impressoes/impressora_tela.dart';
 
-/// Seção Painel: faixa "N a confirmar" e câmera, estado, temperaturas e pausar/continuar/cancelar.
+/// Seção Painel: faixa "N a confirmar" e câmera, estado, pausar/continuar/cancelar, temperaturas e mover.
 class PainelSecao extends StatelessWidget {
   const PainelSecao(
       {super.key, required this.impressora, required this.aConfirmar, required this.verHistorico, this.comCamera = true});
@@ -18,7 +18,7 @@ class PainelSecao extends StatelessWidget {
   Widget build(BuildContext context) => Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
+          constraints: const BoxConstraints(maxWidth: 1200),
           child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
             if (aConfirmar > 0) ...[
               Card(

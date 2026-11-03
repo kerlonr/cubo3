@@ -72,7 +72,7 @@ bool habilitado(WidgetTester tester, String texto) => tester
 void main() {
   testWidgets('mover 10 mm em X manda {acao: mover, eixo: X, distancia: 10}', (tester) async {
     final amb = ambiente();
-    await abrirSecao(tester, amb, 'Controle');
+    await abrirSecao(tester, amb, 'Painel');
     await tester.tap(find.byTooltip('X+'));
     await tester.pumpAndSettle();
     expect(comandos(amb).single, {'acao': 'mover', 'eixo': 'X', 'distancia': 10});
@@ -86,7 +86,7 @@ void main() {
   testWidgets('toque duplo enquanto o comando está no ar manda uma vez só', (tester) async {
     final resposta = Completer<Object?>();
     final amb = ambiente(comando: (_) => resposta.future);
-    await abrirSecao(tester, amb, 'Controle');
+    await abrirSecao(tester, amb, 'Painel');
     await tester.tap(find.text('Home tudo'));
     await tester.pump();
     expect(habilitado(tester, 'Home tudo'), isFalse);
@@ -111,7 +111,7 @@ void main() {
 
   testWidgets('eixo sem home aparece como "sem home" e há aviso', (tester) async {
     final amb = ambiente();
-    await abrirSecao(tester, amb, 'Controle');
+    await abrirSecao(tester, amb, 'Painel');
     expect(find.text('sem home'), findsOneWidget, reason: 'Z ainda não fez home');
     expect(find.textContaining('Faça Home antes de mover'), findsOneWidget);
   });
@@ -136,7 +136,7 @@ void main() {
       primeira = false;
       return json({'detail': recusa}, 400);
     });
-    await abrirSecao(tester, amb, 'Controle');
+    await abrirSecao(tester, amb, 'Painel');
     await tester.tap(find.byTooltip('Y+'));
     await tester.pumpAndSettle();
     expect(find.text(recusa), findsOneWidget);
@@ -148,26 +148,34 @@ void main() {
   testWidgets('pausada: Home e Desligar motores bloqueados; mover e extrudar liberados (troca de filamento)',
       (tester) async {
     final amb = ambiente(estado: 'paused');
-    await abrirSecaoAnimada(tester, amb, 'Controle');
-    for (final b in ['Home tudo', 'Home XY', 'Home Z', 'Desligar motores']) {
+    await abrirSecaoAnimada(tester, amb, 'Painel');
+    for (final b in ['Home tudo', 'Home XY', 'Home Z']) {
       expect(habilitado(tester, b), isFalse, reason: b);
     }
-    expect(habilitado(tester, 'Extrudar'), isTrue);
     expect(find.textContaining('perdem a posição da peça'), findsOneWidget);
     await tester.tap(find.byTooltip('X+'));
     await passar(tester);
     expect(comandos(amb), [
       {'acao': 'mover', 'eixo': 'X', 'distancia': 10}
     ]);
+    await tester.tap(find.text('Controle'));
+    await passar(tester);
+    expect(habilitado(tester, 'Desligar motores'), isFalse);
+    expect(habilitado(tester, 'Extrudar'), isTrue);
   });
 
   testWidgets('imprimindo: aviso para pausar; ajuste fino de Z, ventoinha e temperaturas seguem', (tester) async {
     final amb = ambiente(estado: 'printing');
-    await abrirSecaoAnimada(tester, amb, 'Controle');
+    await abrirSecaoAnimada(tester, amb, 'Painel');
     expect(find.text('Pause a impressão para mover os eixos'), findsOneWidget);
-    for (final b in ['Home XY', 'Home Z', 'Retrair']) {
+    for (final b in ['Home XY', 'Home Z']) {
       expect(habilitado(tester, b), isFalse, reason: b);
     }
+    expect(habilitado(tester, 'Aplicar'), isTrue, reason: 'temperaturas seguem');
+    await tester.tap(find.text('Controle'));
+    await passar(tester);
+    expect(find.text('Pause a impressão para mover os eixos'), findsOneWidget);
+    expect(habilitado(tester, 'Retrair'), isFalse);
     expect(habilitado(tester, '+0,01'), isTrue);
     expect(habilitado(tester, 'Reiniciar firmware'), isTrue);
   });
@@ -175,11 +183,71 @@ void main() {
   testWidgets('409 do servidor (estado ainda não chegou) mostra a mensagem dele, sem oferecer Home', (tester) async {
     const recusa = 'Com a impressão pausada, home e desligar motores perdem a posição da peça';
     final amb = ambiente(comando: (_) => json({'detail': recusa}, 409));
-    await abrirSecao(tester, amb, 'Controle');
+    await abrirSecao(tester, amb, 'Painel');
     await tester.tap(find.text('Home tudo'));
     await tester.pumpAndSettle();
     expect(find.text(recusa), findsOneWidget);
     expect(find.text('Fazer Home'), findsNothing);
+  });
+
+  testWidgets('Painel do dono: câmera, estado, temperaturas e mover, nessa ordem; Controle fica com o resto',
+      (tester) async {
+    final amb = ambiente();
+    await abrirSecao(tester, amb, 'Painel');
+    double y(Finder f) => tester.getTopLeft(f.first).dy;
+    final ordem = [
+      find.text('Sem câmera'),
+      find.text('Temperaturas'),
+      find.text('Home tudo'),
+      find.byTooltip('X+'),
+    ];
+    for (var i = 1; i < ordem.length; i++) {
+      expect(y(ordem[i - 1]), lessThan(y(ordem[i])), reason: '${ordem[i - 1]} antes de ${ordem[i]}');
+    }
+    for (final t in ['0,1', '1', '10', '100']) {
+      expect(find.text(t), findsWidgets, reason: 'passo $t');
+    }
+    await irPara(tester, 'Controle');
+    expect(find.text('Home tudo'), findsNothing);
+    expect(find.byTooltip('X+'), findsNothing);
+    for (final t in ['Desligar motores', 'Extrudar', 'Ajuste fino de Z', 'Reiniciar firmware']) {
+      expect(find.text(t), findsOneWidget, reason: t);
+    }
+  });
+
+  testWidgets('mover pelo Painel não reabre o vídeo', (tester) async {
+    final amb = ambiente();
+    await abrirSecao(tester, amb, 'Painel');
+    for (final t in ['X+', 'Y−', 'Z+']) {
+      await tester.tap(find.byTooltip(t));
+      await tester.pumpAndSettle();
+    }
+    expect(comandos(amb), hasLength(3));
+    expect(amb.recebidos.where((r) => r.url.path == '/api/impressoras/i1/camera/link'), hasLength(1));
+    expect(find.text('Sem câmera'), findsOneWidget);
+  });
+
+  testWidgets('em 1280 dp: câmera à esquerda, temperaturas e mover à direita, sem rolar', (tester) async {
+    final amb = ambiente();
+    await amb.preparar();
+    await tamanhoTela(tester, 1280, 720);
+    await tester.pumpWidget(amb.tela(const ImpressoraAba()));
+    await tester.pumpAndSettle();
+    final camera = tester.getRect(find.text('Sem câmera'));
+    for (final f in [find.text('Temperaturas'), find.text('Home tudo'), find.byTooltip('X+'), find.byTooltip('Z−')]) {
+      final r = tester.getRect(f);
+      expect(r.left, greaterThan(camera.right), reason: '$f à direita da câmera');
+      expect(r.bottom, lessThan(720), reason: '$f visível sem rolar');
+    }
+  });
+
+  testWidgets('membro: Painel sem mover nem temperaturas', (tester) async {
+    final amb = ambiente();
+    await abrirSecao(tester, amb, 'Painel', papel: 'membro');
+    expect(find.text('Sem câmera'), findsOneWidget);
+    expect(find.text('Home tudo'), findsNothing);
+    expect(find.byTooltip('X+'), findsNothing);
+    expect(find.text('PETG'), findsNothing);
   });
 
   testWidgets('ventoinha envia ao soltar o controle deslizante', (tester) async {

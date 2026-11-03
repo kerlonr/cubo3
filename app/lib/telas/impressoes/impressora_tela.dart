@@ -8,9 +8,11 @@ import '../../api/modelos.dart';
 import '../../api/sessao.dart';
 import '../../tema.dart';
 import '../../util/formatos.dart';
+import '../../widgets/adaptativo.dart';
 import '../../widgets/camera_mjpeg.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
+import '../impressora/mover.dart';
 import '../mais/impressoras_tela.dart';
 import 'cartao_ao_vivo.dart';
 
@@ -25,7 +27,7 @@ class ImpressoraTela extends StatelessWidget {
         body: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
+            constraints: const BoxConstraints(maxWidth: 1200),
             child: ListView(padding: const EdgeInsets.all(16), children: [PainelImpressora(impressora: impressora)]),
           ),
         ),
@@ -45,7 +47,8 @@ class BotaoHistoricoKlipper extends StatelessWidget {
       );
 }
 
-/// Câmera, estado e controles (sem rolagem própria: vai dentro de uma lista).
+/// Câmera, estado e controles (sem rolagem própria: vai dentro de uma lista). Para o dono: temperaturas e mover
+/// junto da câmera; em tela larga (≥ 840 dp) a câmera fica à esquerda e eles à direita, para ver o vídeo movendo.
 /// [comCamera] false enquanto a aba está escondida: o vídeo não fica gastando dados.
 class PainelImpressora extends StatefulWidget {
   const PainelImpressora({super.key, required this.impressora, this.comCamera = true});
@@ -148,86 +151,106 @@ class _PainelImpressoraState extends State<PainelImpressora> {
   Widget build(BuildContext context) {
     final estado = context.watch<CanalAoVivo>().estados[_id]?.dados ?? _estado;
     final dono = context.watch<Sessao>().dono;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    final situacao = estado?['estado'] as String?;
+    final esquerda = [
       if (widget.comCamera) ...[CameraAoVivo(impressoraId: _id), const SizedBox(height: 8)],
       PainelAoVivo(nome: '${widget.impressora['nome']}', estado: estado),
-      if (dono) ..._controles(estado?['estado'] as String?),
+      if (dono) ..._impressao(situacao),
+    ];
+    final direita = [
+      if (dono) ...[..._secaoTemperaturas(situacao), MoverImpressora(impressoraId: _id, estado: estado ?? const {})],
+    ];
+    final emergencia = [
+      if (dono) ...[
+        const SizedBox(height: 32),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: vermelho, foregroundColor: Colors.white),
+          // Sempre tocável: nem outro comando no ar nem "sem conexão" (que um tempo esgotado também marca) a desligam.
+          onPressed: _emergencia,
+          icon: const Icon(Icons.dangerous_outlined),
+          label: const Text('Parada de emergência'),
+        ),
+      ],
+    ];
+    if (ClasseLargura.de(context) != ClasseLargura.expandido || direita.isEmpty) {
+      return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch, children: [...esquerda, ...direita, ...emergencia]);
+    }
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [...esquerda, ...emergencia])),
+      const SizedBox(width: 24),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: direita)),
     ]);
   }
 
-  List<Widget> _controles(String? estado) {
-    final pode = !_semConexao && !_enviando;
-    VoidCallback? se(VoidCallback f) => pode ? f : null;
-    return [
-      if (_semConexao)
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.cloud_off),
-            title: const Text('Sem conexão — comandos desativados'),
-            subtitle: const Text('Nada é guardado para depois.'),
-            trailing: TextButton(onPressed: _buscar, child: const Text('Tentar de novo')),
+  VoidCallback? _se(VoidCallback f) => !_semConexao && !_enviando ? f : null;
+
+  List<Widget> _impressao(String? estado) => [
+        if (_semConexao)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.cloud_off),
+              title: const Text('Sem conexão — comandos desativados'),
+              subtitle: const Text('Nada é guardado para depois.'),
+              trailing: TextButton(onPressed: _buscar, child: const Text('Tentar de novo')),
+            ),
           ),
-        ),
-      if (estado == 'printing' || estado == 'paused') ...[
-        const Secao('Impressão'),
+        if (estado == 'printing' || estado == 'paused') ...[
+          const Secao('Impressão'),
+          Row(children: [
+            Expanded(
+              child: estado == 'printing'
+                  ? OutlinedButton.icon(
+                      onPressed: _se(() => _comando('pausar', 'Pausando')),
+                      icon: const Icon(Icons.pause),
+                      label: const Text('Pausar'))
+                  : FilledButton.icon(
+                      onPressed: _se(() => _comando('continuar', 'Continuando')),
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Continuar')),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                  onPressed: _se(_cancelar), icon: const Icon(Icons.stop), label: const Text('Cancelar')),
+            ),
+          ]),
+        ],
+      ];
+
+  List<Widget> _secaoTemperaturas(String? estado) => [
+        const Secao('Temperaturas'),
         Row(children: [
           Expanded(
-            child: estado == 'printing'
-                ? OutlinedButton.icon(
-                    onPressed: se(() => _comando('pausar', 'Pausando')), icon: const Icon(Icons.pause), label: const Text('Pausar'))
-                : FilledButton.icon(
-                    onPressed: se(() => _comando('continuar', 'Continuando')),
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Continuar')),
+            child: TextField(
+                controller: _bico,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Bico', suffixText: '°C')),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: OutlinedButton.icon(
-                onPressed: se(_cancelar), icon: const Icon(Icons.stop), label: const Text('Cancelar')),
+            child: TextField(
+                controller: _mesa,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Mesa', suffixText: '°C')),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: _se(() {
+              final bico = lerNumero(_bico.text), mesa = lerNumero(_mesa.text);
+              if (bico != null || mesa != null) _temperaturas(bico, mesa);
+            }),
+            child: const Text('Aplicar'),
           ),
         ]),
-      ],
-      const Secao('Temperaturas'),
-      Row(children: [
-        Expanded(
-          child: TextField(
-              controller: _bico,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Bico', suffixText: '°C')),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-              controller: _mesa,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Mesa', suffixText: '°C')),
-        ),
-        const SizedBox(width: 8),
-        FilledButton(
-          onPressed: se(() {
-            final bico = lerNumero(_bico.text), mesa = lerNumero(_mesa.text);
-            if (bico != null || mesa != null) _temperaturas(bico, mesa);
-          }),
-          child: const Text('Aplicar'),
-        ),
-      ]),
-      const SizedBox(height: 8),
-      Wrap(spacing: 8, children: [
-        for (final a in atalhosTemperatura.entries)
-          ActionChip(
-            label: Text(a.key),
-            tooltip: '${a.value.bico}° / ${a.value.mesa}°',
-            onPressed: se(() => _atalho(a.value.bico, a.value.mesa, estado)),
-          ),
-      ]),
-      const SizedBox(height: 32),
-      FilledButton.icon(
-        style: FilledButton.styleFrom(backgroundColor: vermelho, foregroundColor: Colors.white),
-        // Sempre tocável: nem outro comando no ar nem "sem conexão" (que um tempo esgotado também marca) a desligam.
-        onPressed: _emergencia,
-        icon: const Icon(Icons.dangerous_outlined),
-        label: const Text('Parada de emergência'),
-      ),
-    ];
-  }
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, children: [
+          for (final a in atalhosTemperatura.entries)
+            ActionChip(
+              label: Text(a.key),
+              tooltip: '${a.value.bico}° / ${a.value.mesa}°',
+              onPressed: _se(() => _atalho(a.value.bico, a.value.mesa, estado)),
+            ),
+        ]),
+      ];
 }

@@ -3,13 +3,12 @@
 // 2) Provas dos bugs achados na revisão (corrigidos no 2.0.1).
 import 'dart:async';
 
-import 'package:cubo3/telas/impressora/impressora_aba.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'apoio.dart';
 import 'controle_test.dart' show abrir, abrirModelo, catalogo;
-import 'impressora_v2_test.dart' show abrirSecao, comandos, habilitado;
+import 'impressora_v2_test.dart' show abrirSecao, abrirSecaoAnimada, comandos, habilitado, passar;
 
 const _impressora = {'id': 'i1', 'nome': 'Ender', 'moonraker_url': 'http://192.168.1.110:7125'};
 
@@ -51,7 +50,7 @@ void main() {
 
     testWidgets('Home XY e Home Z mandam os eixos certos', (tester) async {
       final amb = _ambiente();
-      await abrirSecao(tester, amb, 'Controle');
+      await abrirSecao(tester, amb, 'Painel');
       await _tocar(tester, find.text('Home XY'));
       await _tocar(tester, find.text('Home Z'));
       expect(comandos(amb), [
@@ -62,7 +61,7 @@ void main() {
 
     testWidgets('setas Y+, Y−, X− e Z+ mandam eixo e sinal certos', (tester) async {
       final amb = _ambiente();
-      await abrirSecao(tester, amb, 'Controle');
+      await abrirSecao(tester, amb, 'Painel');
       for (final t in ['Y+', 'Y−', 'X−', 'Z+']) {
         await _tocar(tester, find.byTooltip(t));
       }
@@ -124,7 +123,7 @@ void main() {
 
     testWidgets('sem internet o comando falha na hora e nada fica na fila', (tester) async {
       final amb = _ambiente();
-      await abrirSecao(tester, amb, 'Controle');
+      await abrirSecao(tester, amb, 'Painel');
       amb.online = false;
       await _tocar(tester, find.text('Home tudo'));
       expect(amb.fila.pendentes, 0);
@@ -138,25 +137,19 @@ void main() {
     testWidgets('imprimindo: Home, mover, desligar motores e extrudar ficam bloqueados', (tester) async {
       final amb = _ambiente(estado: 'printing');
       // O Painel anima a barra de progresso imprimindo: pump com tempo em vez de pumpAndSettle.
-      await amb.preparar();
-      await tamanhoTela(tester, 420, 2400);
-      await tester.pumpWidget(amb.tela(const ImpressoraAba()));
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-      await tester.tap(find.text('Controle'));
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
+      await abrirSecaoAnimada(tester, amb, 'Painel');
       expect(find.text('Home tudo'), findsOneWidget);
       final bloqueados = {
         'Home tudo': 'G28 no meio da peça arrasta o bico nela',
         'Desligar motores': 'M84 no meio da peça perde a posição',
         'Extrudar': 'M83 no meio de peça em extrusão absoluta (Cura) a estraga',
       };
-      final liberados = [for (final b in bloqueados.keys) if (habilitado(tester, b)) b];
+      final liberados = [if (habilitado(tester, 'Home tudo')) 'Home tudo'];
       await tester.tap(find.byTooltip('X+'), warnIfMissed: false);
       await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Controle'));
+      await passar(tester);
+      liberados.addAll([for (final b in ['Desligar motores', 'Extrudar']) if (habilitado(tester, b)) b]);
       // Duas verificações: record com listas compara por identidade e nunca seria igual.
       expect(liberados, isEmpty, reason: bloqueados.values.join('; '));
       expect(comandos(amb), isEmpty, reason: 'seta X+ imprimindo');
