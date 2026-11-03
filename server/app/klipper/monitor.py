@@ -4,6 +4,7 @@ import json
 import logging
 import time
 import uuid
+from collections import deque
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -18,7 +19,9 @@ from app.klipper import moonraker
 from app.klipper.servico import registrar_trabalho
 
 log = logging.getLogger("cubo3.klipper")
-OBJETOS = {"print_stats": None, "display_status": None, "virtual_sdcard": None, "extruder": None, "heater_bed": None}
+OBJETOS = {"print_stats": None, "display_status": None, "virtual_sdcard": None, "extruder": None, "heater_bed": None,
+           "toolhead": None, "gcode_move": None, "fan": None}
+LINHAS_CONSOLE = 100
 INTERVALO_PUBLICACAO_S = 2
 
 
@@ -28,6 +31,7 @@ class Monitor:
         self.impressora_id, self.empresa_id, self.url, self.api_key = impressora_id, empresa_id, url, api_key
         self.sessoes, self.hub = sessoes, hub
         self.estado: dict | None = None
+        self.console: deque[dict] = deque(maxlen=LINHAS_CONSOLE)
         self._ultima_publicacao = 0.0
 
     def _publicar_estado(self) -> None:
@@ -90,6 +94,11 @@ class Monitor:
                 p = msg["params"][0]
                 if p.get("action") == "finished":
                     await self._em_thread(self._registrar, p["job"])
+            elif metodo == "notify_gcode_response":
+                for texto in msg.get("params") or []:
+                    linha = {"hora": datetime.now(timezone.utc).isoformat(), "texto": str(texto)}
+                    self.console.append(linha)
+                    self.hub.publicar(self.empresa_id, {"tipo": "console", "impressora_id": str(self.impressora_id), **linha})
             elif metodo in ("notify_klippy_disconnected", "notify_klippy_shutdown"):
                 self._atualizar({"print_stats": {"state": "desligada"}}, forcar=True)
 
@@ -148,6 +157,10 @@ class GerenciadorMonitores:
     def estado(self, impressora_id) -> dict | None:
         par = self._monitores.get(impressora_id)
         return moonraker.publico(par[0].estado) if par else None
+
+    def console(self, impressora_id) -> list[dict]:
+        par = self._monitores.get(impressora_id)
+        return list(par[0].console) if par else []
 
     def estados_da_empresa(self, empresa_id) -> list[dict]:
         return [{"tipo": "estado", "impressora_id": str(i), **moonraker.publico(m.estado)}

@@ -188,3 +188,55 @@ def test_monitor_recupera_trabalho_terminado_desconectado(cliente, dono, fabrica
     with fabrica() as s:
         jobs = sorted(i.job_id for i in s.scalars(select(Impressao).where(Impressao.empresa_id == empresa_a_id)))
     assert jobs == ["0000B1"]
+
+
+def test_mesclar_estado_completo():
+    e = moonraker.mesclar_estado({}, {
+        "toolhead": {"position": [10.0, 20.0, 5.0, 0.0], "homed_axes": "xy"},
+        "gcode_move": {"speed_factor": 1.5, "extrude_factor": 0.95, "homing_origin": [0, 0, -0.05, 0]},
+        "fan": {"speed": 0.5}, "display_status": {"message": "Aquecendo"}})
+    assert (e["posicao"], e["eixos_home"], e["velocidade_pct"], e["fluxo_pct"], e["z_offset"], e["ventoinha_pct"],
+            e["mensagem"]) == ([10.0, 20.0, 5.0], "xy", 150, 95, -0.05, 50, "Aquecendo")
+
+
+def test_console_ao_vivo(cliente, dono, fabrica, empresa_a_id):
+    from app.ao_vivo import Hub
+    from app.klipper.monitor import Monitor, monitores
+
+    imp = impressora(cliente, dono)
+    porta = _porta_livre()
+    recebidos = []
+
+    async def moonraker_falso(ws):
+        async for bruto in ws:
+            msg = json.loads(bruto)
+            await ws.send(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {}}))
+            if msg["method"] == "printer.objects.subscribe":
+                for i in range(105):
+                    await ws.send(json.dumps({"jsonrpc": "2.0", "method": "notify_gcode_response",
+                                              "params": [f"// linha {i}"]}))
+
+    class HubTeste(Hub):
+        def publicar(self, empresa_id, evento):
+            recebidos.append(evento)
+
+    async def cenario():
+        async with websockets.serve(moonraker_falso, "127.0.0.1", porta):
+            m = Monitor(uuid.UUID(imp["id"]), empresa_a_id, f"http://127.0.0.1:{porta}", None, fabrica, HubTeste())
+            tarefa = asyncio.create_task(m.rodar())
+            limite = time.monotonic() + 10
+            while time.monotonic() < limite and len([e for e in recebidos if e["tipo"] == "console"]) < 105:
+                await asyncio.sleep(0.05)
+            tarefa.cancel()
+            return m
+
+    m = asyncio.run(cenario())
+    console = [e for e in recebidos if e["tipo"] == "console"]
+    assert console[0]["texto"] == "// linha 0" and console[0]["impressora_id"] == imp["id"] and console[0]["hora"]
+    assert len(m.console) == 100 and m.console[-1]["texto"] == "// linha 104"
+    monitores._monitores[uuid.UUID(imp["id"])] = (m, None)  # simula o monitor rodando para a rota
+    try:
+        linhas = cliente.get(f"/api/impressoras/{imp['id']}/console", headers=dono).json()["linhas"]
+    finally:
+        monitores._monitores.pop(uuid.UUID(imp["id"]), None)
+    assert len(linhas) == 100 and linhas[0]["texto"] == "// linha 5"

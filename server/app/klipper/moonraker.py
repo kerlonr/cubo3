@@ -62,6 +62,10 @@ def trabalho_de_historico(job: dict) -> DadosTrabalho:
                          filamentos=filamentos, miniatura_rel=rel)
 
 
+def _pct(fator) -> int | None:
+    return None if fator is None else round(fator * 100)
+
+
 def mesclar_estado(estado: dict, status: dict) -> dict:
     objetos = {k: dict(v) for k, v in (estado.get("objetos") or {}).items()}
     for nome, campos in (status or {}).items():
@@ -73,9 +77,15 @@ def mesclar_estado(estado: dict, status: dict) -> dict:
     restante = None
     if progresso and duracao and ps.get("state") == "printing":
         restante = round(duracao / progresso - duracao)
+    th, gm, fan = objetos.get("toolhead", {}), objetos.get("gcode_move", {}), objetos.get("fan", {})
     return {"objetos": objetos, "estado": ps.get("state"), "arquivo": ps.get("filename"), "progresso": progresso,
             "duracao_s": duracao, "restante_s": restante, "bico": ext.get("temperature"), "bico_alvo": ext.get("target"),
-            "mesa": mesa.get("temperature"), "mesa_alvo": mesa.get("target")}
+            "mesa": mesa.get("temperature"), "mesa_alvo": mesa.get("target"),
+            "posicao": [round(v, 3) for v in th.get("position", [])[:3]] or None,
+            "eixos_home": th.get("homed_axes", ""),
+            "velocidade_pct": _pct(gm.get("speed_factor")), "fluxo_pct": _pct(gm.get("extrude_factor")),
+            "z_offset": (gm.get("homing_origin") or [None] * 3)[2], "ventoinha_pct": _pct(fan.get("speed")),
+            "mensagem": ds.get("message")}
 
 
 def publico(estado: dict | None) -> dict | None:
@@ -113,10 +123,35 @@ def baixar(url: str, chave: str | None, caminho_gcodes: str) -> bytes | None:
         return None
 
 
+class ErroKlipper(Exception):
+    """O Klipper recebeu e recusou (ex.: "Must home axis first"): a mensagem dele vai para o app."""
+
+
 def comando(url: str, chave: str | None, caminho: str, params: dict | None = None) -> dict:
-    r = httpx.post(f"{url.rstrip('/')}{caminho}", params=params, headers=_cabecalhos(chave), timeout=15)
+    r = httpx.post(f"{url.rstrip('/')}{caminho}", params=params, headers=_cabecalhos(chave), timeout=60)
+    if 400 <= r.status_code < 500:
+        try:
+            mensagem = r.json()["error"]["message"]
+        except (ValueError, KeyError, TypeError):
+            mensagem = r.text[:200]
+        raise ErroKlipper(mensagem)
     r.raise_for_status()
     return r.json()
+
+
+def listar_arquivos(url: str, chave: str | None) -> list[dict]:
+    # shortcut: só a raiz de gcodes (subpastas ignoradas); aprofundar se o Kerlon usar pastas.
+    r = httpx.get(f"{url.rstrip('/')}/server/files/directory", params={"path": "gcodes", "extended": "true"},
+                  headers=_cabecalhos(chave), timeout=15)
+    r.raise_for_status()
+    return r.json()["result"]["files"]
+
+
+def listar_macros(url: str, chave: str | None) -> list[str]:
+    r = httpx.get(f"{url.rstrip('/')}/printer/objects/list", headers=_cabecalhos(chave), timeout=TIMEOUT)
+    r.raise_for_status()
+    return [o.split(" ", 1)[1] for o in r.json()["result"]["objects"]
+            if o.startswith("gcode_macro ") and not o.split(" ", 1)[1].startswith("_")]
 
 
 def estado_impressao(url: str, chave: str | None) -> str:
