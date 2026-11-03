@@ -5,7 +5,7 @@ from typing import Literal
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -77,44 +77,176 @@ def trazer(id: uuid.UUID, job_id: str, c: Ctx = Depends(ctx), db: Session = Depe
 
 
 ACOES = {"pausar": "/printer/print/pause", "continuar": "/printer/print/resume",
-         "cancelar": "/printer/print/cancel", "emergencia": "/printer/emergency_stop"}
+         "cancelar": "/printer/print/cancel", "emergencia": "/printer/emergency_stop",
+         "reiniciar_firmware": "/printer/firmware_restart"}
 AQUECEDORES = {"bico": ("extruder", 300), "mesa": ("heater_bed", 120)}
 OCUPADA = {"printing", "paused"}
+HOME = {"XYZ": "G28 X Y Z", "XY": "G28 X Y", "Z": "G28 Z"}
+LIMITES = {"ventoinha": (0, 100), "velocidade": (10, 300), "fluxo": (50, 150)}
+
+
+def _entre(valor, minimo, maximo, nome):
+    if valor is None or not minimo <= abs(valor) <= maximo:
+        raise ValueError(f"{nome}: use um valor entre {minimo:g} e {maximo:g}")
 
 
 class Comando(BaseModel):
-    acao: Literal["pausar", "continuar", "cancelar", "emergencia", "temperatura"]
+    acao: Literal["pausar", "continuar", "cancelar", "emergencia", "reiniciar_firmware", "temperatura", "home",
+                  "mover", "motores_off", "extrudar", "ventoinha", "velocidade", "fluxo", "ajuste_z", "macro"]
     alvo: Literal["bico", "mesa"] | None = None
     valor: float | None = None
+    eixos: Literal["XYZ", "XY", "Z"] = "XYZ"
+    eixo: Literal["X", "Y", "Z"] | None = None
+    distancia: float | None = None
+    nome: str | None = Field(None, pattern=r"^[A-Za-z0-9_]+$")
 
     @model_validator(mode="after")
-    def _temperatura(self):
-        if self.acao == "temperatura":
+    def _validar(self):
+        a = self.acao
+        if a == "temperatura":
             if self.alvo is None or self.valor is None:
                 raise ValueError("Informe o aquecedor (bico ou mesa) e a temperatura")
             if not 0 <= self.valor <= AQUECEDORES[self.alvo][1]:
                 raise ValueError(f"Temperatura do {self.alvo} deve ficar entre 0 e {AQUECEDORES[self.alvo][1]} °C")
+        elif a == "mover":
+            if self.eixo is None:
+                raise ValueError("Informe o eixo (X, Y ou Z)")
+            _entre(self.distancia, 0.1, 100, "Distância (mm)")
+        elif a == "extrudar":
+            _entre(self.distancia, 0.1, 50, "Filamento (mm)")
+        elif a in LIMITES:
+            if self.valor is None or not LIMITES[a][0] <= self.valor <= LIMITES[a][1]:
+                raise ValueError(f"Use um valor entre {LIMITES[a][0]} e {LIMITES[a][1]} %")
+        elif a == "ajuste_z":
+            _entre(self.valor, 0.005, 0.5, "Ajuste de Z (mm)")
+        elif a == "macro" and not self.nome:
+            raise ValueError("Informe a macro")
         return self
+
+    def gcode(self) -> str:
+        a = self.acao
+        if a == "temperatura":
+            return f"SET_HEATER_TEMPERATURE HEATER={AQUECEDORES[self.alvo][0]} TARGET={self.valor:g}"
+        if a == "home":
+            return HOME[self.eixos]
+        if a == "mover":
+            return f"G91\nG1 {self.eixo}{self.distancia:g} F{600 if self.eixo == 'Z' else 6000}\nG90"
+        if a == "motores_off":
+            return "M84"
+        if a == "extrudar":
+            return f"M83\nG1 E{self.distancia:g} F300"
+        if a == "ventoinha":
+            return "M107" if self.valor == 0 else f"M106 S{int(self.valor * 255 / 100 + 0.5)}"
+        if a == "velocidade":
+            return f"M220 S{self.valor:g}"
+        if a == "fluxo":
+            return f"M221 S{self.valor:g}"
+        if a == "ajuste_z":
+            return f"SET_GCODE_OFFSET Z_ADJUST={self.valor:g} MOVE=1"
+        return self.nome  # macro
+
+
+class GcodeLivre(BaseModel):
+    script: str = Field(min_length=1, max_length=500)
+
+
+class ImprimirDaImpressora(BaseModel):
+    nome: str = Field(min_length=1, max_length=255)
 
 
 class Imprimir(BaseModel):
     impressora_id: uuid.UUID
 
 
-@rotas.post("/impressoras/{id}/comando")
-def enviar_comando(id: uuid.UUID, dados: Comando, c: Ctx = Depends(so_dono), db: Session = Depends(get_db)):
-    imp = _com_moonraker(db, c, id)
-    if dados.acao == "temperatura":
-        aquecedor = AQUECEDORES[dados.alvo][0]
-        caminho, params = "/printer/gcode/script", {
-            "script": f"SET_HEATER_TEMPERATURE HEATER={aquecedor} TARGET={dados.valor:g}"}
-    else:
-        caminho, params = ACOES[dados.acao], None
+def _executar(imp: Impressora, caminho: str, params: dict | None = None) -> dict:
     try:
         moonraker.comando(imp.moonraker_url, imp.api_key, caminho, params)
+    except moonraker.ErroKlipper as e:
+        raise HTTPException(400, f"Klipper: {e}")
     except httpx.HTTPError:
         raise HTTPException(502, "A impressora não respondeu")
     return {"ok": True}
+
+
+def _livre(imp: Impressora) -> None:
+    estado = (monitores.estado(imp.id) or {}).get("estado") or moonraker.estado_impressao(imp.moonraker_url, imp.api_key)
+    if estado in OCUPADA:
+        raise HTTPException(409, "A impressora está ocupada")
+
+
+@rotas.post("/impressoras/{id}/comando")
+def enviar_comando(id: uuid.UUID, dados: Comando, c: Ctx = Depends(so_dono), db: Session = Depends(get_db)):
+    imp = _com_moonraker(db, c, id)
+    if dados.acao in ACOES:
+        return _executar(imp, ACOES[dados.acao])
+    if dados.acao == "macro":
+        try:
+            existe = dados.nome in moonraker.listar_macros(imp.moonraker_url, imp.api_key)
+        except (httpx.HTTPError, KeyError, ValueError):
+            raise HTTPException(502, "A impressora não respondeu")
+        if not existe:
+            raise HTTPException(422, "Macro não existe nesta impressora")
+    return _executar(imp, "/printer/gcode/script", {"script": dados.gcode()})
+
+
+@rotas.post("/impressoras/{id}/gcode")
+def gcode_livre(id: uuid.UUID, dados: GcodeLivre, c: Ctx = Depends(so_dono), db: Session = Depends(get_db)):
+    return _executar(_com_moonraker(db, c, id), "/printer/gcode/script", {"script": dados.script})
+
+
+@rotas.get("/impressoras/{id}/arquivos")
+def arquivos_da_impressora(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    imp = _com_moonraker(db, c, id)
+    try:
+        lista = moonraker.listar_arquivos(imp.moonraker_url, imp.api_key)
+    except (httpx.HTTPError, KeyError, ValueError):
+        raise HTTPException(502, "A impressora não respondeu")
+    saida = []
+    for f in sorted(lista, key=lambda f: f.get("modified", 0), reverse=True):
+        mini = sorted(f.get("thumbnails") or [], key=lambda t: t.get("width", 0) * t.get("height", 0))
+        quando = moonraker._quando(f.get("modified"))
+        saida.append({"nome": f["filename"], "tamanho": f.get("size"),
+                      "modificado": quando.isoformat() if quando else None,
+                      "tempo_estimado_s": f.get("estimated_time"), "gramas": f.get("filament_weight_total"),
+                      "miniatura": mini[-1]["relative_path"] if mini else None})
+    return saida
+
+
+def _caminho_seguro(caminho: str) -> bool:
+    return ".." not in caminho and not caminho.startswith(("/", "\\")) and ":" not in caminho
+
+
+@rotas.get("/impressoras/{id}/arquivos/miniatura")
+def miniatura_da_impressora(id: uuid.UUID, caminho: str, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    if not _caminho_seguro(caminho) or not caminho.lower().endswith(".png"):
+        raise HTTPException(422, "Caminho de miniatura inválido")
+    imp = _com_moonraker(db, c, id)
+    conteudo = moonraker.baixar(imp.moonraker_url, imp.api_key, caminho)
+    if conteudo is None:
+        raise HTTPException(404, "Miniatura não encontrada")
+    return Response(conteudo, media_type="image/png", headers={"Cache-Control": "private, max-age=86400"})
+
+
+@rotas.post("/impressoras/{id}/arquivos/imprimir")
+def imprimir_da_impressora(id: uuid.UUID, dados: ImprimirDaImpressora, c: Ctx = Depends(so_dono),
+                           db: Session = Depends(get_db)):
+    if not _caminho_seguro(dados.nome):
+        raise HTTPException(422, "Nome de arquivo inválido")
+    imp = _com_moonraker(db, c, id)
+    try:
+        _livre(imp)
+    except (httpx.HTTPError, KeyError, ValueError):
+        raise HTTPException(502, "A impressora não respondeu")
+    return _executar(imp, "/printer/print/start", {"filename": dados.nome})
+
+
+@rotas.get("/impressoras/{id}/macros")
+def macros(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    imp = _com_moonraker(db, c, id)
+    try:
+        return [{"nome": n} for n in sorted(moonraker.listar_macros(imp.moonraker_url, imp.api_key))]
+    except (httpx.HTTPError, KeyError, ValueError):
+        raise HTTPException(502, "A impressora não respondeu")
 
 
 @rotas.post("/arquivos/{id}/imprimir")
@@ -124,9 +256,7 @@ def imprimir_arquivo(id: uuid.UUID, dados: Imprimir, c: Ctx = Depends(so_dono), 
         raise HTTPException(422, "Só dá para imprimir arquivo .gcode")
     imp = _com_moonraker(db, c, dados.impressora_id)
     try:
-        estado = (monitores.estado(imp.id) or {}).get("estado") or moonraker.estado_impressao(imp.moonraker_url, imp.api_key)
-        if estado in OCUPADA:
-            raise HTTPException(409, "A impressora está ocupada")
+        _livre(imp)
         moonraker.enviar_e_imprimir(imp.moonraker_url, imp.api_key, a.nome_original, config().arquivos_dir / a.caminho)
     except (httpx.HTTPError, KeyError, ValueError):
         raise HTTPException(502, "A impressora não respondeu")

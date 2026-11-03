@@ -123,10 +123,35 @@ def baixar(url: str, chave: str | None, caminho_gcodes: str) -> bytes | None:
         return None
 
 
+class ErroKlipper(Exception):
+    """O Klipper recebeu e recusou (ex.: "Must home axis first"): a mensagem dele vai para o app."""
+
+
 def comando(url: str, chave: str | None, caminho: str, params: dict | None = None) -> dict:
-    r = httpx.post(f"{url.rstrip('/')}{caminho}", params=params, headers=_cabecalhos(chave), timeout=15)
+    r = httpx.post(f"{url.rstrip('/')}{caminho}", params=params, headers=_cabecalhos(chave), timeout=60)
+    if 400 <= r.status_code < 500:
+        try:
+            mensagem = r.json()["error"]["message"]
+        except (ValueError, KeyError, TypeError):
+            mensagem = r.text[:200]
+        raise ErroKlipper(mensagem)
     r.raise_for_status()
     return r.json()
+
+
+def listar_arquivos(url: str, chave: str | None) -> list[dict]:
+    # shortcut: só a raiz de gcodes (subpastas ignoradas); aprofundar se o Kerlon usar pastas.
+    r = httpx.get(f"{url.rstrip('/')}/server/files/directory", params={"path": "gcodes", "extended": "true"},
+                  headers=_cabecalhos(chave), timeout=15)
+    r.raise_for_status()
+    return r.json()["result"]["files"]
+
+
+def listar_macros(url: str, chave: str | None) -> list[str]:
+    r = httpx.get(f"{url.rstrip('/')}/printer/objects/list", headers=_cabecalhos(chave), timeout=TIMEOUT)
+    r.raise_for_status()
+    return [o.split(" ", 1)[1] for o in r.json()["result"]["objects"]
+            if o.startswith("gcode_macro ") and not o.split(" ", 1)[1].startswith("_")]
 
 
 def estado_impressao(url: str, chave: str | None) -> str:
