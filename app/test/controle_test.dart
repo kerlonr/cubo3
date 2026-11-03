@@ -156,6 +156,8 @@ void main() {
     amb.online = false;
     await abrir(tester, amb);
     expect(find.textContaining('Sem conexão'), findsOneWidget);
+    final emergencia = find.ancestor(of: find.text('Parada de emergência'), matching: find.bySubtype<ButtonStyleButton>());
+    expect(tester.widget<ButtonStyleButton>(emergencia).enabled, isTrue, reason: 'tempo esgotado também marca sem conexão');
     await tester.tap(find.text('PETG'));
     await tester.pumpAndSettle();
     expect(amb.fila.pendentes, 0);

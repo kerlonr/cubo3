@@ -212,7 +212,8 @@ class _PainelImpressoraState extends State<PainelImpressora> {
       const SizedBox(height: 32),
       FilledButton.icon(
         style: FilledButton.styleFrom(backgroundColor: vermelho, foregroundColor: Colors.white),
-        onPressed: se(_emergencia),
+        // Sempre tocável: nem outro comando no ar nem "sem conexão" (que um tempo esgotado também marca) a desligam.
+        onPressed: _emergencia,
         icon: const Icon(Icons.dangerous_outlined),
         label: const Text('Parada de emergência'),
       ),
