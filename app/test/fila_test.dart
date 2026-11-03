@@ -89,6 +89,18 @@ void main() {
     expect(FilaOffline(s.api(), prefs, guardaOffline: true).erros, hasLength(1), reason: 'erros persistem');
   });
 
+  test('ao enviar o que estava guardado, avisa as telas (dadosMudaram); sem envio não avisa', () async {
+    final s = Servidor();
+    final fila = FilaOffline(s.api(), prefs, guardaOffline: true);
+    await fila.enviarOuGuardar(venda());
+    final antes = dadosMudaram.value;
+    await fila.esvaziar();
+    expect(dadosMudaram.value, antes, reason: 'sem rede nada foi gravado');
+    s.online = true;
+    await fila.esvaziar();
+    expect(dadosMudaram.value, antes + 1);
+  });
+
   test('401 (sessão expirada) não descarta a operação', () async {
     final s = Servidor();
     final fila = FilaOffline(s.api(), prefs, guardaOffline: true);

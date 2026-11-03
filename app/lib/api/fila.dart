@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import 'modelos.dart';
 
+/// Avisa as telas abertas que algo foi gravado no servidor (abas no IndexedStack recarregam sozinhas).
+final dadosMudaram = ValueNotifier<int>(0);
+
 class Operacao {
   Operacao(this.id, this.metodo, this.caminho, this.corpo, this.criadaEm, {this.empresa, this.versaoBase});
 
@@ -116,16 +119,22 @@ class FilaOffline extends ChangeNotifier {
   Future<void> esvaziar() => _esvaziando ??= _esvaziar().whenComplete(() => _esvaziando = null);
 
   Future<void> _esvaziar() async {
-    while (_ops.isNotEmpty) {
-      final op = _ops.first;
-      try {
-        await _enviar(op);
-      } on ErroApi catch (e) {
-        if (e.temporario || e.status == 401) return;
-        erros.add(ErroFila(op, e.mensagem)); // 404/409/422...: reenviar não adianta
+    var enviou = false;
+    try {
+      while (_ops.isNotEmpty) {
+        final op = _ops.first;
+        try {
+          await _enviar(op);
+          enviou = true;
+        } on ErroApi catch (e) {
+          if (e.temporario || e.status == 401) return;
+          erros.add(ErroFila(op, e.mensagem)); // 404/409/422...: reenviar não adianta
+        }
+        _ops.removeAt(0);
+        await _gravar();
       }
-      _ops.removeAt(0);
-      await _gravar();
+    } finally {
+      if (enviou) dadosMudaram.value++;
     }
   }
 

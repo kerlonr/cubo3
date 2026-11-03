@@ -26,7 +26,7 @@ Future<RespostaCache> buscarVarios(BuildContext context, Map<String, String> cam
 }
 
 /// Carregando / erro com "Tentar de novo" / vazio / conteúdo (+ faixa "Sem conexão — dados de HH:MM").
-/// Para recarregar de fora, troque a `key`.
+/// Recarrega sozinha quando [dadosMudaram] avisa; para recarregar de fora, troque a `key`.
 class EstadoTela<T> extends StatefulWidget {
   const EstadoTela({super.key, required this.carregar, required this.construir, this.vazio, this.mensagemVazio});
 
@@ -48,6 +48,13 @@ class _EstadoTelaState<T> extends State<EstadoTela<T>> {
   void initState() {
     super.initState();
     _carregar();
+    dadosMudaram.addListener(_carregar);
+  }
+
+  @override
+  void dispose() {
+    dadosMudaram.removeListener(_carregar);
+    super.dispose();
   }
 
   Future<void> _carregar() async {

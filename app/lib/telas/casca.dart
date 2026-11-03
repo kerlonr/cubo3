@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../ao_vivo/canal_ao_vivo.dart';
 import '../ao_vivo/servico_notificacao.dart';
+import '../api/fila.dart';
 import '../atualizacao.dart';
 
 import 'catalogo/catalogo_aba.dart';
@@ -160,9 +161,10 @@ Future<void> abrirAcoesRapidas(BuildContext context) => showModalBottomSheet(
       context: context,
       showDragHandle: true,
       builder: (c) {
-        void abrir(Widget tela) {
+        Future<void> abrir(Widget tela) async {
           Navigator.pop(c);
-          Navigator.push(context, MaterialPageRoute(builder: (_) => tela));
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => tela));
+          dadosMudaram.value++; // Início, Vendas, Impressões e Estoque mostram o que acabou de ser lançado
         }
 
         return SafeArea(
