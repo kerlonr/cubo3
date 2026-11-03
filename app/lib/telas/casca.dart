@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'estoque/carretel_form.dart';
+import 'estoque/estoque_aba.dart';
 import 'mais/mais_tela.dart';
 
 /// Navegação principal: 5 abas + "+" global. Tela larga (≥ 840 px) troca a barra pelo trilho lateral.
@@ -24,7 +26,11 @@ class CascaState extends State<Casca> {
   void irPara(int i) => setState(() => aba = i);
 
   List<Widget> get _abas => [
-        for (final d in _destinos) _AbaProvisoria(d.$3),
+        _AbaProvisoria(_destinos[0].$3),
+        _AbaProvisoria(_destinos[1].$3),
+        _AbaProvisoria(_destinos[2].$3),
+        const EstoqueAba(),
+        _AbaProvisoria(_destinos[4].$3),
       ];
 
   Widget _icone(int i, bool selecionado) => Icon(selecionado ? _destinos[i].$2 : _destinos[i].$1);
@@ -116,7 +122,7 @@ Future<void> abrirAcoesRapidas(BuildContext context) => showModalBottomSheet(
             ListTile(
                 leading: const Icon(Icons.circle_outlined),
                 title: const Text('Novo carretel'),
-                onTap: () => abrir(const _AbaProvisoria('Novo carretel'))),
+                onTap: () => abrir(const CarretelForm())),
             ListTile(
                 leading: const Icon(Icons.calculate_outlined),
                 title: const Text('Orçar peça'),
