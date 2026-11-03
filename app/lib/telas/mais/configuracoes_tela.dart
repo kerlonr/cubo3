@@ -1,0 +1,105 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../api/api.dart';
+import '../../api/fila.dart';
+import '../../api/sessao.dart';
+import '../../config.dart';
+import '../../main.dart' show chaveServidor;
+import '../../util/formatos.dart';
+import '../../widgets/cartoes.dart';
+import '../login/trocar_senha_tela.dart';
+
+class ConfiguracoesTela extends StatefulWidget {
+  const ConfiguracoesTela({super.key});
+
+  @override
+  State<ConfiguracoesTela> createState() => _ConfiguracoesTelaState();
+}
+
+class _ConfiguracoesTelaState extends State<ConfiguracoesTela> {
+  String _versao = '';
+
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform()
+        .then((i) => setState(() => _versao = '${i.version} (build ${i.buildNumber})'))
+        .catchError((_) {});
+  }
+
+  Future<void> _servidor() async {
+    final api = context.read<ApiCliente>();
+    final c = TextEditingController(text: api.base.toString());
+    final novo = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Endereço do servidor'),
+        content: TextField(controller: c, keyboardType: TextInputType.url),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, servidorPadrao), child: const Text('Padrão')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Salvar')),
+        ],
+      ),
+    );
+    if (novo == null || novo.isEmpty) return;
+    api.base = Uri.parse(novo);
+    await (await SharedPreferences.getInstance()).setString(chaveServidor, novo);
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fila = context.watch<FilaOffline>();
+    final api = context.read<ApiCliente>();
+    return Scaffold(
+      appBar: AppBar(title: const Text('Configurações')),
+      body: ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
+        if (!kIsWeb) ...[
+          const Secao('  Servidor'),
+          ListTile(
+            leading: const Icon(Icons.dns_outlined),
+            title: const Text('Endereço do servidor'),
+            subtitle: Text(api.base.toString()),
+            onTap: _servidor,
+          ),
+          const Secao('  Sem internet'),
+          ListTile(
+            leading: const Icon(Icons.cloud_upload_outlined),
+            title: Text(fila.pendentes == 0 ? 'Nada pendente' : '${fila.pendentes} alteração(ões) esperando internet'),
+            trailing: fila.pendentes == 0 ? null : TextButton(onPressed: fila.esvaziar, child: const Text('Enviar agora')),
+          ),
+          for (final e in fila.erros)
+            ListTile(
+              leading: const Icon(Icons.error_outline, color: Colors.red),
+              title: Text(e.mensagem),
+              subtitle: Text('${e.operacao.metodo} ${e.operacao.caminho} · ${dataHora(e.operacao.criadaEm)}'),
+            ),
+          if (fila.erros.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(onPressed: fila.limparErros, child: const Text('Limpar erros')),
+            ),
+        ],
+        const Secao('  Conta'),
+        ListTile(
+          leading: const Icon(Icons.password),
+          title: const Text('Trocar senha'),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TrocarSenhaTela(voluntaria: true))),
+        ),
+        ListTile(
+          leading: const Icon(Icons.logout),
+          title: const Text('Sair'),
+          onTap: () {
+            Navigator.popUntil(context, (r) => r.isFirst);
+            context.read<Sessao>().sair();
+          },
+        ),
+        ListTile(leading: const Icon(Icons.info_outline), title: const Text('Versão'), subtitle: Text(_versao)),
+      ]),
+    );
+  }
+}

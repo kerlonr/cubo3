@@ -94,7 +94,7 @@ class _ModeloFormState extends State<ModeloForm> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.dados == null ? 'Novo modelo' : 'Editar modelo')),
+      appBar: AppBar(title: Text(widget.dados?['id'] == null ? 'Novo modelo' : 'Editar modelo')),
       body: EstadoTela<Map>(
         carregar: () => buscarVarios(context, caminhosCusto),
         construir: (context, cad) {

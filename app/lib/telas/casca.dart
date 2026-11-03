@@ -5,6 +5,8 @@ import 'estoque/carretel_form.dart';
 import 'estoque/estoque_aba.dart';
 import 'impressoes/confirmar_tela.dart';
 import 'impressoes/impressoes_aba.dart';
+import 'inicio/inicio_aba.dart';
+import 'mais/calculadora_tela.dart';
 import 'mais/mais_tela.dart';
 import 'vendas/venda_rapida_tela.dart';
 import 'vendas/vendas_aba.dart';
@@ -33,7 +35,7 @@ class CascaState extends State<Casca> {
   void irPara(int i) => setState(() => aba = i);
 
   List<Widget> get _abas => [
-        _AbaProvisoria(_destinos[0].$3),
+        const InicioAba(),
         ImpressoesAba(key: impressoes, aoContar: (n) => setState(() => aConfirmar = n)),
         const CatalogoAba(),
         const EstoqueAba(),
@@ -137,16 +139,8 @@ Future<void> abrirAcoesRapidas(BuildContext context) => showModalBottomSheet(
             ListTile(
                 leading: const Icon(Icons.calculate_outlined),
                 title: const Text('Orçar peça'),
-                onTap: () => abrir(const _AbaProvisoria('Orçar peça'))),
+                onTap: () => abrir(const CalculadoraTela())),
           ]),
         );
       },
     );
-
-class _AbaProvisoria extends StatelessWidget {
-  const _AbaProvisoria(this.titulo);
-  final String titulo;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: Text(titulo)));
-}
