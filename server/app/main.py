@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.auth.rotas import rotas as rotas_auth
+from app.empresa import rotas as empresa
 
 
 def criar_app() -> FastAPI:
@@ -10,7 +11,8 @@ def criar_app() -> FastAPI:
     def saude():
         return {"ok": True}
 
-    app.include_router(rotas_auth)
+    for r in (rotas_auth, empresa.rotas, empresa.rotas_canais, empresa.rotas_impressoras):
+        app.include_router(r)
     return app
 
 
