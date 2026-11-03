@@ -74,7 +74,8 @@ class Ambiente {
           recebidos.add(r);
           final chave = '${r.method} ${r.url.path}';
           if (rotas.containsKey(chave)) {
-            final v = rotas[chave]!(r);
+            var v = rotas[chave]!(r);
+            if (v is Future) v = await v; // rota que responde depois (comando ainda no ar)
             return v is http.Response ? v : json(v);
           }
           for (final e in rotasPrefixo.entries) {

@@ -15,6 +15,7 @@ String nomeEstado(String? e) => switch (e) {
       'error' => 'Erro',
       'standby' => 'Parada',
       'desconectada' => 'Sem conexão com a impressora',
+      'desligada' => 'Klipper desligado',
       'sem_integracao' => 'Sem Klipper configurado',
       _ => e ?? '—',
     };
@@ -94,6 +95,8 @@ class PainelAoVivo extends StatelessWidget {
                 Text('faltam ${duracao(num0(e['restante_s']))}', style: const TextStyle(fontFeatures: tabular)),
             ]),
           ],
+          if ('${e['mensagem'] ?? ''}'.isNotEmpty)
+            Padding(padding: const EdgeInsets.only(top: 6), child: Text('${e['mensagem']}')),
           if (e['bico'] != null || e['mesa'] != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),

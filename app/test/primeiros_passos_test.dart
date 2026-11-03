@@ -47,6 +47,7 @@ void main() {
     for (final p in passos) {
       expect(find.text(p), findsOneWidget, reason: p);
     }
+    expect(find.text('Sem vendas nem gastos ainda'), findsOneWidget, reason: 'sem gráfico vazio ocupando espaço');
     await tester.tap(find.text('Cadastrar impressora'));
     await tester.pumpAndSettle();
     expect(find.byType(ImpressoraForm), findsOneWidget);

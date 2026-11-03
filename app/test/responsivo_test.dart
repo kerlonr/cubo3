@@ -38,6 +38,13 @@ final aoVivo = {
   'bico_alvo': 215,
   'mesa': 60.1,
   'mesa_alvo': 60,
+  'posicao': [123.456, 234.567, 345.678],
+  'eixos_home': 'xy',
+  'velocidade_pct': 300,
+  'fluxo_pct': 150,
+  'ventoinha_pct': 100,
+  'z_offset': -0.125,
+  'mensagem': 'Camada 123 de 456 — trocar o filamento para o Azul Petróleo Metalizado na próxima camada',
 };
 
 Map<String, Object?> filamento(String id) => {
@@ -129,6 +136,27 @@ Ambiente cheio() => Ambiente({
       'GET /api/impressoras': (_) => impressoras,
       'GET /api/impressoras/i1/ao-vivo': (_) => aoVivo,
       'GET /api/impressoras/i2/ao-vivo': (_) => {...aoVivo, 'estado': 'standby'},
+      'GET /api/impressoras/i1/arquivos': (_) => [
+            for (var i = 0; i < 4; i++)
+              {
+                'nome': '${i}_$arquivo',
+                'tamanho': 98765432,
+                'modificado': '2026-11-03T12:00:00+00:00',
+                'tempo_estimado_s': 456789,
+                'gramas': 12345.67,
+                'miniatura': i.isEven ? '.thumbs/a-300x300.png' : null,
+              }
+          ],
+      'GET /api/impressoras/i1/macros': (_) => [
+            for (final m in ['CANCEL_PRINT', 'PAUSE', 'RESUME', 'SET_PAUSE_NEXT_LAYER', 'SET_PAUSE_AT_LAYER_COM_NOME_MUITO_LONGO_DEMAIS'])
+              {'nome': m}
+          ],
+      'GET /api/impressoras/i1/console': (_) => {
+            'linhas': [
+              for (var i = 0; i < 6; i++)
+                {'hora': '2026-11-03T12:0$i:00+00:00', 'texto': i.isEven ? '// $longo' : 'ok T:215.3 /215.0 B:60.1 /60.0'}
+            ]
+          },
       'POST /api/impressoras/i1/camera/link': (_) => json({'detail': 'Sem câmera'}, 404),
       'POST /api/impressoras/i2/camera/link': (_) => json({'detail': 'Sem câmera'}, 404),
       'GET /api/impressoes': (_) => [
@@ -172,7 +200,16 @@ Ambiente cheio() => Ambiente({
     });
 
 /// Abas abrem dentro da casca (com a navegação); o resto, sozinho.
-const abas = {'inicio': 0, 'inicio_vazio': 0, 'impressora': 1, 'catalogo': 2, 'estoque': 3, 'vendas': 4};
+const abas = {
+  'inicio': 0,
+  'inicio_vazio': 0,
+  'impressora': 1,
+  'impressora_controle': 1,
+  'impressora_historico': 1,
+  'catalogo': 2,
+  'estoque': 3,
+  'vendas': 4,
+};
 final telas = <String, Widget Function()>{
   'modelo': () => const ModeloTela(id: 'm1'),
   'venda_rapida': () => const VendaRapidaTela(itensIniciais: [
@@ -230,6 +267,14 @@ void main() {
             await tester.pumpWidget(amb.app());
             await tester.pumpAndSettle();
             tester.state<CascaState>(find.byType(Casca)).irPara(abas[nome]!);
+            if (nome.startsWith('impressora_')) {
+              await tester.pumpAndSettle();
+              final rotulo = {'controle': 'Controle', 'arquivos': 'Arquivos', 'macros': 'Macros', 'console': 'Console'};
+              final secao = find.textContaining(rotulo[nome.substring(11)] ?? 'Histórico').first;
+              await tester.ensureVisible(secao);
+              await tester.pumpAndSettle();
+              await tester.tap(secao);
+            }
           } else {
             await tester.pumpWidget(amb.tela(telas[nome]!(), brilho: brilho));
           }

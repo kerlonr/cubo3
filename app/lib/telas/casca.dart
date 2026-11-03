@@ -14,7 +14,7 @@ import 'catalogo/catalogo_aba.dart';
 import 'estoque/carretel_form.dart';
 import 'estoque/estoque_aba.dart';
 import 'impressoes/confirmar_tela.dart';
-import 'impressoes/impressoes_aba.dart';
+import 'impressora/impressora_aba.dart';
 import 'inicio/inicio_aba.dart';
 import 'mais/calculadora_tela.dart';
 import 'mais/mais_tela.dart';
@@ -32,7 +32,7 @@ class Casca extends StatefulWidget {
 class CascaState extends State<Casca> {
   int aba = 0;
   int aConfirmar = 0;
-  final impressoes = GlobalKey<ImpressoesAbaState>();
+  final impressoes = GlobalKey<ImpressoraAbaState>();
   StreamSubscription<Map>? _eventos;
 
   @override
@@ -78,7 +78,7 @@ class CascaState extends State<Casca> {
 
   List<Widget> get _abas => [
         const InicioAba(),
-        ImpressoesAba(key: impressoes, ativa: aba == 1, aoContar: (n) => setState(() => aConfirmar = n)),
+        ImpressoraAba(key: impressoes, ativa: aba == 1, aoContar: (n) => setState(() => aConfirmar = n)),
         const CatalogoAba(),
         const EstoqueAba(),
         const VendasAba(),
@@ -135,11 +135,14 @@ class CascaState extends State<Casca> {
     }
     return Scaffold(
       body: corpo,
-      floatingActionButton: FloatingActionButton(
-        tooltip: 'Novo',
-        onPressed: () => abrirAcoesRapidas(context),
-        child: const Icon(Icons.add),
-      ),
+      // Na aba Impressora o "+" cobriria o envio do console e os controles; lá o "+" fica no topo.
+      floatingActionButton: aba == 1
+          ? null
+          : FloatingActionButton(
+              tooltip: 'Novo',
+              onPressed: () => abrirAcoesRapidas(context),
+              child: const Icon(Icons.add),
+            ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: aba,
         onDestinationSelected: irPara,
@@ -182,7 +185,7 @@ Future<void> abrirAcoesRapidas(BuildContext context) => showModalBottomSheet(
                 title: const Text('Lançar impressão'),
                 onTap: () => abrir(const ConfirmarTela())),
             ListTile(
-                leading: const Icon(Icons.circle_outlined),
+                leading: const Icon(Icons.album_outlined),
                 title: const Text('Novo carretel'),
                 onTap: () => abrir(const CarretelForm())),
             ListTile(

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert' show jsonDecode, utf8;
 
 import 'package:cubo3/telas/catalogo/modelo_tela.dart';
-import 'package:cubo3/telas/impressoes/impressoes_aba.dart';
+import 'package:cubo3/telas/inicio/inicio_aba.dart';
 import 'package:cubo3/telas/impressoes/impressora_tela.dart';
 import 'package:cubo3/widgets/camera_mjpeg.dart';
 import 'package:flutter/material.dart';
@@ -140,11 +140,11 @@ void main() {
     ]);
   });
 
-  testWidgets('tocar no cartão ao vivo da aba Impressões abre a tela da impressora', (tester) async {
+  testWidgets('tocar no cartão ao vivo do Início abre a tela da impressora', (tester) async {
     final amb = ambiente()..rotas['GET /api/impressoras'] = (_) => [impressora];
     await amb.preparar();
-    await tamanhoTela(tester, 500, 2000);
-    await tester.pumpWidget(amb.tela(const ImpressoesAba()));
+    await tamanhoTela(tester, 500, 2400);
+    await tester.pumpWidget(amb.tela(const InicioAba()));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ender'));
     await tester.pumpAndSettle();

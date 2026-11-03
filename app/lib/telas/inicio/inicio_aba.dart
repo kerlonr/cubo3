@@ -62,6 +62,7 @@ class _InicioAbaState extends State<InicioAba> {
     final largo = ClasseLargura.de(context) == ClasseLargura.expandido;
     final impressoras = [for (final i in lista(p['impressoras'])) if ((i['moonraker_url'] ?? '') != '') i];
     final resultado = num0(p['resultado']), lucro = num0(p['lucro_vendas']);
+    final semMovimento = lista(p['por_mes']).every((m) => num0(m['receita']) == 0 && num0(m['gastos']) == 0);
     final cartoes = [
       CartaoValor('Receita', moeda(num0(p['receita'])), icone: Icons.trending_up),
       CartaoValor('Gastos', moeda(num0(p['gastos'])), icone: Icons.trending_down),
@@ -105,7 +106,10 @@ class _InicioAbaState extends State<InicioAba> {
               ),
             ),
           const Secao('Receita × gastos (12 meses)'),
-          SizedBox(height: 200, child: GraficoMeses(lista(p['por_mes']))),
+          if (semMovimento)
+            Text('Sem vendas nem gastos ainda', style: TextStyle(color: t.colorScheme.onSurfaceVariant))
+          else
+            SizedBox(height: 200, child: GraficoMeses(lista(p['por_mes']))),
           if (lista(p['estoque_baixo']).isNotEmpty) ...[
             const Secao('Estoque baixo'),
             for (final e in lista(p['estoque_baixo']))
@@ -132,9 +136,11 @@ class _InicioAbaState extends State<InicioAba> {
             const SizedBox(width: 8),
             Expanded(child: CartaoValor('Filamento', '${numero(num0(p['kg_filamento']))} kg')),
           ]),
-          const SizedBox(height: 8),
-          Text('Toque e segure um mês no gráfico para ver os valores.',
-              style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
+          if (!semMovimento) ...[
+            const SizedBox(height: 8),
+            Text('Toque e segure um mês no gráfico para ver os valores.',
+                style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
+          ],
         ]),
       ),
     );

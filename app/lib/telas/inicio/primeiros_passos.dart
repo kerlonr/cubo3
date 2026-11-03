@@ -94,7 +94,7 @@ class AcoesRapidas extends StatelessWidget {
     final acoes = <(String, IconData, Widget Function())>[
       ('Vender', Icons.point_of_sale, () => const VendaRapidaTela()),
       ('Lançar impressão', Icons.print, () => const ConfirmarTela()),
-      ('Novo carretel', Icons.circle_outlined, () => const CarretelForm()),
+      ('Novo carretel', Icons.album_outlined, () => const CarretelForm()),
       ('Orçar', Icons.calculate_outlined, () => const CalculadoraTela()),
     ];
     return GradeCartoes(colunas: colunas, children: [
