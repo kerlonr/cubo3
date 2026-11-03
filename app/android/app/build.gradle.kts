@@ -1,3 +1,12 @@
+import java.io.FileInputStream
+import java.util.Properties
+
+// Assinatura do APK: android/key.properties + android/cubo3-release.jks (fora do git; faça backup!).
+val chaves = Properties().apply {
+    val arquivo = rootProject.file("key.properties")
+    if (arquivo.exists()) load(FileInputStream(arquivo))
+}
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -31,11 +40,21 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (!chaves.isEmpty) {
+                keyAlias = chaves["keyAlias"] as String
+                keyPassword = chaves["keyPassword"] as String
+                storeFile = file(chaves["storeFile"] as String)
+                storePassword = chaves["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Sem key.properties (outra máquina) cai na chave de debug; o publicar_app.sh exige a de verdade.
+            signingConfig = signingConfigs.getByName(if (chaves.isEmpty) "debug" else "release")
         }
     }
 }

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../ao_vivo/canal_ao_vivo.dart';
 import '../ao_vivo/servico_notificacao.dart';
+import '../atualizacao.dart';
 
 import 'catalogo/catalogo_aba.dart';
 import 'estoque/carretel_form.dart';
@@ -89,7 +90,10 @@ class CascaState extends State<Casca> {
 
   @override
   Widget build(BuildContext context) {
-    final corpo = IndexedStack(index: aba, children: _abas);
+    final corpo = Column(children: [
+      const FaixaAtualizacao(),
+      Expanded(child: IndexedStack(index: aba, children: _abas)),
+    ]);
     return LayoutBuilder(builder: (context, c) {
       if (c.maxWidth >= 840) {
         return Scaffold(

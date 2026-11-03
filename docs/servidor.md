@@ -66,3 +66,19 @@ sudo docker compose start api
 ```
 
 **Atenção:** o backup fica no mesmo disco do servidor. Ele protege contra erro e exclusão, não contra perda do disco. Copie `dados/backups/` para outro lugar de tempos em tempos.
+
+## App (Android + navegador)
+
+O app web e o APK são servidos pela própria API: `https://cubo3.kerlonr.com.br/` (app web), `/baixar` (APK) e `/api/versao` (versão publicada; o app Android compara com o próprio build e mostra "Nova versão do Cubo³ — Atualizar").
+
+Publicar (do PC, na raiz do repositório, Git Bash):
+
+```bash
+# 1. suba o build em app/pubspec.yaml (version: 1.0.0+N → +N+1), senão o Android não oferece a atualização
+sh deploy/publicar_app.sh
+curl -s https://cubo3.kerlonr.com.br/api/versao
+```
+
+O script gera `flutter build apk --release` e `flutter build web --release`, sincroniza `build/web/` em `dados/web/` (o `index.html` entra por último; a pasta é um bind mount, então não dá para trocar o diretório com `mv`) e envia o APK + `versao.json` para `dados/apk/` (o `versao.json` por último). Não precisa de `sudo` nem de reiniciar a API.
+
+**Assinatura do APK:** `app/android/cubo3-release.jks` + `app/android/key.properties` (senha dentro). Os dois ficam fora do git. **Faça backup dos dois juntos:** sem eles nenhuma versão nova instala por cima da que está no celular (teria que desinstalar e perder o que está só no aparelho).
