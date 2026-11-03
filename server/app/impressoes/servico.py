@@ -1,0 +1,94 @@
+import uuid
+from decimal import Decimal
+from typing import Literal
+
+from fastapi import HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.auth.deps import Ctx
+from app.catalogo.custo import receita_do_modelo
+from app.catalogo.modelos import Modelo
+from app.crud import obter
+from app.custos import custo_hora_impressora, r2
+from app.db import agora
+from app.empresa.modelos import Impressora
+from app.empresa.rotas import param_empresa, param_impressora
+from app.estoque.modelos import Carretel
+from app.estoque.servico import id_derivado, lancar
+from app.impressoes.modelos import Impressao
+
+D = Decimal
+
+
+class Uso(BaseModel):
+    carretel_id: uuid.UUID
+    gramas: Decimal = Field(gt=0)
+
+
+class Confirmacao(BaseModel):
+    finalidade: Literal["venda", "pessoal", "teste", "falhou"]
+    pecas_boas: int = Field(0, ge=0)
+    consumos: list[Uso] = []
+    perdas: list[Uso] = []
+    mao_obra_min: Decimal | None = Field(None, ge=0)
+    modelo_id: uuid.UUID | None = None
+
+
+def casar_modelo(db: Session, empresa_id, arquivo: str | None) -> uuid.UUID | None:
+    if not arquivo:
+        return None
+    # shortcut: varre os modelos em Python (nomes_arquivo é JSON); ok para centenas de modelos.
+    for m in db.scalars(select(Modelo).where(Modelo.empresa_id == empresa_id, Modelo.excluido.is_(False))):
+        if arquivo in (m.nomes_arquivo or []):
+            return m.id
+    return None
+
+
+def confirmar(db: Session, c: Ctx, imp: Impressao, dados: Confirmacao) -> Impressao:
+    if imp.status == "confirmada":
+        return imp  # reenvio da fila offline: nada muda
+    if imp.status == "descartada":
+        raise HTTPException(409, "Impressão já descartada")
+    modelo = obter(db, c, Modelo, dados.modelo_id, "Modelo") if dados.modelo_id else (
+        db.get(Modelo, imp.modelo_id) if imp.modelo_id else None)
+    usos = [("consumo", u) for u in dados.consumos] + [("perda", u) for u in dados.perdas]
+    carreteis = {u.carretel_id: obter(db, c, Carretel, u.carretel_id, "Carretel") for _, u in usos}
+
+    material = sum((u.gramas * carreteis[u.carretel_id].preco_kg_real / 1000 for _, u in usos), D(0))
+    emp = param_empresa(db, c.empresa_id)
+    impressora = db.get(Impressora, imp.impressora_id) if imp.impressora_id else None
+    maquina = D(imp.duracao_s or 0) / 3600 * custo_hora_impressora(param_impressora(impressora), emp)
+    receita = (modelo.receita or {}) if modelo else {}
+    minutos = dados.mao_obra_min if dados.mao_obra_min is not None else D(str(receita.get("mao_obra_min", 0)))
+    mao_obra = minutos / 60 * emp.mao_obra_hora
+    r = receita_do_modelo(db, c.empresa_id, receita, D(dados.pecas_boas))
+    insumos = sum((i.qtd * i.custo_unitario for i in r.insumos + r.embalagem), D(0))
+    total = r2(material + maquina + mao_obra + insumos)
+
+    for tipo, u in usos:
+        lancar(db, c, id=id_derivado(imp.id, f"{tipo}:{u.carretel_id}"), item_tipo="carretel",
+               item_id=u.carretel_id, tipo=tipo, quantidade=-u.gramas, impressao_id=imp.id, data=imp.fim)
+    if dados.finalidade == "venda" and modelo and dados.pecas_boas > 0:
+        lancar(db, c, id=id_derivado(imp.id, "producao"), item_tipo="peca", item_id=modelo.id, tipo="producao",
+               quantidade=dados.pecas_boas, valor=total, impressao_id=imp.id, data=imp.fim)
+    if modelo and imp.arquivo and imp.arquivo not in (modelo.nomes_arquivo or []):
+        modelo.nomes_arquivo = [*(modelo.nomes_arquivo or []), imp.arquivo]
+
+    imp.modelo_id = modelo.id if modelo else None
+    imp.finalidade, imp.pecas_boas = dados.finalidade, dados.pecas_boas
+    imp.custo_total = total
+    imp.custo_unitario = r2(total / dados.pecas_boas) if dados.pecas_boas else None
+    imp.status, imp.confirmada_por, imp.confirmada_em = "confirmada", c.usuario.id, agora()
+    imp.fim = imp.fim or agora()
+    db.flush()
+    return imp
+
+
+def descartar(db: Session, c: Ctx, imp: Impressao) -> Impressao:
+    if imp.status == "confirmada":
+        raise HTTPException(409, "Impressão já confirmada")
+    imp.status = "descartada"
+    db.flush()
+    return imp
