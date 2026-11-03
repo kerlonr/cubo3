@@ -65,7 +65,10 @@ def saida_arquivo(a: Arquivo) -> dict:
             "url": f"/api/arquivos/{a.id}", "criado_em": a.criado_em.isoformat()}
 
 
-def saida_modelo(db: Session, m: Modelo, vendidos: Decimal = Decimal(0)) -> dict:
+def saida_modelo(db: Session, m: Modelo, vendidos: Decimal | None = None) -> dict:
+    if vendidos is None:
+        from app.vendas.servico import vendidos_por_modelo
+        vendidos = vendidos_por_modelo(db, m.empresa_id).get(m.id, (Decimal(0),))[0]
     custo = custo_do_modelo(db, m.empresa_id, m)
     arquivos = db.scalars(select(Arquivo).where(Arquivo.modelo_id == m.id).order_by(Arquivo.criado_em))
     return {**serializar(m), "custo": custo_json(custo),
@@ -81,7 +84,7 @@ rotas = APIRouter(prefix="/api", tags=["catalogo"])
 
 @rotas.get("/modelos")
 def listar_modelos(busca: str | None = None, categoria: str | None = None, tag: str | None = None,
-                   ordem: str = "nome", atualizado_desde: str | None = None, incluir_excluidos: bool = False,
+                   ordem: str = "nome", periodo_dias: int | None = None, atualizado_desde: str | None = None, incluir_excluidos: bool = False,
                    c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     # shortcut: filtro e ordem em Python; ok para centenas de modelos, levar para SQL se passar de alguns milhares.
     modelos = list(db.scalars(consulta_lista(Modelo, c, atualizado_desde, incluir_excluidos)))
@@ -92,11 +95,17 @@ def listar_modelos(busca: str | None = None, categoria: str | None = None, tag: 
         modelos = [m for m in modelos if (m.categoria or "").casefold() == categoria.casefold()]
     if tag:
         modelos = [m for m in modelos if tag.casefold() in [t.casefold() for t in m.tags or []]]
+    from app.vendas.servico import vendidos_por_modelo  # vendas depende do catálogo; import tardio evita ciclo
+    vendas = vendidos_por_modelo(db, c.empresa_id, periodo_dias)
+    zero = (Decimal(0), Decimal(0))
+    modelos.sort(key=lambda m: m.nome.casefold())
     if ordem == "recentes":
         modelos.sort(key=lambda m: m.criado_em, reverse=True)
-    else:
-        modelos.sort(key=lambda m: m.nome.casefold())
-    return [saida_modelo(db, m) for m in modelos]
+    elif ordem == "mais_vendidos":
+        modelos.sort(key=lambda m: vendas.get(m.id, zero)[0], reverse=True)
+    elif ordem == "lucro":
+        modelos.sort(key=lambda m: vendas.get(m.id, zero)[1], reverse=True)
+    return [saida_modelo(db, m, vendas.get(m.id, zero)[0]) for m in modelos]
 
 
 @rotas.post("/modelos/{id}/arquivos")
