@@ -121,6 +121,18 @@ void main() {
     expect(web.pendentes, 0);
   });
 
+  test('operação guardada vai para a empresa em que foi feita, mesmo se trocar de empresa', () async {
+    final s = Servidor();
+    final api = s.api()..empresaId = 'A';
+    final fila = FilaOffline(api, prefs, guardaOffline: true);
+    await fila.enviarOuGuardar(venda());
+    api.empresaId = 'B';
+    s.online = true;
+    final reaberta = FilaOffline(api, prefs, guardaOffline: true);
+    await reaberta.esvaziar();
+    expect(s.recebidos.single.headers['X-Empresa'], 'A');
+  });
+
   test('cache: falha de rede devolve o último dado com deCache', () async {
     final cache = CacheLeitura(prefs, persistir: true);
     final r1 = await cache.obter('canais', () async => [1, 2]);

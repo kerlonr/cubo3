@@ -8,21 +8,24 @@ import 'api.dart';
 import 'modelos.dart';
 
 class Operacao {
-  Operacao(this.id, this.metodo, this.caminho, this.corpo, this.criadaEm);
+  Operacao(this.id, this.metodo, this.caminho, this.corpo, this.criadaEm, [this.empresa]);
 
   Operacao.nova(this.metodo, this.caminho, [this.corpo])
       : id = novoId(),
         criadaEm = DateTime.now().toUtc();
 
   factory Operacao.fromJson(Map j) => Operacao(j['id'] as String, j['metodo'] as String, j['caminho'] as String,
-      j['corpo'] as Map?, DateTime.parse(j['criadaEm'] as String));
+      j['corpo'] as Map?, DateTime.parse(j['criadaEm'] as String), j['empresa'] as String?);
 
   final String id, metodo, caminho;
   final Map? corpo;
   final DateTime criadaEm;
 
+  /// Empresa em que foi feita: a fila manda para ela mesmo que o usuário troque de empresa antes.
+  String? empresa;
+
   Map<String, dynamic> toJson() =>
-      {'id': id, 'metodo': metodo, 'caminho': caminho, 'corpo': corpo, 'criadaEm': criadaEm.toUtc().toIso8601String()};
+      {'id': id, 'metodo': metodo, 'caminho': caminho, 'corpo': corpo, 'criadaEm': criadaEm.toUtc().toIso8601String(), 'empresa': empresa};
 }
 
 class ErroFila {
@@ -73,12 +76,14 @@ class FilaOffline extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<dynamic> _enviar(Operacao op) => api.enviar(op.metodo, op.caminho,
-      corpo: op.corpo,
-      extra: op.metodo == 'PUT' ? {'X-Alterado-Em': op.criadaEm.toUtc().toIso8601String()} : null);
+  Future<dynamic> _enviar(Operacao op) => api.enviar(op.metodo, op.caminho, corpo: op.corpo, extra: {
+        'X-Empresa': ?op.empresa,
+        if (op.metodo == 'PUT') 'X-Alterado-Em': op.criadaEm.toUtc().toIso8601String(),
+      });
 
   /// Tenta enviar já. Sem conexão (ou servidor fora) guarda; erro definitivo sobe para a tela.
   Future<ResultadoEnvio> enviarOuGuardar(Operacao op) async {
+    op.empresa ??= api.empresaId;
     if (_ops.isNotEmpty) {
       // Já há pendências: entra atrás delas para não furar a ordem (carretel antes do movimento).
       _ops.add(op);

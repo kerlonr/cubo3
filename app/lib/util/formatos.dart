@@ -48,7 +48,11 @@ String duracao(num segundos) {
 double? lerNumero(String? texto) {
   var t = (texto ?? '').replaceAll(RegExp(r'[^0-9,.\-]'), '');
   if (t.isEmpty) return null;
-  if (t.contains(',')) t = t.replaceAll('.', '').replaceAll(',', '.');
+  if (t.contains(',')) {
+    t = t.replaceAll('.', '').replaceAll(',', '.');
+  } else if (RegExp(r'^-?\d{1,3}(\.\d{3})+$').hasMatch(t)) {
+    t = t.replaceAll('.', ''); // "1.000" no padrão brasileiro é mil
+  }
   return double.tryParse(t);
 }
 

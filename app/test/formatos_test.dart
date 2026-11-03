@@ -17,6 +17,14 @@ void main() {
     expect(lerNumero('abc'), isNull);
   });
 
+  test('lerNumero: ponto só de milhar vira milhar ("1.000 g" é mil, não um)', () {
+    expect(lerNumero('1.000'), 1000);
+    expect(lerNumero('12.500 g'), 12500);
+    expect(lerNumero('1.000.000'), 1000000);
+    expect(lerNumero('33.5'), 33.5);
+    expect(lerNumero('1.25'), 1.25);
+  });
+
   test('arred2 arredonda meio para cima sem erro binário', () {
     expect(arred2(100.025), 100.03);
     expect(arred2(2.675), 2.68);
