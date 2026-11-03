@@ -95,7 +95,7 @@ void main() {
     final put = amb.recebidos.lastWhere((r) => r.method == 'PUT' && r.url.path.startsWith('/api/impressoes/'));
     // null → servidor usa ParamImpressora() padrão em vez do preço/potência da impressora cadastrada.
     expect((jsonDecode(put.body) as Map)['impressora_id'], 'i1');
-  }, skip: true); // BUG revisão: com uma impressora só, lançamento manual manda impressora_id null (confirmar_tela.dart:105,203)
+  });
 
   testWidgets('texto sem modelo + Enter na venda rápida não lança exceção', (tester) async {
     final amb = Ambiente({

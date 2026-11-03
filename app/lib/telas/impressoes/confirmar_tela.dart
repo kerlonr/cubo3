@@ -65,6 +65,9 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
     final carreteis = lista(mapa(cad['estoque'])['carreteis']);
     _modelo = _imp?['modelo_id'] as String?;
     if (_modelo != null) _finalidade = 'venda';
+    // Lançamento manual: com uma impressora só (sem seletor) ou sem escolha, usa a primeira — sem ela o custo/hora sai do padrão.
+    final impressoras = lista(cad['impressoras']);
+    if (impressoras.isNotEmpty) _impressora = impressoras.first['id'] as String;
     final est = mapa(_imp?['estimativa']);
     final fils = lista(est['filamentos']);
     final d = dividirEstimativa(est);
