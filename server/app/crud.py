@@ -60,22 +60,29 @@ def upsert(db: Session, c: Ctx, modelo: type[DaEmpresa], id: uuid.UUID, dados: d
     return obj, criado
 
 
+def consulta_lista(modelo, c: Ctx, atualizado_desde: datetime | None = None, incluir_excluidos: bool = False):
+    q = select(modelo).where(modelo.empresa_id == c.empresa_id)
+    if not incluir_excluidos:
+        q = q.where(modelo.excluido.is_(False))
+    if atualizado_desde is not None:
+        q = q.where(modelo.atualizado_em > atualizado_desde)
+    return q.order_by(modelo.criado_em)
+
+
 def rotas_crud(modelo: type[DaEmpresa], entrada: type[BaseModel], saida: Callable[[Session, Any], dict],
                prefixo: str, *, so_dono_escreve: bool = False,
                ao_salvar: Callable[[Session, Ctx, Any, bool], None] | None = None,
-               nome: str = "Registro") -> APIRouter:
+               nome: str = "Registro", com_listagem: bool = True) -> APIRouter:
+    """com_listagem=False: o módulo define o próprio GET da lista (filtros/ordem específicos)."""
     r = APIRouter(prefix="/api", tags=[prefixo.strip("/")])
     escreve = so_dono if so_dono_escreve else ctx
 
-    @r.get(prefixo)
-    def listar(atualizado_desde: datetime | None = None, incluir_excluidos: bool = False,
-               c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
-        q = select(modelo).where(modelo.empresa_id == c.empresa_id)
-        if not incluir_excluidos:
-            q = q.where(modelo.excluido.is_(False))
-        if atualizado_desde is not None:
-            q = q.where(modelo.atualizado_em > atualizado_desde)
-        return [saida(db, o) for o in db.scalars(q.order_by(modelo.criado_em))]
+    if com_listagem:
+        @r.get(prefixo)
+        def listar(atualizado_desde: datetime | None = None, incluir_excluidos: bool = False,
+                   c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+            q = consulta_lista(modelo, c, atualizado_desde, incluir_excluidos)
+            return [saida(db, o) for o in db.scalars(q)]
 
     @r.get(prefixo + "/{id}")
     def um(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):

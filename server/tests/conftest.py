@@ -7,8 +7,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from argon2 import PasswordHasher
+
 from app import db as db_mod
+from app.auth import seguranca
 from app.main import criar_app
+
+seguranca._ph = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)  # só para os testes ficarem rápidos
 
 
 @pytest.fixture
