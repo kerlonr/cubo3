@@ -129,7 +129,7 @@ Canais de venda são cadastráveis por empresa (ex.: Direto 0%; Shopee x% + R$ y
 - Modelo: nome, descrição, categoria e tags, links (Printables, MakerWorld...), arquivos (STL, 3MF, G-code, fotos; primeira foto vira capa), receita padrão (filamentos e gramas, tempo, minutos de mão de obra, insumos, embalagem), preço de venda definido, custo calculado na hora.
 - Perfil do modelo: capa, preço × custo × lucro, estoque de peças prontas, impressões feitas, vendas, arquivos para baixar.
 - Lista: busca, filtro por categoria e tags, ordenação por **mais vendidos**, mais lucrativos, recentes e nome; período (mês, 3 meses, sempre).
-- Upload de arquivo funciona no celular (seletor de arquivos) e no navegador (seletor e arrastar-e-soltar). Limite por arquivo configurável (padrão 200 MB). Arquivos ficam no volume `arquivos/`, por empresa, e só são servidos a membros autenticados.
+- Upload de arquivo funciona no celular (seletor de arquivos) e no navegador (seletor e arrastar-e-soltar). Limite por arquivo configurável (padrão 95 MB: o túnel Cloudflare gratuito recusa requisições acima de 100 MB). Arquivos ficam no volume `arquivos/`, por empresa, e só são servidos a membros autenticados.
 
 ### 8.4 Impressoras e Klipper
 - Impressora: nome, modelo, parâmetros de custo (seção 7), URL do Moonraker (`http://192.168.1.110:7125`), chave de API opcional.

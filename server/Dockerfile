@@ -8,5 +8,5 @@ RUN pip install --no-cache-dir -r requirements-dev.txt
 COPY . .
 RUN useradd -u 1000 -m cubo && mkdir -p /dados/arquivos && chown -R cubo /dados /srv
 USER 1000
-EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]
+EXPOSE 8100
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8100 --proxy-headers --forwarded-allow-ips='*'"]

@@ -35,9 +35,10 @@ services:
       - /home/server/projects/cubo3/dados/arquivos:/dados/arquivos
       - /home/server/projects/cubo3/dados/web:/web:ro
       - /home/server/projects/cubo3/dados/apk:/apk:ro
+    # Porta interna 8100: a regra DOCKER-USER do host derruba tráfego para a 8000 (protege o Crafty).
     # Só a própria máquina acessa; de fora entra pelo túnel (serviço tunnel abaixo).
     ports:
-      - "127.0.0.1:8096:8000"
+      - "127.0.0.1:8096:8100"
 
   backup:
     image: postgres:16-alpine
@@ -63,6 +64,7 @@ services:
     user: "1000:1000"
     depends_on:
       - api
-    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    # http2: com QUIC (UDP) dentro do container as respostas não voltavam (requisição "ended abruptly")
+    command: tunnel --no-autoupdate --protocol http2 --config /etc/cloudflared/config.yml run
     volumes:
       - /home/server/projects/cubo3/deploy/tunnel:/etc/cloudflared:ro
