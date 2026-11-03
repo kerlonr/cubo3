@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert' show jsonDecode, utf8;
 
+import 'package:cubo3/telas/catalogo/modelo_tela.dart';
 import 'package:cubo3/telas/impressoes/impressoes_aba.dart';
 import 'package:cubo3/telas/impressoes/impressora_tela.dart';
 import 'package:cubo3/widgets/camera_mjpeg.dart';
@@ -160,5 +161,74 @@ void main() {
     expect(amb.fila.pendentes, 0);
     amb.online = true;
     expect(comandos(amb), isEmpty);
+  });
+
+  imprimirTestes();
+}
+
+Ambiente catalogo({Object? Function(http.Request)? imprimir, List impressoras = const [impressora]}) => Ambiente({
+      'GET /api/modelos/m1': (_) => {
+            'id': 'm1',
+            'nome': 'Vaso',
+            'custo': {'total': 10},
+            'arquivos': [
+              {'id': 'a1', 'nome_original': 'vaso.gcode', 'tipo': 'gcode', 'tamanho': 2048},
+              {'id': 'a2', 'nome_original': 'vaso.stl', 'tipo': 'stl', 'tamanho': 4096},
+            ],
+          },
+      'GET /api/impressoras': (_) => impressoras,
+      'POST /api/arquivos/a1/imprimir': ?imprimir,
+    });
+
+Future<void> abrirModelo(WidgetTester tester, Ambiente amb, {String papel = 'dono'}) async {
+  await amb.preparar(papel: papel);
+  await tamanhoTela(tester, 500, 2400);
+  await tester.pumpWidget(amb.tela(const ModeloTela(id: 'm1')));
+  await tester.pumpAndSettle();
+}
+
+void imprimirTestes() {
+  testWidgets('G-code mostra "Imprimir na Ender" só para o dono; STL não', (tester) async {
+    final amb = catalogo();
+    await abrirModelo(tester, amb);
+    expect(find.byTooltip('Imprimir na Ender'), findsOneWidget); // só o .gcode, não o .stl
+    await tester.tap(find.byTooltip('Imprimir na Ender'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('vaso.gcode'), findsWidgets);
+    await tester.tap(find.text('Imprimir'));
+    await tester.pumpAndSettle();
+    expect(amb.corpo('POST /api/arquivos/a1/imprimir'), {'impressora_id': 'i1'});
+    expect(amb.fila.pendentes, 0);
+  });
+
+  testWidgets('membro não vê o botão de imprimir', (tester) async {
+    final amb = catalogo();
+    await abrirModelo(tester, amb, papel: 'membro');
+    expect(find.byIcon(Icons.print_outlined), findsNothing);
+  });
+
+  testWidgets('impressora ocupada (409) mostra a mensagem', (tester) async {
+    final amb = catalogo(imprimir: (_) => json({'detail': 'A impressora está ocupada'}, 409));
+    await abrirModelo(tester, amb);
+    await tester.tap(find.byTooltip('Imprimir na Ender'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Imprimir'));
+    await tester.pumpAndSettle();
+    expect(find.text('A impressora está ocupada'), findsOneWidget);
+  });
+
+  testWidgets('com duas impressoras, escolhe antes de confirmar', (tester) async {
+    final amb = catalogo(impressoras: [
+      impressora,
+      {'id': 'i2', 'nome': 'Bambu', 'moonraker_url': 'http://192.168.1.111:7125'},
+    ]);
+    await abrirModelo(tester, amb);
+    await tester.tap(find.byTooltip('Imprimir'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bambu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Imprimir'));
+    await tester.pumpAndSettle();
+    expect(amb.corpo('POST /api/arquivos/a1/imprimir'), {'impressora_id': 'i2'});
   });
 }

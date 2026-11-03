@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api.dart';
+import '../../api/controle.dart';
 import '../../api/modelos.dart';
+import '../../api/sessao.dart';
 import '../../tema.dart';
 import '../../util/formatos.dart';
 import '../../widgets/cartoes.dart';
@@ -57,6 +59,31 @@ class _ModeloTelaState extends State<ModeloTela> {
     }
   }
 
+  /// Manda o G-code direto à impressora (nunca pela fila); com mais de uma, pergunta qual.
+  Future<void> _imprimir(Json a, List<Json> impressoras) async {
+    final imp = impressoras.length == 1
+        ? impressoras.single
+        : await showDialog<Json>(
+            context: context,
+            builder: (c) => SimpleDialog(title: const Text('Imprimir em qual impressora?'), children: [
+              for (final i in impressoras)
+                SimpleDialogOption(onPressed: () => Navigator.pop(c, i), child: Text('${i['nome']}')),
+            ]),
+          );
+    if (imp == null || !mounted) return;
+    if (!await confirmar(context, 'Imprimir agora?', 'Arquivo: ${a['nome_original']}\nImpressora: ${imp['nome']}',
+        sim: 'Imprimir')) {
+      return;
+    }
+    if (!mounted) return;
+    try {
+      await imprimirArquivo(context.read<ApiCliente>(), '${a['id']}', '${imp['id']}');
+      if (mounted) avisar(context, 'Impressão iniciada na ${imp['nome']}');
+    } catch (e) {
+      if (mounted) avisarErro(context, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -71,6 +98,7 @@ class _ModeloTelaState extends State<ModeloTela> {
             'modelo': '/api/modelos/${widget.id}',
             'impressoes': '/api/impressoes',
             'pedidos': '/api/pedidos',
+            'impressoras': '/api/impressoras',
           });
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) setState(() => _modelo = mapa((r.dados as Map)['modelo']));
@@ -87,6 +115,10 @@ class _ModeloTelaState extends State<ModeloTela> {
     final custo = custoDoJson(mapa(m['custo']));
     final preco = numOu(m['preco_venda']);
     final lucro = numOu(m['lucro_unitario']);
+    final impressoras = [
+      if (context.watch<Sessao>().dono)
+        for (final i in lista(dados['impressoras'])) if ((i['moonraker_url'] ?? '') != '') i
+    ];
     final impressoes = [for (final i in lista(dados['impressoes'])) if (i['modelo_id'] == widget.id) i];
     final vendas = [
       for (final p in lista(dados['pedidos']))
@@ -145,6 +177,12 @@ class _ModeloTelaState extends State<ModeloTela> {
               title: Text('${a['nome_original']}', overflow: TextOverflow.ellipsis),
               subtitle: Text(tamanhoArquivo(num0(a['tamanho']))),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (a['tipo'] == 'gcode' && impressoras.isNotEmpty)
+                  IconButton(
+                    tooltip: impressoras.length == 1 ? 'Imprimir na ${impressoras.single['nome']}' : 'Imprimir',
+                    icon: const Icon(Icons.print_outlined),
+                    onPressed: () => _imprimir(a, impressoras),
+                  ),
                 IconButton(tooltip: 'Baixar', icon: const Icon(Icons.download), onPressed: () => baixarArquivo(context, a)),
                 IconButton(tooltip: 'Apagar', icon: const Icon(Icons.delete_outline), onPressed: () => _apagarArquivo(a)),
               ]),
