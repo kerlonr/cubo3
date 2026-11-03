@@ -69,6 +69,34 @@ void main() {
     expect(cliente.fechado, isTrue);
   });
 
+  testWidgets('câmera desliga com o app em segundo plano ou outra tela por cima e religa ao voltar', (tester) async {
+    final amb = ambiente(estado: 'standby')
+      ..rotas['POST /api/impressoras/i1/camera/link'] = (_) => json({'detail': 'Sem câmera'}, 404);
+    await abrir(tester, amb);
+    int links() => amb.recebidos.where((r) => r.url.path == '/api/impressoras/i1/camera/link').length;
+    final camera = find.text('Sem câmera', skipOffstage: false);
+    expect((links(), camera.evaluate().length), (1, 1));
+    // Ordem que o sistema segue (o AppLifecycleListener confere): ida e volta passando por cada estado.
+    for (final s in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused,
+        AppLifecycleState.hidden, AppLifecycleState.inactive]) {
+      tester.binding.handleAppLifecycleStateChanged(s);
+      await tester.pumpAndSettle();
+      expect(camera, findsNothing, reason: '$s');
+    }
+    expect(links(), 1);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect((links(), camera.evaluate().length), (2, 1));
+
+    await tester.tap(find.byTooltip('Histórico do Klipper'));
+    await tester.pumpAndSettle();
+    expect(camera, findsNothing, reason: 'outra tela por cima');
+    expect(links(), 2);
+    Navigator.of(tester.element(find.byType(ImpressoraTela, skipOffstage: false))).pop();
+    await tester.pumpAndSettle();
+    expect((links(), camera.evaluate().length), (3, 1));
+  });
+
   testWidgets('membro vê estado mas não vê controles', (tester) async {
     final amb = ambiente();
     await abrir(tester, amb, papel: 'membro');

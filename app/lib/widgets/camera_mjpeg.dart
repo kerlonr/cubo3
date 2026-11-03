@@ -78,26 +78,59 @@ class CameraAoVivo extends StatefulWidget {
   State<CameraAoVivo> createState() => _CameraAoVivoState();
 }
 
-class _CameraAoVivoState extends State<CameraAoVivo> {
+class _CameraAoVivoState extends State<CameraAoVivo> with WidgetsBindingObserver {
   Uri? _url;
   String? _erro;
+
+  /// Sem vídeo com o app em segundo plano ou outra tela por cima: não baixa o que ninguém vê (4G).
+  bool _parada = true;
+  bool _primeiroPlano = true;
+  bool _visivel = true;
 
   @override
   void initState() {
     super.initState();
-    _abrir();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Muda quando outra rota (tela, diálogo) entra ou sai de cima desta.
+    _visivel = ModalRoute.of(context)?.isCurrent ?? true;
+    _atualizar(); // o build vem em seguida: sem setState
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState estado) {
+    _primeiroPlano = estado == AppLifecycleState.resumed;
+    setState(_atualizar);
+  }
+
+  /// Liga ou desliga o vídeo; tirar o VideoMjpeg da árvore cancela a conexão.
+  void _atualizar() {
+    final parar = !_visivel || !_primeiroPlano;
+    if (parar == _parada) return;
+    _parada = parar;
+    _url = null;
+    _erro = null;
+    if (!parar) _abrir();
   }
 
   Future<void> _abrir() async {
-    setState(() {
-      _url = null;
-      _erro = null;
-    });
     try {
       final url = await linkCamera(context.read<ApiCliente>(), widget.impressoraId);
-      if (mounted) setState(() => _url = url);
+      if (mounted && !_parada) setState(() => _url = url);
     } on ErroApi catch (e) {
-      if (mounted) setState(() => _erro = e.status == 404 ? 'Sem câmera' : 'Câmera indisponível — toque para tentar de novo');
+      if (mounted && !_parada) {
+        setState(() => _erro = e.status == 404 ? 'Sem câmera' : 'Câmera indisponível — toque para tentar de novo');
+      }
     }
   }
 
@@ -106,10 +139,12 @@ class _CameraAoVivoState extends State<CameraAoVivo> {
   }
 
   Future<void> _tocar() async {
-    if (_erro != null) return _abrir();
+    if (_erro != null) {
+      setState(() => _erro = null);
+      return _abrir();
+    }
     if (widget.telaCheia) return Navigator.pop(context);
-    // Fecha o vídeo daqui enquanto a tela cheia abre o dela: uma conexão por vez.
-    setState(() => _url = null);
+    // A tela cheia por cima desliga o vídeo daqui (uma conexão por vez) e ele religa na volta.
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -120,7 +155,6 @@ class _CameraAoVivoState extends State<CameraAoVivo> {
         ),
       ),
     );
-    if (mounted) _abrir();
   }
 
   @override
@@ -129,7 +163,9 @@ class _CameraAoVivoState extends State<CameraAoVivo> {
       color: Colors.black,
       alignment: Alignment.center,
       child: Stack(fit: StackFit.expand, children: [
-        if (_erro != null)
+        if (_parada)
+          const Center(child: Icon(Icons.videocam_off_outlined, color: Colors.white38)) // parado: sem animação
+        else if (_erro != null)
           Center(child: Text(_erro!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)))
         else if (_url == null)
           const Center(child: CircularProgressIndicator())
