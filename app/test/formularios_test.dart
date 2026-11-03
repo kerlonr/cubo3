@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cubo3/api/fila.dart';
 import 'package:cubo3/telas/estoque/carretel_form.dart';
 import 'package:cubo3/telas/estoque/filamento_form.dart';
 import 'package:cubo3/telas/mais/configuracoes_tela.dart';
@@ -115,5 +116,24 @@ void main() {
     for (final s in ['Empresa', 'Custos', 'Canais de venda', 'Impressoras', 'Notificações', 'Conta', 'Avançado']) {
       expect(find.text(s), findsOneWidget, reason: s);
     }
+  });
+
+  testWidgets('Configurações: erro da fila tem "Tentar de novo", que devolve a operação para a fila', (tester) async {
+    final amb = Ambiente({'PUT /api/clientes/c1': (_) => json({'detail': 'Cliente foi alterado por outra pessoa.'}, 409)});
+    await amb.preparar();
+    amb.online = false;
+    await amb.fila.enviarOuGuardar(Operacao.nova('PUT', '/api/clientes/c1', {'nome': 'Ana'}));
+    amb.online = true;
+    await amb.fila.esvaziar();
+    expect(amb.fila.erros, hasLength(1));
+    amb.rotas['PUT /api/clientes/c1'] = (_) => {'id': 'c1'};
+    await tamanhoTela(tester, 400, 2400);
+    await tester.pumpWidget(amb.tela(const ConfiguracoesTela()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tentar de novo'));
+    await tester.pumpAndSettle();
+    expect(amb.fila.erros, isEmpty);
+    expect(amb.fila.pendentes, 0);
+    expect(find.text('Cliente foi alterado por outra pessoa.'), findsNothing);
   });
 }

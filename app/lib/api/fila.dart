@@ -12,7 +12,7 @@ final dadosMudaram = ValueNotifier<int>(0);
 
 class Operacao {
   Operacao(this.id, this.metodo, this.caminho, this.corpo, this.criadaEm,
-      {this.empresa, this.versaoBase, this.tentativas = 0});
+      {this.empresa, this.versaoBase, this.tentativas = 0, this.proximaTentativa});
 
   /// [versaoBase] = `atualizado_em` lido do servidor antes de editar (só em edição; criação não tem).
   Operacao.nova(this.metodo, this.caminho, [this.corpo, this.versaoBase])
@@ -23,15 +23,21 @@ class Operacao {
       j['corpo'] as Map?, DateTime.parse(j['criadaEm'] as String),
       empresa: j['empresa'] as String?,
       versaoBase: j['versaoBase'] as String?,
-      tentativas: j['tentativas'] as int? ?? 0);
+      tentativas: j['tentativas'] as int? ?? 0,
+      proximaTentativa: DateTime.tryParse(j['proximaTentativa'] as String? ?? ''));
 
   final String id, metodo, caminho;
   final Map? corpo;
   final DateTime criadaEm;
-  final String? versaoBase;
 
-  /// Tentativas seguidas com erro 500 (bug no servidor para esta operação, não servidor fora).
+  /// Muda quando uma edição anterior do mesmo registro, feita neste aparelho, chega antes (ver _esvaziar).
+  String? versaoBase;
+
+  /// Tentativas com erro 500 (bug no servidor para esta operação, não servidor fora).
   int tentativas = 0;
+
+  /// Depois de um 500, a fila só reenvia a partir daqui (espera crescente, ver FilaOffline.esperas500).
+  DateTime? proximaTentativa;
 
   /// Empresa em que foi feita: a fila manda para ela mesmo que o usuário troque de empresa antes.
   String? empresa;
@@ -45,6 +51,7 @@ class Operacao {
         'empresa': empresa,
         'versaoBase': versaoBase,
         'tentativas': tentativas,
+        'proximaTentativa': proximaTentativa?.toUtc().toIso8601String(),
       };
 }
 
@@ -90,8 +97,13 @@ class FilaOffline extends ChangeNotifier {
   Future<void>? _esvaziando;
   Timer? _timer;
 
-  /// Depois de tantos 500 seguidos a operação vai para os erros e a fila segue.
-  static const maxTentativas500 = 3;
+  /// Espera depois da 1ª, 2ª, 3ª e 4ª tentativa com 500; na 5ª a operação vai para os erros e a fila segue.
+  /// Espaçadas: um 500 passageiro (banco reiniciando) não descarta nada.
+  static const esperas500 = [Duration(seconds: 30), Duration(minutes: 2), Duration(minutes: 10), Duration(minutes: 10)];
+  static const maxTentativas500 = 5;
+
+  /// Relógio da espera depois de 500 (os testes avançam o tempo).
+  DateTime Function() relogio = DateTime.now;
 
   int get pendentes => _ops.length;
 
@@ -129,35 +141,60 @@ class FilaOffline extends ChangeNotifier {
       return ResultadoEnvio(false, await _enviar(op));
     } on ErroApi catch (e) {
       if (!e.temporario || !guardaOffline) rethrow;
-      if (e.status == 500) op.tentativas = 1;
+      if (e.status == 500) _falhou500(op);
       _ops.add(op);
       await _gravar();
       return const ResultadoEnvio(true);
     }
   }
 
-  /// Envia em ordem; para no primeiro erro de rede/5xx ou sessão expirada.
-  Future<void> esvaziar() => _esvaziando ??= _esvaziar().whenComplete(() => _esvaziando = null);
+  /// Conta o 500 e marca quando tentar de novo. false = já esgotou as tentativas.
+  bool _falhou500(Operacao op) {
+    if (++op.tentativas >= maxTentativas500) return false;
+    op.proximaTentativa = relogio().add(esperas500[op.tentativas - 1]);
+    return true;
+  }
 
-  Future<void> _esvaziar() async {
+  /// Envia em ordem; para no primeiro erro de rede/502-504 ou sessão expirada. A operação esperando depois
+  /// de um 500 fica onde está e as seguintes vão: um 500 fixo não prende a venda de agora.
+  /// [forcar] (botão "Enviar agora") não espera o prazo depois de um 500.
+  Future<void> esvaziar({bool forcar = false}) =>
+      _esvaziando ??= _esvaziar(forcar).whenComplete(() => _esvaziando = null);
+
+  Future<void> _esvaziar(bool forcar) async {
     var enviou = false;
     try {
-      while (_ops.isNotEmpty) {
-        final op = _ops.first;
+      var i = 0;
+      while (i < _ops.length) {
+        final op = _ops[i];
+        final prazo = op.proximaTentativa;
+        if (!forcar && prazo != null && relogio().isBefore(prazo)) {
+          i++;
+          continue;
+        }
         try {
-          await _enviar(op);
+          final resposta = await _enviar(op);
           enviou = true;
+          // Outras edições do mesmo registro feitas sem rede leram a mesma versão: agora partem desta,
+          // senão o servidor veria a 2ª como conflito com "outra pessoa" (foi este aparelho).
+          final nova = resposta is Map ? resposta['atualizado_em'] : null;
+          if (op.versaoBase != null && nova is String) {
+            for (final o in _ops) {
+              if (o != op && o.caminho == op.caminho && o.versaoBase == op.versaoBase) o.versaoBase = nova;
+            }
+          }
         } on ErroApi catch (e) {
-          // 500 repetido é bug do servidor com esta operação: depois de algumas vezes, sai da frente das outras.
-          // 502/503/504 e sem rede são servidor fora: esperam sem limite.
-          if (e.status == 500 && ++op.tentativas < maxTentativas500) {
+          // 500 é bug do servidor com esta operação (ou ele reiniciando): tenta de novo mais tarde, espaçado;
+          // depois de 5, vai para os erros. 502/503/504 e sem rede são servidor fora: esperam sem limite.
+          if (e.status == 500 && _falhou500(op)) {
             await _gravar();
+            i++;
             continue;
           }
           if (e.status != 500 && (e.temporario || e.status == 401)) return;
           erros.add(ErroFila(op, e.mensagem)); // 404/409/422...: reenviar não adianta
         }
-        _ops.remove(op); // não removeAt(0): a operação pode ter sido descartada enquanto ia
+        _ops.remove(op); // não removeAt(i): a operação pode ter sido descartada enquanto ia
         await _gravar();
       }
     } finally {
@@ -169,6 +206,16 @@ class FilaOffline extends ChangeNotifier {
   Future<void> descartar(Operacao op) async {
     _ops.remove(op);
     await _gravar();
+  }
+
+  /// Devolve uma operação recusada para o fim da fila, com as tentativas zeradas, e tenta enviar.
+  Future<void> tentarDeNovo(ErroFila erro) async {
+    erros.remove(erro);
+    _ops.add(erro.operacao
+      ..tentativas = 0
+      ..proximaTentativa = null);
+    await _gravar();
+    await esvaziar(forcar: true);
   }
 
   Future<void> limparErros() async {

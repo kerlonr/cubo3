@@ -168,7 +168,7 @@ class _ConfiguracoesTelaState extends State<ConfiguracoesTela> {
           ListTile(
             leading: const Icon(Icons.cloud_upload_outlined),
             title: Text(fila.pendentes == 0 ? 'Nada pendente' : '${fila.pendentes} alteração(ões) esperando internet'),
-            trailing: fila.pendentes == 0 ? null : TextButton(onPressed: fila.esvaziar, child: const Text('Enviar agora')),
+            trailing: fila.pendentes == 0 ? null : TextButton(onPressed: () => fila.esvaziar(forcar: true), child: const Text('Enviar agora')),
           ),
           for (final op in fila.operacoes)
             ListTile(
@@ -192,6 +192,7 @@ class _ConfiguracoesTelaState extends State<ConfiguracoesTela> {
               leading: const Icon(Icons.error_outline, color: Colors.red),
               title: Text(e.mensagem),
               subtitle: Text('${e.operacao.metodo} ${e.operacao.caminho} · ${dataHora(e.operacao.criadaEm)}'),
+              trailing: TextButton(onPressed: () => fila.tentarDeNovo(e), child: const Text('Tentar de novo')),
             ),
           if (fila.erros.isNotEmpty)
             Align(

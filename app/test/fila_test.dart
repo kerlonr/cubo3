@@ -101,21 +101,55 @@ void main() {
     expect(dadosMudaram.value, antes + 1);
   });
 
-  test('500 seguidos contam na operação guardada (sobrevive ao app reaberto); 503 não conta', () async {
+  test('500 conta uma tentativa por esvaziamento, com espera crescente; na 5ª vai para os erros; 503 não conta',
+      () async {
+    var agora = DateTime.utc(2026, 11, 3, 12);
     final s = Servidor()
       ..online = true
       ..status = 500;
-    final fila = FilaOffline(s.api(), prefs, guardaOffline: true);
+    FilaOffline nova() => FilaOffline(s.api(), prefs, guardaOffline: true)..relogio = () => agora;
+    final fila = nova();
     expect((await fila.enviarOuGuardar(venda())).guardada, isTrue);
-    expect(FilaOffline(s.api(), prefs, guardaOffline: true).operacoes.single.tentativas, 1);
+    expect(nova().operacoes.single.tentativas, 1, reason: 'sobrevive ao app reaberto');
+    await fila.esvaziar();
+    expect(s.recebidos, hasLength(1), reason: 'antes dos 30 s não tenta de novo');
     s.status = 503;
+    agora = agora.add(const Duration(seconds: 30));
     await fila.esvaziar();
-    expect(FilaOffline(s.api(), prefs, guardaOffline: true).operacoes.single.tentativas, 1);
+    expect(s.recebidos, hasLength(2));
+    expect(nova().operacoes.single.tentativas, 1, reason: '503 é servidor fora: não conta');
     s.status = 500;
-    await fila.esvaziar();
+    await fila.esvaziar(); // 2ª com 500
+    for (final espera in const [Duration(minutes: 2), Duration(minutes: 10), Duration(minutes: 10)]) {
+      final antes = s.recebidos.length;
+      agora = agora.add(espera - const Duration(seconds: 1));
+      await fila.esvaziar();
+      expect(s.recebidos, hasLength(antes), reason: 'ainda esperando $espera');
+      agora = agora.add(const Duration(seconds: 1));
+      await fila.esvaziar();
+      expect(s.recebidos, hasLength(antes + 1));
+    }
     expect(fila.pendentes, 0);
     expect(fila.erros.single.mensagem, 'Recusado 500');
-    expect(s.recebidos, hasLength(4)); // 1 + 503 + mais 2 vezes 500
+    expect(s.recebidos, hasLength(6)); // 5 vezes 500 + o 503
+  });
+
+  test('"Tentar de novo" devolve a operação dos erros para a fila e envia', () async {
+    final s = Servidor();
+    final fila = FilaOffline(s.api(), prefs, guardaOffline: true);
+    await fila.enviarOuGuardar(Operacao.nova('PUT', '/api/clientes/a', {}));
+    await fila.enviarOuGuardar(venda());
+    s
+      ..online = true
+      ..status = 409;
+    await fila.esvaziar();
+    expect(fila.erros, hasLength(2));
+    s.status = 200;
+    await fila.tentarDeNovo(fila.erros.first);
+    expect(s.recebidos.last.url.path, '/api/clientes/a');
+    expect(fila.pendentes, 0);
+    expect([for (final e in fila.erros) e.operacao.caminho], ['/api/pedidos/p1']);
+    expect(FilaOffline(s.api(), prefs, guardaOffline: true).erros, hasLength(1));
   });
 
   test('401 (sessão expirada) não descarta a operação', () async {
