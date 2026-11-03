@@ -14,3 +14,8 @@ __pycache__/
 
 # Rascunho dos planos
 .superpowers/
+
+# Segredos do deploy
+deploy/.env
+deploy/tunnel/*.json
+deploy/tunnel/config.yml

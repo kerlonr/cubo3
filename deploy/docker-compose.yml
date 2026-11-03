@@ -1,0 +1,68 @@
+# Cubo³ no servidor 192.168.1.150 — pasta /home/server/projects/cubo3
+# Volumes com caminho ABSOLUTO de propósito: caminho relativo + pasta movida = Docker cria pasta vazia.
+name: cubo3
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cubo3
+      POSTGRES_USER: cubo3
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina no deploy/.env}
+      TZ: America/Sao_Paulo
+    volumes:
+      - /home/server/projects/cubo3/dados/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cubo3 -d cubo3"]
+      interval: 5s
+      retries: 20
+
+  api:
+    build: ../server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://cubo3:${POSTGRES_PASSWORD}@db/cubo3
+      JWT_SEGREDO: ${JWT_SEGREDO:?defina no deploy/.env}
+      ARQUIVOS_DIR: /dados/arquivos
+      WEB_DIR: /web
+      APK_DIR: /apk
+      TZ: America/Sao_Paulo
+    volumes:
+      - /home/server/projects/cubo3/dados/arquivos:/dados/arquivos
+      - /home/server/projects/cubo3/dados/web:/web:ro
+      - /home/server/projects/cubo3/dados/apk:/apk:ro
+    # Só a própria máquina acessa; de fora entra pelo túnel (serviço tunnel abaixo).
+    ports:
+      - "127.0.0.1:8096:8000"
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: cubo3
+      PGDATABASE: cubo3
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      TZ: America/Sao_Paulo
+    entrypoint: ["sh", "/backup.sh"]
+    volumes:
+      - /home/server/projects/cubo3/deploy/backup.sh:/backup.sh:ro
+      - /home/server/projects/cubo3/dados/backups:/backups
+      - /home/server/projects/cubo3/dados/arquivos:/arquivos:ro
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.0
+    restart: unless-stopped
+    user: "1000:1000"
+    depends_on:
+      - api
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - /home/server/projects/cubo3/deploy/tunnel:/etc/cloudflared:ro

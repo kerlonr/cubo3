@@ -1,0 +1,8 @@
+# Copie para deploy/tunnel/config.yml no servidor e troque <UUID> pelo id do túnel "cubo3".
+# A credencial <UUID>.json vem de ~/.cloudflared/ (criada por `cloudflared tunnel create cubo3`).
+tunnel: <UUID>
+credentials-file: /etc/cloudflared/<UUID>.json
+ingress:
+  - hostname: cubo3.kerlonr.com.br
+    service: http://api:8000
+  - service: http_status:404
