@@ -111,6 +111,21 @@ void main() {
         throwsA(isA<ErroApi>().having((e) => e.mensagem, 'm', 'A senha precisa ter pelo menos 8 caracteres')));
   });
 
+  test('422 de validação do FastAPI (mensagem em inglês) vira texto legível com o campo', () async {
+    final api = cliente((r) async => json({
+          'detail': [
+            {'loc': ['body', 'distancia'], 'msg': 'Input should be a finite number', 'type': 'finite_number'}
+          ]
+        }, 422));
+    await expectLater(api.post('/api/x'), throwsA(isA<ErroApi>().having((e) => e.mensagem, 'm', 'Valor inválido: distancia')));
+    final falta = cliente((r) async => json({
+          'detail': [
+            {'loc': ['body', 'nome'], 'msg': 'Field required', 'type': 'missing'}
+          ]
+        }, 422));
+    await expectLater(falta.post('/api/x'), throwsA(isA<ErroApi>().having((e) => e.mensagem, 'm', 'Campo obrigatório: nome')));
+  });
+
   test('trocar_senha no login vai para a troca de senha', () async {
     final api = cliente((r) async {
       if (r.url.path == '/api/auth/login') return json({'acesso': 'A1', 'refresh': 'R1', 'trocar_senha': true});

@@ -22,8 +22,14 @@ class ErroApi implements Exception {
       final detail = (jsonDecode(utf8.decode(corpo)) as Map)['detail'];
       if (detail is String) return ErroApi(status, detail);
       if (detail is List && detail.isNotEmpty) {
-        final msg = '${(detail.first as Map)['msg']}'.replaceFirst('Value error, ', '');
-        return ErroApi(status, msg);
+        // {loc, msg, type}: "Value error, ..." é texto nosso (validador do servidor); o resto vem em inglês do
+        // FastAPI, então mostra só o campo.
+        final e = detail.first as Map;
+        final msg = '${e['msg']}';
+        if (msg.startsWith('Value error, ')) return ErroApi(status, msg.substring(13));
+        final campo = e['loc'] is List && (e['loc'] as List).isNotEmpty ? '${(e['loc'] as List).last}' : '';
+        if (campo.isEmpty) return ErroApi(status, 'Dados inválidos');
+        return ErroApi(status, e['type'] == 'missing' ? 'Campo obrigatório: $campo' : 'Valor inválido: $campo');
       }
     } catch (_) {
       // Corpo não-JSON (página HTML da Cloudflare): cai na mensagem pelo status.
