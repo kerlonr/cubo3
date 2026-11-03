@@ -159,7 +159,7 @@ def test_monitor_recupera_trabalho_terminado_desconectado(cliente, dono, fabrica
     from sqlalchemy import select
 
     imp = impressora(cliente, dono)
-    novo = {**JOB, "job_id": "0000B1", "end_time": time.time()}
+    novo = {**JOB, "job_id": "0000B1", "end_time": time.time() + 5}  # terminou depois do cadastro
     antigo = {**JOB, "job_id": "0000A1"}  # terminou antes de a impressora existir no Cubo³
     porta = _porta_livre()
     recebidos = []

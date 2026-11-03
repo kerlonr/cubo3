@@ -1,8 +1,8 @@
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Uuid, create_engine
+from sqlalchemy import Boolean, DateTime, ForeignKey, Uuid, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, declared_attr, mapped_column, sessionmaker
 from sqlalchemy.types import TypeDecorator
 
@@ -37,6 +37,16 @@ class Registro:
     criado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
     atualizado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora, onupdate=agora, index=True)
     excluido: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+@event.listens_for(Base, "before_update", propagate=True)
+def _atualizado_em_crescente(mapper, conexao, alvo) -> None:
+    # O relógio pode repetir o mesmo instante (Windows ~15 ms); a versão base (X-Versao-Base) precisa que
+    # cada gravação tenha um atualizado_em estritamente maior que o anterior.
+    if not isinstance(alvo, Registro):
+        return
+    novo, anterior = agora(), alvo.atualizado_em
+    alvo.atualizado_em = novo if anterior is None or novo > anterior else anterior + timedelta(microseconds=1)
 
 
 class DaEmpresa(Registro):
