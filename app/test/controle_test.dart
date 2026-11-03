@@ -140,6 +140,21 @@ void main() {
     ]);
   });
 
+  testWidgets('pausada: atalho "Desligar" confirma e só então manda 0/0', (tester) async {
+    final amb = ambiente(estado: 'paused');
+    await abrir(tester, amb);
+    await tester.tap(find.text('Desligar'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(comandos(amb), isEmpty);
+    await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Desligar')));
+    await tester.pumpAndSettle();
+    expect(comandos(amb), [
+      {'acao': 'temperatura', 'alvo': 'bico', 'valor': 0},
+      {'acao': 'temperatura', 'alvo': 'mesa', 'valor': 0},
+    ]);
+  });
+
   testWidgets('tocar no cartão ao vivo do Início abre a tela da impressora', (tester) async {
     final amb = ambiente()..rotas['GET /api/impressoras'] = (_) => [impressora];
     await amb.preparar();

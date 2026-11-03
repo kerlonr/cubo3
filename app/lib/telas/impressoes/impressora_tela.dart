@@ -133,6 +133,17 @@ class _PainelImpressoraState extends State<PainelImpressora> {
   void _temperaturas(num? bico, num? mesa) =>
       _enviar((api) => mudarTemperaturas(api, _id, bico: bico, mesa: mesa), 'Temperatura enviada');
 
+  /// "Desligar" (0/0) com peça em andamento ou pausada esfria e perde a peça: confirma antes.
+  Future<void> _atalho(num bico, num mesa, String? estado) async {
+    if (bico == 0 &&
+        (estado == 'printing' || estado == 'paused') &&
+        !await confirmar(context, 'Desligar bico e mesa?', 'A peça em andamento esfria e se perde.',
+            sim: 'Desligar', nao: 'Voltar', cor: vermelho)) {
+      return;
+    }
+    if (mounted) _temperaturas(bico, mesa);
+  }
+
   @override
   Widget build(BuildContext context) {
     final estado = context.watch<CanalAoVivo>().estados[_id]?.dados ?? _estado;
@@ -206,7 +217,7 @@ class _PainelImpressoraState extends State<PainelImpressora> {
           ActionChip(
             label: Text(a.key),
             tooltip: '${a.value.bico}° / ${a.value.mesa}°',
-            onPressed: se(() => _temperaturas(a.value.bico, a.value.mesa)),
+            onPressed: se(() => _atalho(a.value.bico, a.value.mesa, estado)),
           ),
       ]),
       const SizedBox(height: 32),
