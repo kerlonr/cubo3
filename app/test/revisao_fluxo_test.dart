@@ -1,5 +1,4 @@
-// Testes da revisão final (feat/app). Cada um prova um bug achado na revisão e fica com `skip`
-// documentado para a suíte seguir verde; tire o skip quando corrigir.
+// Testes da revisão final (feat/app): cada um reproduz um bug achado na revisão e hoje prova a correção.
 import 'dart:convert';
 
 import 'package:cubo3/api/api.dart';
@@ -116,7 +115,7 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-  }, skip: true); // BUG revisão: Enter num texto sem modelo correspondente chama onSelected(null) e estoura firstWhere (venda_rapida_tela.dart:211)
+  });
 
   testWidgets('Configurações lista as pendentes e descarta uma só depois de confirmar', (tester) async {
     final amb = Ambiente({});

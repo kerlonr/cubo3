@@ -207,12 +207,15 @@ class _VendaRapidaTelaState extends State<VendaRapidaTela> {
               dropdownMenuEntries: [
                 for (final m in modelos) DropdownMenuEntry(value: m['id'] as String, label: '${m['nome']}'),
               ],
-              onSelected: (v) => setState(() {
-                final m = modelos.firstWhere((x) => x['id'] == v);
-                it.modelo = v;
-                it.descricao = '${m['nome']}';
-                it.preco.text = DinheiroFormatter.formatar(numOu(m['preco_venda']));
-              }),
+              onSelected: (v) {
+                if (v == null) return; // Enter num texto que não é modelo nenhum
+                setState(() {
+                  final m = modelos.firstWhere((x) => x['id'] == v);
+                  it.modelo = v;
+                  it.descricao = '${m['nome']}';
+                  it.preco.text = DinheiroFormatter.formatar(numOu(m['preco_venda']));
+                });
+              },
             ),
           ),
           if (_itens.length > 1)
