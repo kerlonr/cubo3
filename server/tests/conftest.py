@@ -52,3 +52,43 @@ def app(fabrica, tmp_path, monkeypatch):
 def cliente(app):
     with TestClient(app) as c:
         yield c
+
+
+SENHA = "senha-forte-123"
+
+
+def _headers(cliente, email, empresa_id, senha=SENHA):
+    r = cliente.post("/api/auth/login", json={"email": email, "senha": senha})
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['acesso']}", "X-Empresa": str(empresa_id)}
+
+
+@pytest.fixture
+def empresas(db):
+    from app.auth.servico import adicionar_membro, criar_dono
+
+    _, a = criar_dono(db, "dono@a.com", "Dono A", SENHA, "Empresa A")
+    adicionar_membro(db, a.id, "membro@a.com", "Membro A", SENHA)
+    _, b = criar_dono(db, "dono@b.com", "Dono B", SENHA, "Empresa B")
+    db.commit()
+    return {"a": a.id, "b": b.id}
+
+
+@pytest.fixture
+def empresa_a_id(empresas):
+    return empresas["a"]
+
+
+@pytest.fixture
+def dono(cliente, empresas):
+    return _headers(cliente, "dono@a.com", empresas["a"])
+
+
+@pytest.fixture
+def membro(cliente, empresas):
+    return _headers(cliente, "membro@a.com", empresas["a"])
+
+
+@pytest.fixture
+def outro(cliente, empresas):
+    return _headers(cliente, "dono@b.com", empresas["b"])
