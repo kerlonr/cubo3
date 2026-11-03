@@ -211,6 +211,7 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
         if (impressoras.length > 1)
           DropdownButtonFormField<String>(
             initialValue: _impressora,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Impressora'),
             items: [for (final i in impressoras) DropdownMenuItem(value: i['id'] as String, child: Text('${i['nome']}'))],
             onChanged: (v) => setState(() => _impressora = v),

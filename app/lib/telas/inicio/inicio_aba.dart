@@ -6,6 +6,7 @@ import '../../api/cache.dart';
 import '../../api/modelos.dart';
 import '../../tema.dart';
 import '../../util/formatos.dart';
+import '../../widgets/adaptativo.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../../widgets/logo.dart';
@@ -54,7 +55,7 @@ class _InicioAbaState extends State<InicioAba> {
 
   Widget _corpo(Map p, String nomeMes) {
     final t = Theme.of(context);
-    final largo = MediaQuery.sizeOf(context).width >= 840;
+    final largo = ClasseLargura.de(context) == ClasseLargura.expandido;
     final impressoras = [for (final i in lista(p['impressoras'])) if ((i['moonraker_url'] ?? '') != '') i];
     final resultado = num0(p['resultado']), lucro = num0(p['lucro_vendas']);
     final cartoes = [
@@ -73,15 +74,7 @@ class _InicioAbaState extends State<InicioAba> {
             Expanded(child: Text(nomeMes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600))),
             IconButton(onPressed: () => _mudarMes(1), icon: const Icon(Icons.chevron_right)),
           ]),
-          GridView.count(
-            crossAxisCount: largo ? 4 : 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: largo ? 2 : 1.45,
-            children: cartoes,
-          ),
+          GradeCartoes(colunas: largo ? 4 : 2, children: cartoes),
           if (num0(p['a_confirmar']) > 0) ...[
             const SizedBox(height: 8),
             Card(

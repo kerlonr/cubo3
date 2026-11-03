@@ -36,6 +36,7 @@ class CartaoValor extends StatelessWidget {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(valor,
+                  softWrap: false, // sem quebra: a altura medida é a de uma linha (o FittedBox só encolhe)
                   style: TextStyle(
                       fontSize: 26, fontWeight: FontWeight.w600, color: cor, fontFeatures: tabular, letterSpacing: -0.5)),
             ),

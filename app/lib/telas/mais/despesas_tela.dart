@@ -128,6 +128,7 @@ class _DespesaFormState extends State<DespesaForm> {
           CampoDinheiro(_valor, 'Valor', obrigatorio: true),
           DropdownButtonFormField<String>(
             initialValue: _categoria,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Categoria'),
             items: [for (final e in categoriasDespesa.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
             onChanged: (v) => setState(() => _categoria = v!),

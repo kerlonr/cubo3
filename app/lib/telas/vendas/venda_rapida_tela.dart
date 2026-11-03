@@ -145,6 +145,7 @@ class _VendaRapidaTelaState extends State<VendaRapidaTela> {
       if (canais.length > 1)
         DropdownButtonFormField<String>(
           initialValue: _canal,
+          isExpanded: true,
           decoration: const InputDecoration(labelText: 'Canal de venda'),
           items: [for (final c in canais) DropdownMenuItem(value: c['id'] as String, child: Text('${c['nome']}'))],
           onChanged: (v) => setState(() => _canal = v),

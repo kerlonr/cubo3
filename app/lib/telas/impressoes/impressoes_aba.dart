@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import '../../api/modelos.dart';
 import '../../tema.dart';
 import '../../util/formatos.dart';
+import '../../widgets/adaptativo.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../mais/impressoras_tela.dart';
-import 'cartao_ao_vivo.dart';
 import 'confirmar_tela.dart';
 import 'impressora_tela.dart';
 
@@ -17,9 +17,12 @@ const nomesStatus = {
   'descartada': 'Descartada',
 };
 
-/// Aba Impressões: impressora ao vivo no topo, "A confirmar" (padrão) e "Todas".
+/// Aba Impressora: câmera, estado e controles da impressora; ao lado (ou embaixo) "A confirmar" (padrão) e "Todas".
 class ImpressoesAba extends StatefulWidget {
-  const ImpressoesAba({super.key, this.aoContar});
+  const ImpressoesAba({super.key, this.aoContar, this.ativa = true});
+
+  /// false enquanto outra aba está na frente (a câmera só liga com a aba visível).
+  final bool ativa;
 
   /// Avisa a casca quantas estão a confirmar (contador no ícone da aba).
   final ValueChanged<int>? aoContar;
@@ -31,6 +34,7 @@ class ImpressoesAba extends StatefulWidget {
 class ImpressoesAbaState extends State<ImpressoesAba> {
   bool _todas = false;
   int _versao = 0;
+  String? _impressora;
 
   void recarregar() => setState(() => _versao++);
 
@@ -42,7 +46,7 @@ class ImpressoesAbaState extends State<ImpressoesAba> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Impressões'), actions: [
+      appBar: AppBar(title: const Text('Impressora'), actions: [
         IconButton(tooltip: 'Impressoras', icon: const Icon(Icons.settings_outlined), onPressed: () => _abrir(const ImpressorasTela())),
         IconButton(tooltip: 'Lançar impressão', icon: const Icon(Icons.add), onPressed: () => _abrir(const ConfirmarTela())),
       ]),
@@ -63,38 +67,45 @@ class ImpressoesAbaState extends State<ImpressoesAba> {
     final impressoras = [for (final i in lista(d['impressoras'])) if ((i['moonraker_url'] ?? '') != '') i];
     final todas = lista(d['impressoes']).reversed.toList();
     final mostradas = _todas ? todas : [for (final i in todas) if (i['status'] == 'a_confirmar') i];
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 900),
-        child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
-          for (final i in impressoras)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: InkWell(
-                onTap: () => _abrir(ImpressoraTela(impressora: i)),
-                child: CartaoAoVivo(impressora: i),
-              ),
-            ),
-          const SizedBox(height: 8),
-          SegmentedButton<bool>(
-            segments: [
-              ButtonSegment(value: false, label: Text('A confirmar (${todas.where((i) => i['status'] == 'a_confirmar').length})')),
-              const ButtonSegment(value: true, label: Text('Todas')),
-            ],
-            selected: {_todas},
-            onSelectionChanged: (s) => setState(() => _todas = s.first),
+    final atual = impressoras.where((i) => i['id'] == _impressora).firstOrNull ?? impressoras.firstOrNull;
+    return ListaDetalhe(
+      detalhe: [
+        if (impressoras.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final i in impressoras)
+                ChoiceChip(
+                  label: Text('${i['nome']}', overflow: TextOverflow.ellipsis),
+                  selected: i == atual,
+                  onSelected: (_) => setState(() => _impressora = i['id'] as String),
+                ),
+            ]),
           ),
-          const SizedBox(height: 8),
-          if (mostradas.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(32),
-              child: Text('Nada para confirmar. Quando uma impressão terminar no Klipper, ela aparece aqui.',
-                  textAlign: TextAlign.center),
-            ),
-          for (final i in mostradas) _item(i),
-        ]),
-      ),
+        if (atual != null) ...[
+          Align(alignment: Alignment.centerRight, child: BotaoHistoricoKlipper(impressora: atual)),
+          PainelImpressora(key: ValueKey(atual['id']), impressora: atual, comCamera: widget.ativa),
+        ],
+      ],
+      lista: [
+        const SizedBox(height: 8),
+        SegmentedButton<bool>(
+          segments: [
+            ButtonSegment(value: false, label: Text('A confirmar (${todas.where((i) => i['status'] == 'a_confirmar').length})')),
+            const ButtonSegment(value: true, label: Text('Todas')),
+          ],
+          selected: {_todas},
+          onSelectionChanged: (s) => setState(() => _todas = s.first),
+        ),
+        const SizedBox(height: 8),
+        if (mostradas.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(32),
+            child: Text('Nada para confirmar. Quando uma impressão terminar no Klipper, ela aparece aqui.',
+                textAlign: TextAlign.center),
+          ),
+        for (final i in mostradas) _item(i),
+      ],
     );
   }
 

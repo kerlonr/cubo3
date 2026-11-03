@@ -189,7 +189,7 @@ class LinhaPedido extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         onTap: aoTocar,
-        title: Text(mapa(p['cliente'])['nome'] as String? ?? resumoItens(p)),
+        title: Text(mapa(p['cliente'])['nome'] as String? ?? resumoItens(p), maxLines: 2, overflow: TextOverflow.ellipsis),
         subtitle: Text([if (data != null) dataCurta(data), nomesStatusPedido[p['status']] ?? '${p['status']}'].join(' · ')),
         trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text(moeda(totalPedido(p)), style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),

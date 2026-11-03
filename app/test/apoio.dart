@@ -8,7 +8,9 @@ import 'package:cubo3/api/cache.dart';
 import 'package:cubo3/api/fila.dart';
 import 'package:cubo3/api/sessao.dart';
 import 'package:cubo3/main.dart';
+import 'package:cubo3/tema.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -105,10 +107,19 @@ class Ambiente {
 
   Widget app() => AppCubo3(api: api, sessao: sessao, fila: fila, cache: cache, canal: canal);
 
-  /// Monta uma tela solta com os mesmos serviços do app.
-  Widget tela(Widget filho) => MultiProvider(
+  /// Monta uma tela solta com os mesmos serviços do app ([brilho] = com o tema e o idioma do app).
+  Widget tela(Widget filho, {Brightness? brilho}) => MultiProvider(
         providers: provedores(api, sessao, fila, cache, canal),
-        child: MaterialApp(home: filho),
+        child: brilho == null
+            ? MaterialApp(home: filho)
+            : MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: temaCubo3(brilho),
+                locale: const Locale('pt', 'BR'),
+                supportedLocales: const [Locale('pt', 'BR')],
+                localizationsDelegates: GlobalMaterialLocalizations.delegates,
+                home: filho,
+              ),
       );
 }
 

@@ -14,16 +14,49 @@ import '../../widgets/estado_tela.dart';
 import '../mais/impressoras_tela.dart';
 import 'cartao_ao_vivo.dart';
 
-/// Câmera, estado e (só para o dono) os controles da impressora.
-class ImpressoraTela extends StatefulWidget {
+/// Câmera, estado e (só para o dono) os controles da impressora, numa tela própria.
+class ImpressoraTela extends StatelessWidget {
   const ImpressoraTela({super.key, required this.impressora});
   final Json impressora;
 
   @override
-  State<ImpressoraTela> createState() => _ImpressoraTelaState();
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text('${impressora['nome']}'), actions: [BotaoHistoricoKlipper(impressora: impressora)]),
+        body: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: ListView(padding: const EdgeInsets.all(16), children: [PainelImpressora(impressora: impressora)]),
+          ),
+        ),
+      );
 }
 
-class _ImpressoraTelaState extends State<ImpressoraTela> {
+class BotaoHistoricoKlipper extends StatelessWidget {
+  const BotaoHistoricoKlipper({super.key, required this.impressora});
+  final Json impressora;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+        tooltip: 'Histórico do Klipper',
+        icon: const Icon(Icons.history),
+        onPressed: () =>
+            Navigator.push(context, MaterialPageRoute(builder: (_) => HistoricoImpressoraTela(impressora: impressora))),
+      );
+}
+
+/// Câmera, estado e controles (sem rolagem própria: vai dentro de uma lista).
+/// [comCamera] false enquanto a aba está escondida: o vídeo não fica gastando dados.
+class PainelImpressora extends StatefulWidget {
+  const PainelImpressora({super.key, required this.impressora, this.comCamera = true});
+  final Json impressora;
+  final bool comCamera;
+
+  @override
+  State<PainelImpressora> createState() => _PainelImpressoraState();
+}
+
+class _PainelImpressoraState extends State<PainelImpressora> {
   Json? _estado;
   bool _semConexao = false;
   bool _enviando = false;
@@ -104,28 +137,11 @@ class _ImpressoraTelaState extends State<ImpressoraTela> {
   Widget build(BuildContext context) {
     final estado = context.watch<CanalAoVivo>().estados[_id]?.dados ?? _estado;
     final dono = context.watch<Sessao>().dono;
-    return Scaffold(
-      appBar: AppBar(title: Text('${widget.impressora['nome']}'), actions: [
-        IconButton(
-          tooltip: 'Histórico do Klipper',
-          icon: const Icon(Icons.history),
-          onPressed: () => Navigator.push(
-              context, MaterialPageRoute(builder: (_) => HistoricoImpressoraTela(impressora: widget.impressora))),
-        ),
-      ]),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
-          child: ListView(padding: const EdgeInsets.all(16), children: [
-            CameraAoVivo(impressoraId: _id),
-            const SizedBox(height: 8),
-            PainelAoVivo(nome: '${widget.impressora['nome']}', estado: estado),
-            if (dono) ..._controles(estado?['estado'] as String?),
-          ]),
-        ),
-      ),
-    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (widget.comCamera) ...[CameraAoVivo(impressoraId: _id), const SizedBox(height: 8)],
+      PainelAoVivo(nome: '${widget.impressora['nome']}', estado: estado),
+      if (dono) ..._controles(estado?['estado'] as String?),
+    ]);
   }
 
   List<Widget> _controles(String? estado) {

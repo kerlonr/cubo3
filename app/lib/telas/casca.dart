@@ -8,6 +8,7 @@ import '../ao_vivo/canal_ao_vivo.dart';
 import '../ao_vivo/servico_notificacao.dart';
 import '../api/fila.dart';
 import '../atualizacao.dart';
+import '../widgets/adaptativo.dart';
 
 import 'catalogo/catalogo_aba.dart';
 import 'estoque/carretel_form.dart';
@@ -20,7 +21,7 @@ import 'mais/mais_tela.dart';
 import 'vendas/venda_rapida_tela.dart';
 import 'vendas/vendas_aba.dart';
 
-/// Navegação principal: 5 abas + "+" global. Tela larga (≥ 840 px) troca a barra pelo trilho lateral.
+/// Navegação principal: 5 abas + "+" global. Compacto (< 600 dp): barra inferior; médio e expandido: trilho lateral.
 class Casca extends StatefulWidget {
   const Casca({super.key});
 
@@ -67,7 +68,7 @@ class CascaState extends State<Casca> {
 
   static const _destinos = [
     (Icons.space_dashboard_outlined, Icons.space_dashboard, 'Início'),
-    (Icons.print_outlined, Icons.print, 'Impressões'),
+    (Icons.print_outlined, Icons.print, 'Impressora'),
     (Icons.category_outlined, Icons.category, 'Catálogo'),
     (Icons.inventory_2_outlined, Icons.inventory_2, 'Estoque'),
     (Icons.receipt_long_outlined, Icons.receipt_long, 'Vendas'),
@@ -77,7 +78,7 @@ class CascaState extends State<Casca> {
 
   List<Widget> get _abas => [
         const InicioAba(),
-        ImpressoesAba(key: impressoes, aoContar: (n) => setState(() => aConfirmar = n)),
+        ImpressoesAba(key: impressoes, ativa: aba == 1, aoContar: (n) => setState(() => aConfirmar = n)),
         const CatalogoAba(),
         const EstoqueAba(),
         const VendasAba(),
@@ -95,61 +96,59 @@ class CascaState extends State<Casca> {
       const FaixaAtualizacao(),
       Expanded(child: IndexedStack(index: aba, children: _abas)),
     ]);
-    return LayoutBuilder(builder: (context, c) {
-      if (c.maxWidth >= 840) {
-        return Scaffold(
-          body: Row(children: [
-            NavigationRail(
-              selectedIndex: aba,
-              onDestinationSelected: irPara,
-              labelType: NavigationRailLabelType.all,
-              leading: Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: FloatingActionButton(
-                  heroTag: 'mais-acoes',
-                  elevation: 0,
-                  tooltip: 'Novo',
-                  onPressed: () => abrirAcoesRapidas(context),
-                  child: const Icon(Icons.add),
-                ),
-              ),
-              trailing: Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: IconButton(tooltip: 'Mais', icon: const Icon(Icons.menu), onPressed: () => abrirMais(context)),
-                  ),
-                ),
-              ),
-              destinations: [
-                for (var i = 0; i < _destinos.length; i++)
-                  NavigationRailDestination(
-                      icon: _icone(i, false), selectedIcon: _icone(i, true), label: Text(_destinos[i].$3)),
-              ],
-            ),
-            const VerticalDivider(width: 1),
-            Expanded(child: corpo),
-          ]),
-        );
-      }
+    if (ClasseLargura.de(context) != ClasseLargura.compacto) {
       return Scaffold(
-        body: corpo,
-        floatingActionButton: FloatingActionButton(
-          tooltip: 'Novo',
-          onPressed: () => abrirAcoesRapidas(context),
-          child: const Icon(Icons.add),
-        ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: aba,
-          onDestinationSelected: irPara,
-          destinations: [
-            for (var i = 0; i < _destinos.length; i++)
-              NavigationDestination(icon: _icone(i, false), selectedIcon: _icone(i, true), label: _destinos[i].$3),
-          ],
-        ),
+        body: Row(children: [
+          NavigationRail(
+            selectedIndex: aba,
+            onDestinationSelected: irPara,
+            labelType: NavigationRailLabelType.all,
+            leading: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: FloatingActionButton(
+                heroTag: 'mais-acoes',
+                elevation: 0,
+                tooltip: 'Novo',
+                onPressed: () => abrirAcoesRapidas(context),
+                child: const Icon(Icons.add),
+              ),
+            ),
+            trailing: Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: IconButton(tooltip: 'Mais', icon: const Icon(Icons.menu), onPressed: () => abrirMais(context)),
+                ),
+              ),
+            ),
+            destinations: [
+              for (var i = 0; i < _destinos.length; i++)
+                NavigationRailDestination(
+                    icon: _icone(i, false), selectedIcon: _icone(i, true), label: Text(_destinos[i].$3)),
+            ],
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(child: corpo),
+        ]),
       );
-    });
+    }
+    return Scaffold(
+      body: corpo,
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Novo',
+        onPressed: () => abrirAcoesRapidas(context),
+        child: const Icon(Icons.add),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: aba,
+        onDestinationSelected: irPara,
+        destinations: [
+          for (var i = 0; i < _destinos.length; i++)
+            NavigationDestination(icon: _icone(i, false), selectedIcon: _icone(i, true), label: _destinos[i].$3),
+        ],
+      ),
+    );
   }
 }
 

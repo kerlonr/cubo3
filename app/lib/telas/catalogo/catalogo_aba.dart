@@ -159,14 +159,11 @@ class _CatalogoAbaState extends State<CatalogoAba> {
               Text(m['nome'] as String, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
               Text(preco == null ? 'Sem preço' : moeda(preco), style: const TextStyle(fontFeatures: tabular)),
-              Row(children: [
+              // Wrap: em cartão estreito o "vendidos" desce inteiro em vez de partir o valor do lucro.
+              Wrap(spacing: 8, children: [
                 if (lucro != null)
-                  Expanded(
-                    child: Text('lucro ${moeda(lucro)}',
-                        style: TextStyle(fontSize: 12, color: corResultado(lucro), fontFeatures: tabular)),
-                  )
-                else
-                  const Spacer(),
+                  Text('lucro ${moeda(lucro)}',
+                      style: TextStyle(fontSize: 12, color: corResultado(lucro), fontFeatures: tabular)),
                 Text('${numero(num0(m['vendidos']))} vend.', style: const TextStyle(fontSize: 12)),
               ]),
             ]),

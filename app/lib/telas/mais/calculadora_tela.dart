@@ -147,6 +147,7 @@ class _CalculadoraTelaState extends State<CalculadoraTela> {
         if (impressoras.length > 1)
           DropdownButtonFormField<String>(
             initialValue: _impressora,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Impressora'),
             items: [for (final x in impressoras) DropdownMenuItem(value: x['id'] as String, child: Text('${x['nome']}'))],
             onChanged: (v) => setState(() => _impressora = v),

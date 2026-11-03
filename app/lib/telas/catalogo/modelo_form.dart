@@ -193,6 +193,7 @@ class _ModeloFormState extends State<ModeloForm> {
               if (impressoras.length > 1)
                 DropdownButtonFormField<String>(
                   initialValue: impressoras.any((x) => x['id'] == _impressora) ? _impressora : null,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Impressora'),
                   items: [
                     for (final x in impressoras) DropdownMenuItem(value: x['id'] as String, child: Text(x['nome'] as String)),
