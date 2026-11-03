@@ -10,11 +10,11 @@ import 'apoio.dart';
 
 const impressora = {'id': 'i1', 'nome': 'Ender', 'moonraker_url': 'http://192.168.1.110:7125'};
 
-Ambiente ambiente({Object? Function(http.Request)? comando, num bico = 215}) => Ambiente({
+Ambiente ambiente({Object? Function(http.Request)? comando, num bico = 215, String estado = 'standby'}) => Ambiente({
       'GET /api/impressoras': (_) => [impressora],
       'GET /api/impressoes': (_) => [],
       'GET /api/impressoras/i1/ao-vivo': (_) => {
-            'estado': 'standby',
+            'estado': estado,
             'bico': bico,
             'posicao': [10, 20, 5],
             'eixos_home': 'xy',
@@ -34,6 +34,22 @@ Future<void> abrirSecao(WidgetTester tester, Ambiente amb, String secao, {String
   await tester.pumpWidget(amb.tela(const ImpressoraAba()));
   await tester.pumpAndSettle();
   await irPara(tester, secao);
+}
+
+/// Como [abrirSecao], para impressão em andamento: o Painel anima o progresso e pumpAndSettle não termina.
+Future<void> abrirSecaoAnimada(WidgetTester tester, Ambiente amb, String secao) async {
+  await amb.preparar();
+  await tamanhoTela(tester, 420, 2400);
+  await tester.pumpWidget(amb.tela(const ImpressoraAba()));
+  await passar(tester);
+  await tester.tap(find.text(secao));
+  await passar(tester);
+}
+
+Future<void> passar(WidgetTester tester) async {
+  for (var i = 0; i < 10; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
 
 /// Toca numa seção (a barra rola: em tela estreita as últimas ficam escondidas à direita).
@@ -127,6 +143,43 @@ void main() {
     await tester.tap(find.text('Fazer Home'));
     await tester.pumpAndSettle();
     expect(comandos(amb).last, {'acao': 'home', 'eixos': 'XYZ'});
+  });
+
+  testWidgets('pausada: Home e Desligar motores bloqueados; mover e extrudar liberados (troca de filamento)',
+      (tester) async {
+    final amb = ambiente(estado: 'paused');
+    await abrirSecaoAnimada(tester, amb, 'Controle');
+    for (final b in ['Home tudo', 'Home XY', 'Home Z', 'Desligar motores']) {
+      expect(habilitado(tester, b), isFalse, reason: b);
+    }
+    expect(habilitado(tester, 'Extrudar'), isTrue);
+    expect(find.textContaining('perdem a posição da peça'), findsOneWidget);
+    await tester.tap(find.byTooltip('X+'));
+    await passar(tester);
+    expect(comandos(amb), [
+      {'acao': 'mover', 'eixo': 'X', 'distancia': 10}
+    ]);
+  });
+
+  testWidgets('imprimindo: aviso para pausar; ajuste fino de Z, ventoinha e temperaturas seguem', (tester) async {
+    final amb = ambiente(estado: 'printing');
+    await abrirSecaoAnimada(tester, amb, 'Controle');
+    expect(find.text('Pause a impressão para mover os eixos'), findsOneWidget);
+    for (final b in ['Home XY', 'Home Z', 'Retrair']) {
+      expect(habilitado(tester, b), isFalse, reason: b);
+    }
+    expect(habilitado(tester, '+0,01'), isTrue);
+    expect(habilitado(tester, 'Reiniciar firmware'), isTrue);
+  });
+
+  testWidgets('409 do servidor (estado ainda não chegou) mostra a mensagem dele, sem oferecer Home', (tester) async {
+    const recusa = 'Com a impressão pausada, home e desligar motores perdem a posição da peça';
+    final amb = ambiente(comando: (_) => json({'detail': recusa}, 409));
+    await abrirSecao(tester, amb, 'Controle');
+    await tester.tap(find.text('Home tudo'));
+    await tester.pumpAndSettle();
+    expect(find.text(recusa), findsOneWidget);
+    expect(find.text('Fazer Home'), findsNothing);
   });
 
   testWidgets('ventoinha envia ao soltar o controle deslizante', (tester) async {

@@ -42,4 +42,4 @@ String miniaturaDaImpressora(String impressoraId, String caminho) =>
     '/api/impressoras/$impressoraId/arquivos/miniatura?caminho=${Uri.encodeQueryComponent(caminho)}';
 
 /// Recusa do Klipper que pede Home antes ("Klipper: Must home axis first...").
-bool pedeHome(String mensagem) => mensagem.toLowerCase().contains('home');
+bool pedeHome(String mensagem) => mensagem.toLowerCase().contains('must home');

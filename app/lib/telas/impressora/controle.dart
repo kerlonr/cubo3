@@ -61,6 +61,11 @@ class _ControleImpressoraState extends State<ControleImpressora> with EnvioComan
     final home = '${e['eixos_home'] ?? ''}'.toLowerCase();
     final bico = num0(e['bico']);
     final zOffset = num0(e['z_offset']);
+    // O servidor recusa (409) o mesmo: imprimindo, nada de mexer nos eixos; pausada, home e motores perdem a peça.
+    final imprimindo = e['estado'] == 'printing';
+    final pausada = e['estado'] == 'paused';
+    VoidCallback? mexe(VoidCallback f) => imprimindo ? null : se(f);
+    VoidCallback? zera(VoidCallback f) => imprimindo || pausada ? null : se(f);
 
     Widget eixo(String nome, int i) {
       final feito = home.contains(nome.toLowerCase());
@@ -78,7 +83,7 @@ class _ControleImpressoraState extends State<ControleImpressora> with EnvioComan
     Widget seta(String eixo, int sinal, IconData icone) => IconButton.filledTonal(
           tooltip: '$eixo${sinal > 0 ? '+' : '−'}',
           iconSize: 28,
-          onPressed: se(() => _mover(eixo, sinal)),
+          onPressed: mexe(() => _mover(eixo, sinal)),
           icon: Icon(icone),
         );
 
@@ -114,6 +119,15 @@ class _ControleImpressoraState extends State<ControleImpressora> with EnvioComan
               child: Row(children: [eixo('X', 0), eixo('Y', 1), eixo('Z', 2)]),
             ),
           ),
+          if (imprimindo || pausada)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                  imprimindo
+                      ? 'Pause a impressão para mover os eixos'
+                      : 'Com a impressão pausada, Home e Desligar motores ficam bloqueados: perdem a posição da peça',
+                  style: TextStyle(fontSize: 13, color: amarelo)),
+            ),
           if (home != 'xyz')
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -123,13 +137,13 @@ class _ControleImpressoraState extends State<ControleImpressora> with EnvioComan
           const Secao('Home'),
           Wrap(spacing: 8, runSpacing: 8, children: [
             FilledButton.icon(
-                onPressed: se(() => comando('home', 'Home de todos os eixos', extra: {'eixos': 'XYZ'})),
+                onPressed: zera(() => comando('home', 'Home de todos os eixos', extra: {'eixos': 'XYZ'})),
                 icon: const Icon(Icons.home_outlined),
                 label: const Text('Home tudo')),
             OutlinedButton(
-                onPressed: se(() => comando('home', 'Home XY', extra: {'eixos': 'XY'})), child: const Text('Home XY')),
+                onPressed: zera(() => comando('home', 'Home XY', extra: {'eixos': 'XY'})), child: const Text('Home XY')),
             OutlinedButton(
-                onPressed: se(() => comando('home', 'Home Z', extra: {'eixos': 'Z'})), child: const Text('Home Z')),
+                onPressed: zera(() => comando('home', 'Home Z', extra: {'eixos': 'Z'})), child: const Text('Home Z')),
           ]),
           const Secao('Mover'),
           CampoComAjuda(
@@ -157,7 +171,7 @@ class _ControleImpressoraState extends State<ControleImpressora> with EnvioComan
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
-                onPressed: se(() => comando('motores_off', 'Motores desligados')),
+                onPressed: zera(() => comando('motores_off', 'Motores desligados')),
                 icon: const Icon(Icons.power_settings_new),
                 label: const Text('Desligar motores')),
           ),
@@ -167,14 +181,14 @@ class _ControleImpressoraState extends State<ControleImpressora> with EnvioComan
           Wrap(spacing: 8, runSpacing: 8, children: [
             FilledButton.tonalIcon(
               onPressed: bico >= bicoMinimoExtrudar
-                  ? se(() => comando('extrudar', 'Extrudando $_extrusao mm', extra: {'distancia': _extrusao}))
+                  ? mexe(() => comando('extrudar', 'Extrudando $_extrusao mm', extra: {'distancia': _extrusao}))
                   : null,
               icon: const Icon(Icons.arrow_downward),
               label: const Text('Extrudar'),
             ),
             OutlinedButton.icon(
               onPressed: bico >= bicoMinimoExtrudar
-                  ? se(() => comando('extrudar', 'Retraindo $_extrusao mm', extra: {'distancia': -_extrusao}))
+                  ? mexe(() => comando('extrudar', 'Retraindo $_extrusao mm', extra: {'distancia': -_extrusao}))
                   : null,
               icon: const Icon(Icons.arrow_upward),
               label: const Text('Retrair'),
