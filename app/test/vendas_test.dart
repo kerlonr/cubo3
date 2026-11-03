@@ -148,4 +148,31 @@ void main() {
     expect(novo.url.path, isNot('/api/clientes/k1'));
     expect(novo.headers.containsKey('X-Versao-Base'), isFalse);
   });
+
+  testWidgets('marcar Entregue grava pelo PUT do pedido com entregue_em em UTC; os outros status seguem no /status',
+      (tester) async {
+    var status = 'pronto';
+    final amb = Ambiente({
+      'GET /api/pedidos/p1': (_) => {'id': 'p1', 'status': status, 'pago': true, 'itens': [], 'avisos': []},
+    });
+    await amb.preparar();
+    await tamanhoTela(tester, 500, 1400);
+    await tester.pumpWidget(amb.tela(const PedidoTela(id: 'p1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Entregue'));
+    await tester.pumpAndSettle();
+    expect(amb.ultimo('POST /api/pedidos/p1/status'), isNull);
+    final corpo = amb.corpo('PUT /api/pedidos/p1');
+    expect(corpo.keys, unorderedEquals(['status', 'entregue_em']));
+    expect(corpo['status'], 'entregue');
+    expect(corpo['entregue_em'], endsWith('Z'));
+    expect(DateTime.parse(corpo['entregue_em'] as String).difference(DateTime.now()).inMinutes.abs(), lessThan(1));
+
+    status = 'aprovado';
+    await tester.pumpWidget(amb.tela(const PedidoTela(id: 'p1', key: Key('de novo'))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Produzindo'));
+    await tester.pumpAndSettle();
+    expect(amb.corpo('POST /api/pedidos/p1/status'), {'status': 'produzindo'});
+  });
 }

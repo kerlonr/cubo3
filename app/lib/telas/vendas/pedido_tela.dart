@@ -58,9 +58,12 @@ class _PedidoTelaState extends State<PedidoTela> {
     }
     if (!mounted) return;
     try {
-      final r = await context
-          .read<FilaOffline>()
-          .enviarOuGuardar(Operacao.nova('POST', '/api/pedidos/${widget.id}/status', {'status': novo}));
+      // Entregue guarda a hora em que foi entregue (vale a do aparelho, mesmo se for enviado depois pela fila).
+      final op = novo == 'entregue'
+          ? Operacao.nova('PUT', '/api/pedidos/${widget.id}',
+              {'status': 'entregue', 'entregue_em': DateTime.now().toUtc().toIso8601String()})
+          : Operacao.nova('POST', '/api/pedidos/${widget.id}/status', {'status': novo});
+      final r = await context.read<FilaOffline>().enviarOuGuardar(op);
       if (!mounted) return;
       avisarEnvio(context, r, nomesStatusPedido[novo]!);
       await mostrarAvisos(context, r.resposta);
