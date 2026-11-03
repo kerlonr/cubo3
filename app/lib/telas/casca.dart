@@ -6,6 +6,8 @@ import 'estoque/estoque_aba.dart';
 import 'impressoes/confirmar_tela.dart';
 import 'impressoes/impressoes_aba.dart';
 import 'mais/mais_tela.dart';
+import 'vendas/venda_rapida_tela.dart';
+import 'vendas/vendas_aba.dart';
 
 /// Navegação principal: 5 abas + "+" global. Tela larga (≥ 840 px) troca a barra pelo trilho lateral.
 class Casca extends StatefulWidget {
@@ -35,7 +37,7 @@ class CascaState extends State<Casca> {
         ImpressoesAba(key: impressoes, aoContar: (n) => setState(() => aConfirmar = n)),
         const CatalogoAba(),
         const EstoqueAba(),
-        _AbaProvisoria(_destinos[4].$3),
+        const VendasAba(),
       ];
 
   Widget _icone(int i, bool selecionado) {
@@ -123,7 +125,7 @@ Future<void> abrirAcoesRapidas(BuildContext context) => showModalBottomSheet(
             ListTile(
                 leading: const Icon(Icons.point_of_sale),
                 title: const Text('Venda rápida'),
-                onTap: () => abrir(const _AbaProvisoria('Venda rápida'))),
+                onTap: () => abrir(const VendaRapidaTela())),
             ListTile(
                 leading: const Icon(Icons.print),
                 title: const Text('Lançar impressão'),

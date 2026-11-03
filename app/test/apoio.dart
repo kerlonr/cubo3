@@ -36,6 +36,9 @@ class Ambiente {
   Ambiente(this.rotas);
 
   final Map<String, Object? Function(http.Request)> rotas;
+
+  /// Rotas por prefixo ("PUT /api/pedidos/"), para ids gerados no aparelho.
+  final rotasPrefixo = <String, Object? Function(http.Request)>{};
   final recebidos = <http.Request>[];
   bool online = true;
   late ApiCliente api;
@@ -64,6 +67,12 @@ class Ambiente {
           if (rotas.containsKey(chave)) {
             final v = rotas[chave]!(r);
             return v is http.Response ? v : json(v);
+          }
+          for (final e in rotasPrefixo.entries) {
+            if (chave.startsWith(e.key)) {
+              final v = e.value(r);
+              return v is http.Response ? v : json(v);
+            }
           }
           if (r.url.path == '/api/eu') return json(euJson(papel: papel));
           if (r.method == 'GET') {

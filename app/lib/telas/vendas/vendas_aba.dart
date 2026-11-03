@@ -1,0 +1,80 @@
+import 'package:flutter/material.dart';
+
+import '../../api/modelos.dart';
+import '../../widgets/estado_tela.dart';
+import 'clientes_tela.dart';
+import 'pedido_tela.dart';
+import 'venda_rapida_tela.dart';
+
+const _filtros = {
+  'Orçamentos': {'orcamento'},
+  'Em andamento': {'aprovado', 'produzindo', 'pronto'},
+  'Entregues': {'entregue'},
+  'Todos': <String>{},
+};
+
+class VendasAba extends StatefulWidget {
+  const VendasAba({super.key});
+
+  @override
+  State<VendasAba> createState() => _VendasAbaState();
+}
+
+class _VendasAbaState extends State<VendasAba> {
+  String _filtro = 'Entregues';
+  int _versao = 0;
+
+  Future<void> _abrir(Widget tela) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => tela));
+    setState(() => _versao++);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Vendas'), actions: [
+        IconButton(tooltip: 'Clientes', icon: const Icon(Icons.people_outline), onPressed: () => _abrir(const ClientesTela())),
+        IconButton(
+            tooltip: 'Novo pedido', icon: const Icon(Icons.note_add_outlined), onPressed: () => _abrir(const VendaRapidaTela(orcamento: true))),
+        IconButton(tooltip: 'Venda rápida', icon: const Icon(Icons.add), onPressed: () => _abrir(const VendaRapidaTela())),
+      ]),
+      body: Column(children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Row(children: [
+            for (final f in _filtros.keys)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(label: Text(f), selected: _filtro == f, onSelected: (_) => setState(() => _filtro = f)),
+              ),
+          ]),
+        ),
+        Expanded(
+          child: EstadoTela<List>(
+            key: ValueKey(_versao),
+            carregar: () => buscar(context, '/api/pedidos'),
+            construir: (context, l) {
+              final status = _filtros[_filtro]!;
+              final pedidos = [for (final p in lista(l)) if (status.isEmpty || status.contains(p['status'])) p];
+              if (pedidos.isEmpty) {
+                return ListView(children: const [
+                  Padding(padding: EdgeInsets.all(48), child: Text('Nenhum pedido aqui.', textAlign: TextAlign.center))
+                ]);
+              }
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 900),
+                  child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
+                    for (final p in pedidos) LinhaPedido(p, aoTocar: () => _abrir(PedidoTela(id: p['id'] as String))),
+                  ]),
+                ),
+              );
+            },
+          ),
+        ),
+      ]),
+    );
+  }
+}
