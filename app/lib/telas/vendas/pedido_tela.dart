@@ -66,6 +66,7 @@ class _PedidoTelaState extends State<PedidoTela> {
       final r = await context.read<FilaOffline>().enviarOuGuardar(op);
       if (!mounted) return;
       avisarEnvio(context, r, nomesStatusPedido[novo]!);
+      if (r.recusada != null) return;
       await mostrarAvisos(context, r.resposta);
       setState(() => _versao++);
     } catch (e) {

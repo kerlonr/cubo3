@@ -60,11 +60,15 @@ class ErroFila {
 }
 
 class ResultadoEnvio {
-  const ResultadoEnvio(this.guardada, [this.resposta]);
+  const ResultadoEnvio(this.guardada, [this.resposta, this.recusada]);
 
   /// true = sem conexão; ficou no aparelho e vai quando a rede voltar.
   final bool guardada;
   final dynamic resposta;
+
+  /// Mensagem do servidor quando recusou (404/409/422...). Só vem aqui se havia pendências na frente;
+  /// com a fila vazia o erro sobe como ErroApi.
+  final String? recusada;
 }
 
 /// Fila local de escritas (só Android; no navegador o app é só online).
@@ -115,7 +119,11 @@ class FilaOffline extends ChangeNotifier {
       _ops.add(op);
       await _gravar();
       await esvaziar();
-      return ResultadoEnvio(_ops.contains(op));
+      final erro = erros.where((e) => e.operacao == op).firstOrNull;
+      if (erro == null) return ResultadoEnvio(_ops.contains(op));
+      erros.remove(erro); // a tela mostra a mensagem; não repete na lista de erros
+      await _gravar();
+      return ResultadoEnvio(false, null, erro.mensagem);
     }
     try {
       return ResultadoEnvio(false, await _enviar(op));

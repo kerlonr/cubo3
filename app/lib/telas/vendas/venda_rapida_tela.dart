@@ -97,6 +97,7 @@ class _VendaRapidaTelaState extends State<VendaRapidaTela> {
       }));
       if (!mounted) return;
       avisarEnvio(context, r, widget.orcamento ? 'Pedido criado' : 'Venda registrada');
+      if (r.recusada != null) return;
       await mostrarAvisos(context, r.resposta);
       if (mounted) Navigator.maybePop(context, true);
     } catch (e) {

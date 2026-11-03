@@ -110,6 +110,10 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
           'fim': DateTime.now().toUtc().toIso8601String(),
           'duracao_s': ((lerNumero(_horas.text) ?? 0) * 3600).round(),
         }));
+        if (criada.recusada != null) {
+          if (mounted) avisarEnvio(context, criada);
+          return;
+        }
       }
       final r = await fila.enviarOuGuardar(Operacao.nova('POST', '/api/impressoes/$id/confirmar', {
         'finalidade': _finalidade,
@@ -120,6 +124,7 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
         if (lerNumero(_maoObra.text) != null) 'mao_obra_min': lerNumero(_maoObra.text),
       }));
       if (!mounted) return;
+      if (r.recusada != null) return avisarEnvio(context, r);
       avisarEnvio(context, ResultadoEnvio((criada?.guardada ?? false) || r.guardada), 'Impressão registrada');
       Navigator.maybePop(context, true);
     } catch (e) {

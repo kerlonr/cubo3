@@ -154,6 +154,25 @@ void main() {
     expect(s.recebidos.where((r) => r.headers.containsKey('X-Alterado-Em')), isEmpty);
   });
 
+  test('com pendência na frente, operação nova recusada (422) volta como recusada com a mensagem', () async {
+    var online = false;
+    final api = ApiCliente(
+        MockClient((r) async {
+          if (!online) throw http.ClientException('sem rede');
+          return r.url.path == '/api/pedidos/p2' ? json({'detail': 'Estoque insuficiente'}, 422) : json({'ok': true});
+        }),
+        Uri.parse('https://teste'),
+        ArmazemMemoria());
+    final fila = FilaOffline(api, prefs, guardaOffline: true);
+    await fila.enviarOuGuardar(Operacao.nova('PUT', '/api/carreteis/c1', {}));
+    online = true;
+    final r = await fila.enviarOuGuardar(Operacao.nova('PUT', '/api/pedidos/p2', {}));
+    expect(r.guardada, isFalse);
+    expect(r.recusada, 'Estoque insuficiente');
+    expect(fila.pendentes, 0);
+    expect(fila.erros, isEmpty, reason: 'a tela já mostrou; não repete na lista de erros');
+  });
+
   test('erro definitivo com fila vazia sobe para a tela; no navegador sem rede também', () async {
     final s = Servidor()
       ..online = true

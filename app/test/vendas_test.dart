@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cubo3/api/fila.dart';
 import 'package:cubo3/telas/vendas/clientes_tela.dart';
 import 'package:cubo3/telas/vendas/pedido_tela.dart';
 import 'package:cubo3/telas/vendas/venda_rapida_tela.dart';
@@ -174,5 +175,21 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Produzindo'));
     await tester.pumpAndSettle();
     expect(amb.corpo('POST /api/pedidos/p1/status'), {'status': 'produzindo'});
+  });
+
+  testWidgets('com pendência na fila, venda recusada (422) mostra o erro e não diz que registrou', (tester) async {
+    final amb = ambiente();
+    amb.rotasPrefixo['PUT /api/pedidos/'] = (_) => json({'detail': 'Estoque insuficiente'}, 422);
+    await amb.preparar();
+    await tamanhoTela(tester, 500, 1400);
+    await tester.pumpWidget(amb.tela(const VendaRapidaTela()));
+    await tester.pumpAndSettle();
+    amb.online = false;
+    await amb.fila.enviarOuGuardar(Operacao.nova('PUT', '/api/carreteis/c1', {}));
+    amb.online = true;
+    await vender(tester);
+    expect(find.text('Estoque insuficiente'), findsOneWidget);
+    expect(find.text('Venda registrada'), findsNothing);
+    expect(find.text('Registrar venda'), findsOneWidget, reason: 'a tela continua aberta para corrigir');
   });
 }

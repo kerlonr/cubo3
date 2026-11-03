@@ -127,9 +127,9 @@ void avisar(BuildContext context, String mensagem) =>
 void avisarErro(BuildContext context, Object erro) =>
     avisar(context, erro is ErroApi ? erro.mensagem : 'Algo deu errado: $erro');
 
-/// Mensagem padrão depois de gravar pela fila.
+/// Mensagem padrão depois de gravar pela fila (ou o motivo da recusa).
 void avisarEnvio(BuildContext context, ResultadoEnvio r, [String feito = 'Salvo']) =>
-    avisar(context, r.guardada ? 'Salvo no aparelho, envia quando tiver internet' : feito);
+    avisar(context, r.recusada ?? (r.guardada ? 'Salvo no aparelho, envia quando tiver internet' : feito));
 
 /// Grava pela fila offline e avisa. true = aceito (enviado ou guardado no aparelho).
 /// Em edição, [versaoBase] = `atualizado_em` do registro carregado (o servidor recusa se outro mudou depois).
@@ -138,7 +138,7 @@ Future<bool> salvar(BuildContext context, String metodo, String caminho, Map cor
   try {
     final r = await context.read<FilaOffline>().enviarOuGuardar(Operacao.nova(metodo, caminho, corpo, versaoBase));
     if (context.mounted) avisarEnvio(context, r, feito);
-    return true;
+    return r.recusada == null;
   } catch (e) {
     if (context.mounted) avisarErro(context, e);
     return false;

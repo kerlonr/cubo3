@@ -76,7 +76,7 @@ Future<bool> pesarCarretel(BuildContext context, Json carretel) async {
   try {
     final r = await enviarPesagem(fila, carretel['id'] as String, peso);
     if (context.mounted) avisarEnvio(context, r, 'Saldo ajustado');
-    return true;
+    return r.recusada == null;
   } catch (e) {
     if (context.mounted) avisarErro(context, e);
     return false;
