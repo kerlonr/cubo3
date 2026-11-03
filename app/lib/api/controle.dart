@@ -26,8 +26,9 @@ Future<Uri> linkCamera(ApiCliente api, String impressoraId) async {
   return api.url(url);
 }
 
+/// O servidor manda o G-code à impressora antes de responder (até 300 s): espera 330 s.
 Future<void> imprimirArquivo(ApiCliente api, String arquivoId, String impressoraId) =>
-    api.post('/api/arquivos/$arquivoId/imprimir', {'impressora_id': impressoraId});
+    api.post('/api/arquivos/$arquivoId/imprimir', {'impressora_id': impressoraId}, const Duration(seconds: 330));
 
 /// Imprime um G-code que já está na impressora (409 = ocupada).
 Future<void> imprimirDaImpressora(ApiCliente api, String impressoraId, String nome) =>

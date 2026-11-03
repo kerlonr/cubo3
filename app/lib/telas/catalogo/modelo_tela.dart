@@ -10,6 +10,7 @@ import '../../tema.dart';
 import '../../util/formatos.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
+import '../impressora/envio.dart';
 import 'arquivos.dart';
 import 'modelo_form.dart';
 
@@ -22,8 +23,12 @@ class ModeloTela extends StatefulWidget {
   State<ModeloTela> createState() => _ModeloTelaState();
 }
 
-class _ModeloTelaState extends State<ModeloTela> {
+class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
   int _versao = 0;
+
+  /// Impressora do envio em curso (a recusa do Klipper oferece Home nela).
+  @override
+  String impressoraId = '';
   Json? _modelo;
 
   void _recarregar() => setState(() => _versao++);
@@ -76,12 +81,8 @@ class _ModeloTelaState extends State<ModeloTela> {
       return;
     }
     if (!mounted) return;
-    try {
-      await imprimirArquivo(context.read<ApiCliente>(), '${a['id']}', '${imp['id']}');
-      if (mounted) avisar(context, 'Impressão iniciada na ${imp['nome']}');
-    } catch (e) {
-      if (mounted) avisarErro(context, e);
-    }
+    impressoraId = '${imp['id']}';
+    await enviar((api) => imprimirArquivo(api, '${a['id']}', impressoraId), 'Impressão iniciada na ${imp['nome']}');
   }
 
   @override
@@ -181,11 +182,18 @@ class _ModeloTelaState extends State<ModeloTela> {
                   IconButton(
                     tooltip: impressoras.length == 1 ? 'Imprimir na ${impressoras.single['nome']}' : 'Imprimir',
                     icon: const Icon(Icons.print_outlined),
-                    onPressed: () => _imprimir(a, impressoras),
+                    onPressed: se(() => _imprimir(a, impressoras)),
                   ),
                 IconButton(tooltip: 'Baixar', icon: const Icon(Icons.download), onPressed: () => baixarArquivo(context, a)),
                 IconButton(tooltip: 'Apagar', icon: const Icon(Icons.delete_outline), onPressed: () => _apagarArquivo(a)),
               ]),
+            ),
+          if (emVoo)
+            const ListTile(
+              contentPadding: EdgeInsets.zero,
+              // Ícone parado: o envio pode levar minutos e um indicador animado não ajuda mais que o texto.
+              leading: Icon(Icons.upload),
+              title: Text('Enviando para a impressora…'),
             ),
           const SizedBox(height: 8),
           EnvioArquivos(modeloId: widget.id, aoEnviar: _recarregar),

@@ -131,7 +131,9 @@ class ApiCliente {
 
   Future<dynamic> put(String caminho, Map corpo) => _chamar('PUT', caminho, corpo: corpo);
 
-  Future<dynamic> post(String caminho, [Map? corpo]) => _chamar('POST', caminho, corpo: corpo ?? const {});
+  /// [limite]: espera maior só para quem precisa (o servidor mandando um G-code grande à impressora).
+  Future<dynamic> post(String caminho, [Map? corpo, Duration limite = const Duration(seconds: 30)]) =>
+      _chamar('POST', caminho, corpo: corpo ?? const {}, limite: limite);
 
   Future<dynamic> delete(String caminho) => _chamar('DELETE', caminho);
 
@@ -140,21 +142,25 @@ class ApiCliente {
       _chamar(metodo, caminho, corpo: corpo, extra: extra);
 
   Future<dynamic> _chamar(String metodo, String caminho,
-      {Map<String, String>? query, Object? corpo, Map<String, String>? extra}) async {
+      {Map<String, String>? query, Object? corpo, Map<String, String>? extra, Duration? limite}) async {
     final semAuth = caminho == '/api/auth/login' || caminho == '/api/auth/refresh';
     final usado = _acesso;
     try {
-      return await _bruto(metodo, caminho, query: query, corpo: corpo, extra: extra, comAuth: !semAuth);
+      return await _bruto(metodo, caminho, query: query, corpo: corpo, extra: extra, comAuth: !semAuth, limite: limite);
     } on ErroApi catch (e) {
       if (e.status != 401 || semAuth) rethrow;
       // Outro pedido pode já ter renovado enquanto este estava no ar.
       if (_acesso == usado) await renovar();
-      return _bruto(metodo, caminho, query: query, corpo: corpo, extra: extra);
+      return _bruto(metodo, caminho, query: query, corpo: corpo, extra: extra, limite: limite);
     }
   }
 
   Future<dynamic> _bruto(String metodo, String caminho,
-      {Map<String, String>? query, Object? corpo, Map<String, String>? extra, bool comAuth = true}) async {
+      {Map<String, String>? query,
+      Object? corpo,
+      Map<String, String>? extra,
+      bool comAuth = true,
+      Duration? limite}) async {
     final r = http.Request(metodo, url(caminho, query));
     if (comAuth) r.headers.addAll(cabecalhosAuth);
     if (extra != null) r.headers.addAll(extra);
@@ -162,7 +168,7 @@ class ApiCliente {
       r.headers['Content-Type'] = 'application/json';
       r.bodyBytes = utf8.encode(jsonEncode(corpo));
     }
-    return _resposta(() => _http.send(r).timeout(const Duration(seconds: 30)));
+    return _resposta(() => _http.send(r).timeout(limite ?? const Duration(seconds: 30)));
   }
 
   /// Envia um arquivo (multipart, campo `arquivo`).

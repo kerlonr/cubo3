@@ -218,6 +218,23 @@ void imprimirTestes() {
     expect(amb.fila.pendentes, 0);
   });
 
+  testWidgets('imprimir do catálogo mostra o envio e espera até o servidor terminar de mandar (passa de 30 s)',
+      (tester) async {
+    final amb = catalogo(imprimir: (_) => Future.delayed(const Duration(seconds: 120), () => {'ok': true}));
+    await abrirModelo(tester, amb);
+    await tester.tap(find.byTooltip('Imprimir na Ender'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Imprimir'));
+    await tester.pump();
+    expect(find.text('Enviando para a impressora…'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 60));
+    expect(find.text('Sem conexão'), findsNothing);
+    await tester.pump(const Duration(seconds: 61));
+    await tester.pumpAndSettle();
+    expect(find.text('Impressão iniciada na Ender'), findsOneWidget);
+    expect(find.text('Enviando para a impressora…'), findsNothing);
+  });
+
   testWidgets('membro não vê o botão de imprimir', (tester) async {
     final amb = catalogo();
     await abrirModelo(tester, amb, papel: 'membro');
