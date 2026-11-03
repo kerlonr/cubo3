@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../ao_vivo/canal_ao_vivo.dart';
 import '../../api/api.dart';
 import '../../api/modelos.dart';
 import '../../tema.dart';
@@ -46,7 +47,11 @@ class _CartaoAoVivoState extends State<CartaoAoVivo> {
   }
 
   @override
-  Widget build(BuildContext context) => PainelAoVivo(nome: '${widget.impressora['nome']}', estado: _estado);
+  Widget build(BuildContext context) {
+    // Eventos do WebSocket têm prioridade; o GET inicial cobre até o primeiro evento chegar.
+    final aoVivo = context.watch<CanalAoVivo>().estados['${widget.impressora['id']}'];
+    return PainelAoVivo(nome: '${widget.impressora['nome']}', estado: aoVivo?.dados ?? _estado);
+  }
 }
 
 class PainelAoVivo extends StatelessWidget {

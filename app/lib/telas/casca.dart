@@ -1,4 +1,11 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../ao_vivo/canal_ao_vivo.dart';
+import '../ao_vivo/servico_notificacao.dart';
 
 import 'catalogo/catalogo_aba.dart';
 import 'estoque/carretel_form.dart';
@@ -23,6 +30,38 @@ class CascaState extends State<Casca> {
   int aba = 0;
   int aConfirmar = 0;
   final impressoes = GlobalKey<ImpressoesAbaState>();
+  StreamSubscription<Map>? _eventos;
+
+  @override
+  void initState() {
+    super.initState();
+    _eventos = context.read<CanalAoVivo>().eventos.listen(_aoEvento);
+  }
+
+  @override
+  void dispose() {
+    _eventos?.cancel();
+    super.dispose();
+  }
+
+  /// Fim de impressão com o app aberto: recarrega a lista, avisa na tela e, no navegador, notifica.
+  void _aoEvento(Map e) {
+    if (e['tipo'] != 'impressao_terminou' || !mounted) return;
+    impressoes.currentState?.recarregar();
+    final a = alertaFim(e);
+    final id = '${e['impressao_id'] ?? ''}';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(a.titulo),
+      duration: const Duration(seconds: 10),
+      action: id.isEmpty
+          ? null
+          : SnackBarAction(
+              label: 'Confirmar',
+              onPressed: () =>
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => ConfirmarTela(impressaoId: id)))),
+    ));
+    if (kIsWeb) mostrarAlertaFim(e).catchError((_) {});
+  }
 
   static const _destinos = [
     (Icons.space_dashboard_outlined, Icons.space_dashboard, 'Início'),

@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'dart:async';
+
+import 'package:cubo3/ao_vivo/canal_ao_vivo.dart';
 import 'package:cubo3/api/api.dart';
 import 'package:cubo3/api/cache.dart';
 import 'package:cubo3/api/fila.dart';
@@ -45,6 +48,10 @@ class Ambiente {
   late Sessao sessao;
   late FilaOffline fila;
   late CacheLeitura cache;
+  late CanalAoVivo canal;
+
+  /// Conexão ao vivo falsa: mande eventos com `aoVivo.add(jsonEncode({...}))`.
+  final aoVivo = StreamController<dynamic>.broadcast();
 
   http.Request? ultimo(String metodoCaminho) {
     for (final r in recebidos.reversed) {
@@ -86,6 +93,7 @@ class Ambiente {
     sessao = Sessao(api, prefs);
     fila = FilaOffline(api, prefs, guardaOffline: guardaOffline);
     cache = CacheLeitura(prefs, persistir: false);
+    canal = CanalAoVivo(api, conectar: (_) => (stream: aoVivo.stream, enviar: (_) {}, fechar: () async {}));
     if (logado) {
       await api.usarTokens({'acesso': 'A', 'refresh': 'R'});
       await sessao.escolherEmpresa('a');
@@ -95,11 +103,11 @@ class Ambiente {
     }
   }
 
-  Widget app() => AppCubo3(api: api, sessao: sessao, fila: fila, cache: cache);
+  Widget app() => AppCubo3(api: api, sessao: sessao, fila: fila, cache: cache, canal: canal);
 
   /// Monta uma tela solta com os mesmos serviços do app.
   Widget tela(Widget filho) => MultiProvider(
-        providers: provedores(api, sessao, fila, cache),
+        providers: provedores(api, sessao, fila, cache, canal),
         child: MaterialApp(home: filho),
       );
 }
