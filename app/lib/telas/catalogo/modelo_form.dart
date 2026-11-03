@@ -76,7 +76,7 @@ class _ModeloFormState extends State<ModeloForm> {
               ? {'titulo': linha.split('|').first.trim(), 'url': linha.split('|').last.trim()}
               : {'titulo': '', 'url': linha.trim()}
     ];
-    final ok = await salvar(context, 'PUT', '/api/modelos/${d['id'] ?? novoId()}', {
+    final ok = await salvar(context, 'PUT', '/api/modelos/${d['id'] ?? novoId()}', versaoBase: d['atualizado_em'] as String?, {
       'nome': _nome.text.trim(),
       'preco_venda': lerNumero(_preco.text),
       'descricao': _descricao.text.trim().isEmpty ? null : _descricao.text.trim(),

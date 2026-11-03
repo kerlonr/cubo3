@@ -125,9 +125,11 @@ void avisarEnvio(BuildContext context, ResultadoEnvio r, [String feito = 'Salvo'
     avisar(context, r.guardada ? 'Salvo no aparelho, envia quando tiver internet' : feito);
 
 /// Grava pela fila offline e avisa. true = aceito (enviado ou guardado no aparelho).
-Future<bool> salvar(BuildContext context, String metodo, String caminho, Map corpo, {String feito = 'Salvo'}) async {
+/// Em edição, [versaoBase] = `atualizado_em` do registro carregado (o servidor recusa se outro mudou depois).
+Future<bool> salvar(BuildContext context, String metodo, String caminho, Map corpo,
+    {String feito = 'Salvo', String? versaoBase}) async {
   try {
-    final r = await context.read<FilaOffline>().enviarOuGuardar(Operacao.nova(metodo, caminho, corpo));
+    final r = await context.read<FilaOffline>().enviarOuGuardar(Operacao.nova(metodo, caminho, corpo, versaoBase));
     if (context.mounted) avisarEnvio(context, r, feito);
     return true;
   } catch (e) {

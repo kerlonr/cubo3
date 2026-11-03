@@ -47,7 +47,7 @@ class _FilamentoFormState extends State<FilamentoForm> {
   Future<void> _salvar() async {
     if (!_form.currentState!.validate()) return;
     final hex = _corHex.text.trim().toUpperCase();
-    final ok = await salvar(context, 'PUT', '/api/filamentos/${d['id'] ?? novoId()}', {
+    final ok = await salvar(context, 'PUT', '/api/filamentos/${d['id'] ?? novoId()}', versaoBase: d['atualizado_em'] as String?, {
       'marca': _marca.text.trim(),
       'material': _material.text.trim().toUpperCase(),
       'cor_nome': _corNome.text.trim().isEmpty ? null : _corNome.text.trim(),

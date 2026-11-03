@@ -284,12 +284,14 @@ class _CarreteisTelaState extends State<CarreteisTela> {
                           case 'ajustar':
                             _recarregar(await ajustar(context, 'carretel', id, sufixo: 'g'));
                           case 'aberto':
-                            _recarregar(await salvar(context, 'PUT', '/api/carreteis/$id', {'aberto': c['aberto'] != true}));
+                            _recarregar(await salvar(context, 'PUT', '/api/carreteis/$id', {'aberto': c['aberto'] != true},
+                                versaoBase: c['atualizado_em'] as String?));
                           case 'arquivar':
                             if (await confirmar(context, 'Arquivar carretel?', 'Ele sai do estoque e dos seletores.',
                                     sim: 'Arquivar') &&
                                 context.mounted) {
-                              _recarregar(await salvar(context, 'PUT', '/api/carreteis/$id', {'arquivado': true}));
+                              _recarregar(await salvar(context, 'PUT', '/api/carreteis/$id', {'arquivado': true},
+                                versaoBase: c['atualizado_em'] as String?));
                             }
                         }
                       },

@@ -24,7 +24,7 @@ class _InsumoFormState extends State<InsumoForm> {
 
   Future<void> _salvar() async {
     if (!_form.currentState!.validate()) return;
-    final ok = await salvar(context, 'PUT', '/api/insumos/${d['id'] ?? novoId()}', {
+    final ok = await salvar(context, 'PUT', '/api/insumos/${d['id'] ?? novoId()}', versaoBase: d['atualizado_em'] as String?, {
       'nome': _nome.text.trim(),
       'custo_unitario': lerNumero(_custo.text) ?? 0,
       'categoria': _categoria,

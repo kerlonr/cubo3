@@ -102,7 +102,7 @@ class _DespesaFormState extends State<DespesaForm> {
 
   Future<void> _salvar() async {
     if (!_form.currentState!.validate()) return;
-    final ok = await salvar(context, 'PUT', '/api/despesas/${d['id'] ?? novoId()}', {
+    final ok = await salvar(context, 'PUT', '/api/despesas/${d['id'] ?? novoId()}', versaoBase: d['atualizado_em'] as String?, {
       'data': diaIso(_data),
       'categoria': _categoria,
       'valor': lerNumero(_valor.text),

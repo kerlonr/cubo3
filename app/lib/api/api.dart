@@ -129,8 +129,7 @@ class ApiCliente {
 
   Future<dynamic> get(String caminho, {Map<String, String>? query}) => _chamar('GET', caminho, query: query);
 
-  Future<dynamic> put(String caminho, Map corpo, {DateTime? alteradoEm}) => _chamar('PUT', caminho,
-      corpo: corpo, extra: {if (alteradoEm != null) 'X-Alterado-Em': alteradoEm.toUtc().toIso8601String()});
+  Future<dynamic> put(String caminho, Map corpo) => _chamar('PUT', caminho, corpo: corpo);
 
   Future<dynamic> post(String caminho, [Map? corpo]) => _chamar('POST', caminho, corpo: corpo ?? const {});
 

@@ -213,7 +213,7 @@ class _CanalFormState extends State<CanalForm> {
 
   Future<void> _salvar() async {
     if (!_form.currentState!.validate()) return;
-    final ok = await salvar(context, 'PUT', '/api/canais/${d['id'] ?? novoId()}', {
+    final ok = await salvar(context, 'PUT', '/api/canais/${d['id'] ?? novoId()}', versaoBase: d['atualizado_em'] as String?, {
       'nome': _nome.text.trim(),
       'taxa_pct': lerNumero(_taxaPct.text) ?? 0,
       'taxa_fixa': lerNumero(_taxaFixa.text) ?? 0,

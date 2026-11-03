@@ -83,7 +83,7 @@ class _ImpressoraFormState extends State<ImpressoraForm> {
 
   Future<void> _salvar() async {
     if (!_form.currentState!.validate()) return;
-    final ok = await salvar(context, 'PUT', '/api/impressoras/${d['id'] ?? novoId()}', {
+    final ok = await salvar(context, 'PUT', '/api/impressoras/${d['id'] ?? novoId()}', versaoBase: d['atualizado_em'] as String?, {
       'nome': _nome.text.trim(),
       'moonraker_url': _url.text.trim().isEmpty ? null : _url.text.trim(),
       'modelo': _modelo.text.trim().isEmpty ? null : _modelo.text.trim(),

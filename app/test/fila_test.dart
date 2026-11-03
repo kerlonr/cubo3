@@ -101,12 +101,28 @@ void main() {
     expect(fila.erros, isEmpty);
   });
 
-  test('PUT leva X-Alterado-Em igual a criadaEm em UTC', () async {
+  test('edição leva X-Versao-Base exato; criação não leva; X-Alterado-Em nunca', () async {
     final s = Servidor()..online = true;
     final fila = FilaOffline(s.api(), prefs, guardaOffline: true);
-    final op = Operacao('x', 'PUT', '/api/clientes/c1', {'nome': 'A'}, DateTime.utc(2026, 11, 3, 12, 30));
-    await fila.enviarOuGuardar(op);
-    expect(s.recebidos.single.headers['X-Alterado-Em'], '2026-11-03T12:30:00.000Z');
+    await fila.enviarOuGuardar(Operacao.nova('PUT', '/api/clientes/c1', {'nome': 'A'}));
+    await fila.enviarOuGuardar(Operacao.nova('PUT', '/api/clientes/c1', {'nome': 'B'}, '2026-11-03T12:30:00.123456+00:00'));
+    expect(s.recebidos[0].headers.containsKey('X-Versao-Base'), isFalse);
+    expect(s.recebidos[1].headers['X-Versao-Base'], '2026-11-03T12:30:00.123456+00:00');
+    expect(s.recebidos.where((r) => r.headers.containsKey('X-Alterado-Em')), isEmpty);
+  });
+
+  test('criar e editar sem internet: tudo chega em ordem; só a edição de registro do servidor leva versão base', () async {
+    final s = Servidor();
+    final fila = FilaOffline(s.api(), prefs, guardaOffline: true);
+    await fila.enviarOuGuardar(Operacao.nova('PUT', '/api/clientes/c1', {'nome': 'A'}));
+    // Nasceu no aparelho: não há versão lida do servidor.
+    await fila.enviarOuGuardar(Operacao.nova('PUT', '/api/clientes/c1', {'nome': 'B'}));
+    await fila.enviarOuGuardar(Operacao.nova('PUT', '/api/clientes/c2', {'nome': 'C'}, 'v2'));
+    s.online = true;
+    await FilaOffline(s.api(), prefs, guardaOffline: true).esvaziar();
+    expect(s.recebidos.map((r) => r.body), [for (final n in 'ABC'.split('')) jsonEncode({'nome': n})]);
+    expect(s.recebidos.map((r) => r.headers['X-Versao-Base']), [null, null, 'v2']);
+    expect(s.recebidos.where((r) => r.headers.containsKey('X-Alterado-Em')), isEmpty);
   });
 
   test('erro definitivo com fila vazia sobe para a tela; no navegador sem rede também', () async {

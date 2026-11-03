@@ -96,7 +96,7 @@ class _ClienteFormState extends State<ClienteForm> {
     String? v(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
     final dados = {'nome': _nome.text.trim(), 'telefone': v(_telefone), 'email': v(_email), 'obs': v(_obs)};
     final id = d['id'] as String? ?? novoId();
-    if (await salvar(context, 'PUT', '/api/clientes/$id', dados) && mounted) {
+    if (await salvar(context, 'PUT', '/api/clientes/$id', dados, versaoBase: d['atualizado_em'] as String?) && mounted) {
       Navigator.pop(context, {...dados, 'id': id});
     }
   }

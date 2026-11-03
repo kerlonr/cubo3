@@ -8,24 +8,34 @@ import 'api.dart';
 import 'modelos.dart';
 
 class Operacao {
-  Operacao(this.id, this.metodo, this.caminho, this.corpo, this.criadaEm, [this.empresa]);
+  Operacao(this.id, this.metodo, this.caminho, this.corpo, this.criadaEm, {this.empresa, this.versaoBase});
 
-  Operacao.nova(this.metodo, this.caminho, [this.corpo])
+  /// [versaoBase] = `atualizado_em` lido do servidor antes de editar (só em edição; criação não tem).
+  Operacao.nova(this.metodo, this.caminho, [this.corpo, this.versaoBase])
       : id = novoId(),
         criadaEm = DateTime.now().toUtc();
 
   factory Operacao.fromJson(Map j) => Operacao(j['id'] as String, j['metodo'] as String, j['caminho'] as String,
-      j['corpo'] as Map?, DateTime.parse(j['criadaEm'] as String), j['empresa'] as String?);
+      j['corpo'] as Map?, DateTime.parse(j['criadaEm'] as String),
+      empresa: j['empresa'] as String?, versaoBase: j['versaoBase'] as String?);
 
   final String id, metodo, caminho;
   final Map? corpo;
   final DateTime criadaEm;
+  final String? versaoBase;
 
   /// Empresa em que foi feita: a fila manda para ela mesmo que o usuário troque de empresa antes.
   String? empresa;
 
-  Map<String, dynamic> toJson() =>
-      {'id': id, 'metodo': metodo, 'caminho': caminho, 'corpo': corpo, 'criadaEm': criadaEm.toUtc().toIso8601String(), 'empresa': empresa};
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'metodo': metodo,
+        'caminho': caminho,
+        'corpo': corpo,
+        'criadaEm': criadaEm.toUtc().toIso8601String(),
+        'empresa': empresa,
+        'versaoBase': versaoBase,
+      };
 }
 
 class ErroFila {
@@ -78,7 +88,8 @@ class FilaOffline extends ChangeNotifier {
 
   Future<dynamic> _enviar(Operacao op) => api.enviar(op.metodo, op.caminho, corpo: op.corpo, extra: {
         'X-Empresa': ?op.empresa,
-        if (op.metodo == 'PUT') 'X-Alterado-Em': op.criadaEm.toUtc().toIso8601String(),
+        // O servidor recusa com 409 se o registro mudou depois desta versão (edição de outra pessoa).
+        'X-Versao-Base': ?op.versaoBase,
       });
 
   /// Tenta enviar já. Sem conexão (ou servidor fora) guarda; erro definitivo sobe para a tela.

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cubo3/telas/vendas/clientes_tela.dart';
 import 'package:cubo3/telas/vendas/pedido_tela.dart';
 import 'package:cubo3/telas/vendas/venda_rapida_tela.dart';
 import 'package:flutter/material.dart';
@@ -121,5 +122,30 @@ void main() {
     await tester.pumpWidget(amb.tela(const PedidoTela(id: 'p1')));
     await tester.pumpAndSettle();
     expect(find.text('Antigo (excluído)'), findsOneWidget);
+  });
+
+  testWidgets('editar cliente manda a versão lida (X-Versao-Base); cliente novo não manda', (tester) async {
+    final amb = ambiente();
+    await amb.preparar();
+    Future<void> abrir(ClienteForm form) async {
+      await tester.pumpWidget(amb.tela(Builder(
+          builder: (c) => TextButton(
+              onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => form)), child: const Text('abrir')))));
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+    }
+
+    await abrir(const ClienteForm(dados: {'id': 'k1', 'nome': 'Ana', 'atualizado_em': '2026-11-03T12:30:00.123456+00:00'}));
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    expect(amb.ultimo('PUT /api/clientes/k1')!.headers['X-Versao-Base'], '2026-11-03T12:30:00.123456+00:00');
+
+    await abrir(const ClienteForm());
+    await tester.enterText(find.byType(TextField).first, 'Bia');
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    final novo = amb.recebidos.lastWhere((r) => r.method == 'PUT' && r.url.path.startsWith('/api/clientes/'));
+    expect(novo.url.path, isNot('/api/clientes/k1'));
+    expect(novo.headers.containsKey('X-Versao-Base'), isFalse);
   });
 }
