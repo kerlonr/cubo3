@@ -1,0 +1,96 @@
+import 'dart:convert';
+
+import 'package:cubo3/api/api.dart';
+import 'package:cubo3/api/cache.dart';
+import 'package:cubo3/api/fila.dart';
+import 'package:cubo3/api/sessao.dart';
+import 'package:cubo3/main.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+http.Response json(Object? corpo, [int status = 200]) =>
+    http.Response.bytes(utf8.encode(jsonEncode(corpo)), status, headers: {'content-type': 'application/json'});
+
+const empresaA = {'id': 'a', 'nome': 'Cubo³', 'papel': 'dono'};
+
+Map<String, Object> euJson({String papel = 'dono'}) => {
+      'id': 'u',
+      'nome': 'Kerlon',
+      'email': 'k@x.com',
+      'trocar_senha': false,
+      'empresas': [
+        {...empresaA, 'papel': papel}
+      ]
+    };
+
+/// Ambiente de teste: servidor falso (`rotas` por "MÉTODO /caminho"), pedidos recebidos e serviços do app.
+class Ambiente {
+  Ambiente(this.rotas);
+
+  final Map<String, Object? Function(http.Request)> rotas;
+  final recebidos = <http.Request>[];
+  bool online = true;
+  late ApiCliente api;
+  late Sessao sessao;
+  late FilaOffline fila;
+  late CacheLeitura cache;
+
+  http.Request? ultimo(String metodoCaminho) {
+    for (final r in recebidos.reversed) {
+      if ('${r.method} ${r.url.path}' == metodoCaminho) return r;
+    }
+    return null;
+  }
+
+  Map corpo(String metodoCaminho) => jsonDecode(ultimo(metodoCaminho)!.body) as Map;
+
+  Future<void> preparar({bool logado = true, String papel = 'dono', bool guardaOffline = true}) async {
+    SharedPreferences.setMockInitialValues({});
+    await initializeDateFormatting('pt_BR');
+    final prefs = await SharedPreferences.getInstance();
+    api = ApiCliente(
+        MockClient((r) async {
+          if (!online) throw http.ClientException('sem rede');
+          recebidos.add(r);
+          final chave = '${r.method} ${r.url.path}';
+          if (rotas.containsKey(chave)) {
+            final v = rotas[chave]!(r);
+            return v is http.Response ? v : json(v);
+          }
+          if (r.url.path == '/api/eu') return json(euJson(papel: papel));
+          if (r.method == 'GET') return json(r.url.path.split('/').length > 3 ? {} : []);
+          return json(r.method == 'PUT' || r.method == 'POST' ? jsonDecode(r.body.isEmpty ? '{}' : r.body) : {'ok': true});
+        }),
+        Uri.parse('https://teste'),
+        ArmazemMemoria());
+    sessao = Sessao(api, prefs);
+    fila = FilaOffline(api, prefs, guardaOffline: guardaOffline);
+    cache = CacheLeitura(prefs, persistir: false);
+    if (logado) {
+      await api.usarTokens({'acesso': 'A', 'refresh': 'R'});
+      await sessao.escolherEmpresa('a');
+      sessao.eu = euJson(papel: papel);
+    } else {
+      sessao.estado = EstadoSessao.deslogado;
+    }
+  }
+
+  Widget app() => AppCubo3(api: api, sessao: sessao, fila: fila, cache: cache);
+
+  /// Monta uma tela solta com os mesmos serviços do app.
+  Widget tela(Widget filho) => MultiProvider(
+        providers: provedores(api, sessao, fila, cache),
+        child: MaterialApp(home: filho),
+      );
+}
+
+Future<void> tamanhoTela(WidgetTester tester, double largura, [double altura = 900]) async {
+  tester.view.physicalSize = Size(largura, altura);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+}
