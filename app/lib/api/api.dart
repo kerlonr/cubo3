@@ -86,7 +86,7 @@ class ApiCliente {
 
   Map<String, String> get cabecalhosAuth => {
         if (_acesso != null) 'Authorization': 'Bearer $_acesso',
-        if (empresaId != null) 'X-Empresa': empresaId!,
+        'X-Empresa': ?empresaId,
       };
 
   Uri url(String caminho, [Map<String, String>? query]) {
