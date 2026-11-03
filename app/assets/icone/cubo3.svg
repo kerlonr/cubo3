@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke="#18181B" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+  <title>Cubo³</title>
+  <polygon points="50,8 86.4,29 50,50 13.6,29" fill="#5E5CE6" stroke="none"/>
+  <polygon points="50,8 86.4,29 86.4,71 50,92 13.6,71 13.6,29"/>
+  <path d="M13.6 29 50 50 86.4 29 M50 50 50 92"/>
+</svg>
