@@ -62,6 +62,10 @@ def trabalho_de_historico(job: dict) -> DadosTrabalho:
                          filamentos=filamentos, miniatura_rel=rel)
 
 
+def _pct(fator) -> int | None:
+    return None if fator is None else round(fator * 100)
+
+
 def mesclar_estado(estado: dict, status: dict) -> dict:
     objetos = {k: dict(v) for k, v in (estado.get("objetos") or {}).items()}
     for nome, campos in (status or {}).items():
@@ -73,9 +77,15 @@ def mesclar_estado(estado: dict, status: dict) -> dict:
     restante = None
     if progresso and duracao and ps.get("state") == "printing":
         restante = round(duracao / progresso - duracao)
+    th, gm, fan = objetos.get("toolhead", {}), objetos.get("gcode_move", {}), objetos.get("fan", {})
     return {"objetos": objetos, "estado": ps.get("state"), "arquivo": ps.get("filename"), "progresso": progresso,
             "duracao_s": duracao, "restante_s": restante, "bico": ext.get("temperature"), "bico_alvo": ext.get("target"),
-            "mesa": mesa.get("temperature"), "mesa_alvo": mesa.get("target")}
+            "mesa": mesa.get("temperature"), "mesa_alvo": mesa.get("target"),
+            "posicao": [round(v, 3) for v in th.get("position", [])[:3]] or None,
+            "eixos_home": th.get("homed_axes", ""),
+            "velocidade_pct": _pct(gm.get("speed_factor")), "fluxo_pct": _pct(gm.get("extrude_factor")),
+            "z_offset": (gm.get("homing_origin") or [None] * 3)[2], "ventoinha_pct": _pct(fan.get("speed")),
+            "mensagem": ds.get("message")}
 
 
 def publico(estado: dict | None) -> dict | None:

@@ -39,6 +39,12 @@ def ao_vivo_impressora(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depen
     return monitores.estado(imp.id) or {"estado": "desconectada" if imp.moonraker_url else "sem_integracao"}
 
 
+@rotas.get("/impressoras/{id}/console")
+def console(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    imp = obter(db, c, Impressora, id, "Impressora")
+    return {"linhas": monitores.console(imp.id)}
+
+
 @rotas.get("/impressoras/{id}/historico")
 def historico(id: uuid.UUID, limite: int = 50, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     imp = _com_moonraker(db, c, id)
