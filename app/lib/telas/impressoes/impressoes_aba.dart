@@ -82,6 +82,15 @@ class ImpressoesAbaState extends State<ImpressoesAba> {
                 ),
             ]),
           ),
+        if (lista(d['impressoras']).isEmpty)
+          EstadoVazio(
+            icone: Icons.print_outlined,
+            titulo: 'Nenhuma impressora',
+            explicacao: 'Cadastre a impressora com o endereço do Klipper (Moonraker) para ver aqui a câmera, o '
+                'progresso e os controles.',
+            acao: 'Cadastrar impressora',
+            aoTocar: () => _abrir(const ImpressoraForm()),
+          ),
         if (atual != null) ...[
           Align(alignment: Alignment.centerRight, child: BotaoHistoricoKlipper(impressora: atual)),
           PainelImpressora(key: ValueKey(atual['id']), impressora: atual, comCamera: widget.ativa),
@@ -99,10 +108,13 @@ class ImpressoesAbaState extends State<ImpressoesAba> {
         ),
         const SizedBox(height: 8),
         if (mostradas.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(32),
-            child: Text('Nada para confirmar. Quando uma impressão terminar no Klipper, ela aparece aqui.',
-                textAlign: TextAlign.center),
+          EstadoVazio(
+            icone: Icons.task_alt,
+            titulo: _todas ? 'Nenhuma impressão ainda' : 'Nada para confirmar',
+            explicacao: 'Quando uma impressão terminar no Klipper, ela aparece aqui para você confirmar os gramas. '
+                'Imprimiu fora do Klipper? Lance à mão.',
+            acao: 'Lançar impressão',
+            aoTocar: () => _abrir(const ConfirmarTela()),
           ),
         for (final i in mostradas) _item(i),
       ],

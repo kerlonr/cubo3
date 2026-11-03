@@ -25,15 +25,49 @@ Future<RespostaCache> buscarVarios(BuildContext context, Map<String, String> cam
       rs.map((r) => r.quando).reduce((a, b) => a.isBefore(b) ? a : b));
 }
 
+/// Lista vazia que ensina: para que serve e o botão do próximo passo.
+class EstadoVazio extends StatelessWidget {
+  const EstadoVazio(
+      {super.key, required this.titulo, required this.explicacao, this.icone = Icons.inbox_outlined, this.acao, this.aoTocar});
+
+  final String titulo;
+  final String explicacao;
+  final IconData icone;
+  final String? acao;
+  final VoidCallback? aoTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icone, size: 48, color: t.colorScheme.primary),
+        const SizedBox(height: 12),
+        Text(titulo, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Text(explicacao, textAlign: TextAlign.center, style: TextStyle(color: t.colorScheme.onSurfaceVariant)),
+        ),
+        if (acao != null) ...[
+          const SizedBox(height: 16),
+          FilledButton.icon(onPressed: aoTocar, icon: const Icon(Icons.add), label: Text(acao!)),
+        ],
+      ]),
+    );
+  }
+}
+
 /// Carregando / erro com "Tentar de novo" / vazio / conteúdo (+ faixa "Sem conexão — dados de HH:MM").
 /// Recarrega sozinha quando [dadosMudaram] avisa; para recarregar de fora, troque a `key`.
 class EstadoTela<T> extends StatefulWidget {
-  const EstadoTela({super.key, required this.carregar, required this.construir, this.vazio, this.mensagemVazio});
+  const EstadoTela({super.key, required this.carregar, required this.construir, this.vazio, this.estadoVazio});
 
   final Future<RespostaCache> Function() carregar;
   final Widget Function(BuildContext context, T dados) construir;
   final bool Function(T dados)? vazio;
-  final String? mensagemVazio;
+  final EstadoVazio? estadoVazio;
 
   @override
   State<EstadoTela<T>> createState() => _EstadoTelaState<T>();
@@ -90,13 +124,7 @@ class _EstadoTelaState<T> extends State<EstadoTela<T>> {
     }
     final dados = _r!.dados as T;
     final Widget conteudo = widget.vazio?.call(dados) == true
-        ? ListView(children: [
-            Padding(
-              padding: const EdgeInsets.all(48),
-              child: Text(widget.mensagemVazio ?? 'Nada por aqui ainda',
-                  textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            )
-          ])
+        ? ListView(children: [widget.estadoVazio ?? const EstadoVazio(titulo: 'Nada por aqui ainda', explicacao: '')])
         : widget.construir(context, dados);
     return RefreshIndicator(
       onRefresh: _carregar,

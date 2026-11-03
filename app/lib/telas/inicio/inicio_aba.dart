@@ -13,6 +13,7 @@ import '../../widgets/logo.dart';
 import '../casca.dart';
 import '../impressoes/cartao_ao_vivo.dart';
 import '../impressoes/impressora_tela.dart';
+import 'primeiros_passos.dart';
 
 /// Painel: o que gastamos, vendemos, lucramos e o que falta no estoque.
 class InicioAba extends StatefulWidget {
@@ -43,10 +44,13 @@ class _InicioAbaState extends State<InicioAba> {
           if (!context.mounted) return painel;
           // Impressoras são extra: sem elas o painel ainda abre.
           List impressoras = const [];
+          List<bool>? passos;
           try {
             impressoras = (await buscar(context, '/api/impressoras')).dados as List;
+            if (context.mounted) passos = await passosFeitos(context, temImpressora: impressoras.isNotEmpty);
           } catch (_) {}
-          return RespostaCache({...painel.dados as Map, 'impressoras': impressoras}, painel.deCache, painel.quando);
+          return RespostaCache(
+              {...painel.dados as Map, 'impressoras': impressoras, 'passos': passos}, painel.deCache, painel.quando);
         },
         construir: (context, p) => _corpo(p, nomeMes[0].toUpperCase() + nomeMes.substring(1)),
       ),
@@ -69,6 +73,11 @@ class _InicioAbaState extends State<InicioAba> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1100),
         child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
+          if (p['passos'] != null) ...[
+            CartaoPrimeirosPassos(feitos: p['passos'] as List<bool>),
+            const SizedBox(height: 8),
+          ],
+          AcoesRapidas(colunas: largo ? 4 : 2),
           Row(children: [
             IconButton(onPressed: () => _mudarMes(-1), icon: const Icon(Icons.chevron_left)),
             Expanded(child: Text(nomeMes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600))),

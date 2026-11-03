@@ -68,7 +68,7 @@ void main() {
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
     for (final acao in ['Venda rápida', 'Lançar impressão', 'Novo carretel', 'Orçar peça']) {
-      expect(find.text(acao), findsOneWidget);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text(acao)), findsOneWidget);
     }
   });
 

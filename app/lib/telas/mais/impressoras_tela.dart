@@ -35,7 +35,14 @@ class _ImpressorasTelaState extends State<ImpressorasTela> {
         key: ValueKey(_versao),
         carregar: () => buscar(context, '/api/impressoras'),
         vazio: (l) => l.isEmpty,
-        mensagemVazio: 'Cadastre sua impressora para o custo de máquina e o Klipper.',
+        estadoVazio: EstadoVazio(
+          icone: Icons.print_outlined,
+          titulo: 'Nenhuma impressora',
+          explicacao: 'Cadastre sua impressora: ela entra no custo de cada peça (energia e desgaste) e, com o Klipper, '
+              'você acompanha a impressão ao vivo.',
+          acao: 'Cadastrar impressora',
+          aoTocar: () => _abrir(const ImpressoraForm()),
+        ),
         construir: (context, l) => ListView(padding: const EdgeInsets.all(16), children: [
           for (final i in lista(l))
             Card(
@@ -160,7 +167,11 @@ class _HistoricoImpressoraTelaState extends State<HistoricoImpressoraTela> {
       body: EstadoTela<List>(
         carregar: () => buscar(context, '/api/impressoras/${widget.impressora['id']}/historico', query: {'limite': '50'}),
         vazio: (l) => l.isEmpty,
-        mensagemVazio: 'O Klipper não tem trabalhos no histórico.',
+        estadoVazio: const EstadoVazio(
+          icone: Icons.history,
+          titulo: 'Histórico vazio',
+          explicacao: 'O Klipper ainda não tem trabalhos registrados. Depois da primeira impressão eles aparecem aqui.',
+        ),
         construir: (context, l) => ListView(padding: const EdgeInsets.all(16), children: [
           for (final j in lista(l))
             Card(

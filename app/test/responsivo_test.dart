@@ -166,7 +166,7 @@ Ambiente cheio() => Ambiente({
     });
 
 /// Abas abrem dentro da casca (com a navegação); o resto, sozinho.
-const abas = {'inicio': 0, 'impressora': 1, 'catalogo': 2, 'estoque': 3, 'vendas': 4};
+const abas = {'inicio': 0, 'inicio_vazio': 0, 'impressora': 1, 'catalogo': 2, 'estoque': 3, 'vendas': 4};
 final telas = <String, Widget Function()>{
   'modelo': () => const ModeloTela(id: 'm1'),
   'venda_rapida': () => const VendaRapidaTela(itensIniciais: [
@@ -204,7 +204,7 @@ void main() {
         testWidgets('$nome em $largura dp ($tema) não estoura', (tester) async {
           // O teste troca sombra por contorno preto; a captura mostra a sombra de verdade.
           if (autoUpdateGoldenFiles) debugDisableShadows = false;
-          final amb = cheio();
+          final amb = nome == 'inicio_vazio' ? Ambiente({}) : cheio(); // empresa nova: primeiros passos
           await amb.preparar();
           if (nome == 'configuracoes') {
             amb.online = false;

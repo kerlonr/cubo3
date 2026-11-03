@@ -65,6 +65,15 @@ class _DespesasTelaState extends State<DespesasTela> {
                 const Text('Compras de carretel e de insumo entram sozinhas nos gastos do painel.',
                     style: TextStyle(fontSize: 12)),
                 const SizedBox(height: 8),
+                if (doMes.isEmpty)
+                  EstadoVazio(
+                    icone: Icons.receipt_outlined,
+                    titulo: 'Nenhuma despesa neste mês',
+                    explicacao: 'Lance contas como luz, internet, ferramentas e peças de reposição para o resultado '
+                        'do mês ficar certo.',
+                    acao: 'Lançar despesa',
+                    aoTocar: () => _abrir(const DespesaForm()),
+                  ),
                 for (final d in doMes)
                   Card(
                     margin: const EdgeInsets.only(bottom: 8),

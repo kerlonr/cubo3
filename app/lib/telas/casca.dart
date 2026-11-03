@@ -152,6 +152,12 @@ class CascaState extends State<Casca> {
   }
 }
 
+/// Abre um cadastro e, na volta, as telas abertas recarregam (mostram o que acabou de ser lançado).
+Future<void> abrirTela(BuildContext context, Widget tela) async {
+  await Navigator.push(context, MaterialPageRoute(builder: (_) => tela));
+  dadosMudaram.value++;
+}
+
 void abrirMais(BuildContext context) =>
     Navigator.push(context, MaterialPageRoute(builder: (_) => const MaisTela()));
 
@@ -160,10 +166,9 @@ Future<void> abrirAcoesRapidas(BuildContext context) => showModalBottomSheet(
       context: context,
       showDragHandle: true,
       builder: (c) {
-        Future<void> abrir(Widget tela) async {
+        Future<void> abrir(Widget tela) {
           Navigator.pop(c);
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => tela));
-          dadosMudaram.value++; // Início, Vendas, Impressões e Estoque mostram o que acabou de ser lançado
+          return abrirTela(context, tela);
         }
 
         return SafeArea(

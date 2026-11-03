@@ -77,8 +77,8 @@ class _EstoqueAbaState extends State<EstoqueAba> {
     );
   }
 
-  Widget _lista(List<Widget> itens, String vazio) => itens.isEmpty
-      ? ListView(children: [Padding(padding: const EdgeInsets.all(48), child: Text(vazio, textAlign: TextAlign.center))])
+  Widget _lista(List<Widget> itens, EstadoVazio vazio) => itens.isEmpty
+      ? ListView(children: [vazio])
       : Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
@@ -108,7 +108,15 @@ class _EstoqueAbaState extends State<EstoqueAba> {
             onTap: () => _abrir(CarreteisTela(filamento: f)),
           ),
         ),
-    ], 'Nenhum filamento ainda. Toque em + para cadastrar.');
+    ],
+        EstadoVazio(
+          icone: Icons.palette_outlined,
+          titulo: 'Nenhum filamento ainda',
+          explicacao: 'Filamento é o tipo que você compra (marca, material e cor) com o preço por kg. '
+              'Depois registre cada carretel para o estoque descontar os gramas sozinho.',
+          acao: 'Cadastrar filamento',
+          aoTocar: () => _abrir(const FilamentoForm()),
+        ));
   }
 
   Widget _insumos(Map e) => _lista([
@@ -160,7 +168,14 @@ class _EstoqueAbaState extends State<EstoqueAba> {
               ),
             ),
           ),
-      ], 'Nenhum insumo. Cadastre ímãs, parafusos, caixas...');
+      ],
+          EstadoVazio(
+            icone: Icons.inventory_2_outlined,
+            titulo: 'Nenhum insumo',
+            explicacao: 'Insumos são ímãs, parafusos, caixas e etiquetas que vão junto com a peça e entram no custo.',
+            acao: 'Cadastrar insumo',
+            aoTocar: () => _abrir(const InsumoForm()),
+          ));
 }
 
 class _PecasLista extends StatelessWidget {
@@ -176,7 +191,12 @@ class _PecasLista extends StatelessWidget {
         final itens = [for (final p in pecas) if (num0(p['saldo']) != 0) p];
         if (itens.isEmpty) {
           return ListView(children: const [
-            Padding(padding: EdgeInsets.all(48), child: Text('Nenhuma peça pronta em estoque.', textAlign: TextAlign.center))
+            EstadoVazio(
+              icone: Icons.view_in_ar_outlined,
+              titulo: 'Nenhuma peça pronta',
+              explicacao: 'Ao confirmar uma impressão com a finalidade "Estoque", as peças entram aqui e saem quando '
+                  'você vende.',
+            ),
           ]);
         }
         return ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
@@ -259,8 +279,17 @@ class _CarreteisTelaState extends State<CarreteisTela> {
           construir: (context, e) {
             final carreteis = [for (final c in lista(e['carreteis'])) if (c['filamento_id'] == f['id']) c];
             if (carreteis.isEmpty) {
-              return ListView(children: const [
-                Padding(padding: EdgeInsets.all(48), child: Text('Nenhum carretel ativo.', textAlign: TextAlign.center))
+              return ListView(children: [
+                EstadoVazio(
+                  icone: Icons.circle_outlined,
+                  titulo: 'Nenhum carretel ativo',
+                  explicacao: 'Registre cada carretel que comprar: o app desconta os gramas de cada impressão e avisa '
+                      'quando estiver acabando.',
+                  acao: 'Registrar carretel',
+                  aoTocar: () async => _recarregar(await Navigator.push<bool>(context,
+                          MaterialPageRoute(builder: (_) => CarretelForm(filamentoId: f['id'] as String))) ==
+                      true),
+                ),
               ]);
             }
             return ListView(padding: const EdgeInsets.all(16), children: [

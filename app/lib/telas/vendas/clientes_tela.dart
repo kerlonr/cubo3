@@ -50,7 +50,14 @@ class _ClientesTelaState extends State<ClientesTela> {
             key: ValueKey(_versao),
             carregar: () => buscar(context, '/api/clientes'),
             vazio: (l) => l.isEmpty,
-            mensagemVazio: 'Nenhum cliente ainda.',
+            estadoVazio: EstadoVazio(
+              icone: Icons.people_outline,
+              titulo: 'Nenhum cliente ainda',
+              explicacao: 'Guarde nome e contato de quem compra para ver o histórico de pedidos de cada um. '
+                  'Cliente é opcional na venda.',
+              acao: 'Cadastrar cliente',
+              aoTocar: () => _abrir(const ClienteForm()),
+            ),
             construir: (context, l) {
               final clientes = [
                 for (final c in lista(l))

@@ -58,8 +58,15 @@ class _VendasAbaState extends State<VendasAba> {
               final status = _filtros[_filtro]!;
               final pedidos = [for (final p in lista(l)) if (status.isEmpty || status.contains(p['status'])) p];
               if (pedidos.isEmpty) {
-                return ListView(children: const [
-                  Padding(padding: EdgeInsets.all(48), child: Text('Nenhum pedido aqui.', textAlign: TextAlign.center))
+                return ListView(children: [
+                  EstadoVazio(
+                    icone: Icons.receipt_long_outlined,
+                    titulo: lista(l).isEmpty ? 'Nenhuma venda ainda' : 'Nenhum pedido em "$_filtro"',
+                    explicacao: 'Registre uma venda em poucos toques: escolha o modelo, a quantidade e pronto. '
+                        'Para orçamento, use o ícone de novo pedido no topo.',
+                    acao: 'Registrar venda',
+                    aoTocar: () => _abrir(const VendaRapidaTela()),
+                  ),
                 ]);
               }
               return Align(
