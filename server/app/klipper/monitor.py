@@ -4,14 +4,16 @@ import json
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Callable
 
 import websockets
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ao_vivo import Hub, hub
 from app.empresa.modelos import Impressora
+from app.impressoes.modelos import Impressao
 from app.klipper import moonraker
 from app.klipper.servico import registrar_trabalho
 
@@ -49,22 +51,45 @@ class Monitor:
                                                     "impressora_id": str(self.impressora_id), "arquivo": i.arquivo,
                                                     "situacao": i.situacao_klipper})
 
+    def _recuperar(self, jobs: list[dict]) -> None:
+        """Na reconexão: registra o que terminou depois da última impressão do Klipper já registrada
+        (ou do cadastro da impressora), para não perder trabalhos de quando o monitor estava fora do ar."""
+        with self.sessoes() as db:
+            marco = db.scalar(select(func.max(Impressao.fim)).where(Impressao.impressora_id == self.impressora_id,
+                                                                   Impressao.origem == "klipper"))
+            if marco is None:
+                marco = db.get(Impressora, self.impressora_id).criado_em
+        for job in reversed(jobs):  # do mais antigo para o mais novo
+            fim = job.get("end_time")
+            if job.get("status") != "in_progress" and fim and datetime.fromtimestamp(fim, timezone.utc) > marco:
+                self._registrar(job)
+
+    async def _em_thread(self, funcao, *args) -> None:
+        try:
+            await asyncio.to_thread(funcao, *args)
+        except Exception:  # um trabalho com dado estranho não pode derrubar a conexão
+            log.exception("impressora %s: falha ao registrar trabalho", self.impressora_id)
+
     async def _sessao(self, ws) -> None:
         await ws.send(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "server.connection.identify", "params": {
             "client_name": "cubo3", "version": "1.0", "type": "other", "url": "https://cubo3.kerlonr.com.br"}}))
         await ws.send(json.dumps({"jsonrpc": "2.0", "id": 2, "method": "printer.objects.subscribe",
                                   "params": {"objects": OBJETOS}}))
+        await ws.send(json.dumps({"jsonrpc": "2.0", "id": 3, "method": "server.history.list",
+                                  "params": {"limit": 20, "order": "desc"}}))
         async for bruto in ws:
             msg = json.loads(bruto)
             metodo = msg.get("method")
             if msg.get("id") == 2 and isinstance(msg.get("result"), dict):
                 self._atualizar(msg["result"].get("status", {}), forcar=True)
+            elif msg.get("id") == 3 and isinstance(msg.get("result"), dict):
+                await self._em_thread(self._recuperar, msg["result"].get("jobs", []))
             elif metodo == "notify_status_update":
                 self._atualizar(msg["params"][0])
             elif metodo == "notify_history_changed":
                 p = msg["params"][0]
                 if p.get("action") == "finished":
-                    await asyncio.to_thread(self._registrar, p["job"])
+                    await self._em_thread(self._registrar, p["job"])
             elif metodo in ("notify_klippy_disconnected", "notify_klippy_shutdown"):
                 self._atualizar({"print_stats": {"state": "desligada"}}, forcar=True)
 

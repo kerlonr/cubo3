@@ -4,7 +4,7 @@ from typing import Literal
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.auth.deps import Ctx
@@ -47,16 +47,25 @@ def casar_modelo(db: Session, empresa_id, arquivo: str | None) -> uuid.UUID | No
 
 
 def confirmar(db: Session, c: Ctx, imp: Impressao, dados: Confirmacao) -> Impressao:
-    if imp.status == "confirmada":
-        return imp  # reenvio da fila offline: nada muda
-    if imp.status == "descartada":
+    # Trava a impressão antes de qualquer lançamento: dois aparelhos confirmando juntos → só um baixa estoque.
+    tomada = db.execute(update(Impressao).where(Impressao.id == imp.id,
+                                                Impressao.status.in_(("a_confirmar", "arquivada")))
+                        .values(status="confirmada")).rowcount
+    if not tomada:
+        db.refresh(imp)
+        if imp.status == "confirmada":
+            return imp  # reenvio da fila offline ou outro aparelho já confirmou: nada muda
         raise HTTPException(409, "Impressão já descartada")
     modelo = obter(db, c, Modelo, dados.modelo_id, "Modelo") if dados.modelo_id else (
         db.get(Modelo, imp.modelo_id) if imp.modelo_id else None)
-    usos = [("consumo", u) for u in dados.consumos] + [("perda", u) for u in dados.perdas]
-    carreteis = {u.carretel_id: obter(db, c, Carretel, u.carretel_id, "Carretel") for _, u in usos}
+    # Mesmo carretel repetido na lista (ex.: duas cores do mesmo rolo) vira um lançamento só, somado.
+    usos: dict[tuple[str, uuid.UUID], Decimal] = {}
+    for tipo, lista in (("consumo", dados.consumos), ("perda", dados.perdas)):
+        for u in lista:
+            usos[(tipo, u.carretel_id)] = usos.get((tipo, u.carretel_id), D(0)) + u.gramas
+    carreteis = {cid: obter(db, c, Carretel, cid, "Carretel") for _, cid in usos}
 
-    material = sum((u.gramas * carreteis[u.carretel_id].preco_kg_real / 1000 for _, u in usos), D(0))
+    material = sum((g * carreteis[cid].preco_kg_real / 1000 for (_, cid), g in usos.items()), D(0))
     emp = param_empresa(db, c.empresa_id)
     impressora = db.get(Impressora, imp.impressora_id) if imp.impressora_id else None
     maquina = D(imp.duracao_s or 0) / 3600 * custo_hora_impressora(param_impressora(impressora), emp)
@@ -67,9 +76,9 @@ def confirmar(db: Session, c: Ctx, imp: Impressao, dados: Confirmacao) -> Impres
     insumos = sum((i.qtd * i.custo_unitario for i in r.insumos + r.embalagem), D(0))
     total = r2(material + maquina + mao_obra + insumos)
 
-    for tipo, u in usos:
-        lancar(db, c, id=id_derivado(imp.id, f"{tipo}:{u.carretel_id}"), item_tipo="carretel",
-               item_id=u.carretel_id, tipo=tipo, quantidade=-u.gramas, impressao_id=imp.id, data=imp.fim)
+    for (tipo, cid), gramas in usos.items():
+        lancar(db, c, id=id_derivado(imp.id, f"{tipo}:{cid}"), item_tipo="carretel",
+               item_id=cid, tipo=tipo, quantidade=-gramas, impressao_id=imp.id, data=imp.fim)
     if dados.finalidade == "venda" and modelo and dados.pecas_boas > 0:
         lancar(db, c, id=id_derivado(imp.id, "producao"), item_tipo="peca", item_id=modelo.id, tipo="producao",
                quantidade=dados.pecas_boas, valor=total, impressao_id=imp.id, data=imp.fim)

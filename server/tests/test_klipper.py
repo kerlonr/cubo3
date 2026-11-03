@@ -149,3 +149,42 @@ def test_monitor_com_moonraker_falso(cliente, dono, fabrica, empresa_a_id):
     with fabrica() as s:
         imps = list(s.scalars(select(Impressao).where(Impressao.job_id == "0000A8")))
     assert [(i.status, i.empresa_id) for i in imps] == [("a_confirmar", empresa_a_id)]
+
+
+def test_monitor_recupera_trabalho_terminado_desconectado(cliente, dono, fabrica, empresa_a_id):
+    """Trabalho que terminou com o monitor fora do ar entra na reconexão (só os posteriores ao cadastro)."""
+    from app.ao_vivo import Hub
+    from app.impressoes.modelos import Impressao
+    from app.klipper.monitor import Monitor
+    from sqlalchemy import select
+
+    imp = impressora(cliente, dono)
+    novo = {**JOB, "job_id": "0000B1", "end_time": time.time()}
+    antigo = {**JOB, "job_id": "0000A1"}  # terminou antes de a impressora existir no Cubo³
+    porta = _porta_livre()
+    recebidos = []
+
+    async def moonraker_falso(ws):
+        async for bruto in ws:
+            msg = json.loads(bruto)
+            resultado = {"jobs": [novo, antigo]} if msg["method"] == "server.history.list" else {}
+            await ws.send(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": resultado}))
+
+    class HubTeste(Hub):
+        def publicar(self, empresa_id, evento):
+            recebidos.append(evento)
+
+    async def cenario():
+        async with websockets.serve(moonraker_falso, "127.0.0.1", porta):
+            m = Monitor(uuid.UUID(imp["id"]), empresa_a_id, f"http://127.0.0.1:{porta}", None, fabrica, HubTeste())
+            tarefa = asyncio.create_task(m.rodar())
+            limite = time.monotonic() + 10
+            while time.monotonic() < limite and not any(e["tipo"] == "impressao_terminou" for e in recebidos):
+                await asyncio.sleep(0.05)
+            await asyncio.sleep(0.3)
+            tarefa.cancel()
+
+    asyncio.run(cenario())
+    with fabrica() as s:
+        jobs = sorted(i.job_id for i in s.scalars(select(Impressao).where(Impressao.empresa_id == empresa_a_id)))
+    assert jobs == ["0000B1"]

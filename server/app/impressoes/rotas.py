@@ -37,8 +37,13 @@ def ao_salvar(db: Session, c: Ctx, i: Impressao, criado: bool) -> None:
         obter(db, c, Modelo, i.modelo_id, "Modelo")
 
 
+def ao_excluir(db: Session, c: Ctx, i: Impressao) -> None:
+    if i.status == "confirmada":
+        raise HTTPException(409, "Impressão confirmada já mexeu no estoque; não pode ser excluída")
+
+
 rotas_impressoes = rotas_crud(Impressao, ImpressaoEntrada, saida_impressao, "/impressoes", ao_salvar=ao_salvar,
-                              nome="Impressão", com_listagem=False)
+                              ao_excluir=ao_excluir, nome="Impressão", com_listagem=False)
 rotas = APIRouter(prefix="/api", tags=["impressoes"])
 
 

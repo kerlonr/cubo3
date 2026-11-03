@@ -1,3 +1,4 @@
+import threading
 import time
 import uuid
 from typing import Literal
@@ -19,6 +20,7 @@ rotas = APIRouter(prefix="/api", tags=["auth"])
 
 JANELA_S = 15 * 60
 MAX_FALHAS = 5
+_TRAVA = threading.Lock()
 
 
 def _senha_valida(v: str) -> str:
@@ -69,15 +71,19 @@ def _falhas(request: Request) -> dict[str, list[float]]:
 def login(dados: Login, request: Request, db: Session = Depends(get_db)):
     email = normaliza_email(dados.email)
     falhas = _falhas(request)
-    recentes = [t for t in falhas.get(email, []) if time.time() - t < JANELA_S]
-    falhas[email] = recentes
-    if len(recentes) >= MAX_FALHAS:
-        raise HTTPException(429, "Muitas tentativas. Espere 15 minutos.")
+    agora_s = time.time()
+    with _TRAVA:
+        recentes = [t for t in falhas.get(email, []) if agora_s - t < JANELA_S]
+        falhas[email] = recentes
+        if len(recentes) >= MAX_FALHAS:
+            raise HTTPException(429, "Muitas tentativas. Espere 15 minutos.")
+        # conta a tentativa antes de conferir a senha: tentativas em paralelo não escapam do limite
+        recentes.append(agora_s)
     u = db.scalar(select(Usuario).where(Usuario.email == email, Usuario.excluido.is_(False)))
     if u is None or not confere_senha(dados.senha, u.senha_hash):
-        recentes.append(time.time())
         raise HTTPException(401, "E-mail ou senha incorretos")
-    falhas.pop(email, None)
+    with _TRAVA:
+        falhas.pop(email, None)
     return {**emitir_tokens(u), "trocar_senha": u.trocar_senha}
 
 

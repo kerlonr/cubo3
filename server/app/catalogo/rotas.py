@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, UploadFile
@@ -84,7 +85,7 @@ rotas = APIRouter(prefix="/api", tags=["catalogo"])
 
 @rotas.get("/modelos")
 def listar_modelos(busca: str | None = None, categoria: str | None = None, tag: str | None = None,
-                   ordem: str = "nome", periodo_dias: int | None = None, atualizado_desde: str | None = None, incluir_excluidos: bool = False,
+                   ordem: str = "nome", periodo_dias: int | None = None, atualizado_desde: datetime | None = None, incluir_excluidos: bool = False,
                    c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     # shortcut: filtro e ordem em Python; ok para centenas de modelos, levar para SQL se passar de alguns milhares.
     modelos = list(db.scalars(consulta_lista(Modelo, c, atualizado_desde, incluir_excluidos)))

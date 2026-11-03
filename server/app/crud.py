@@ -4,8 +4,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import AwareDatetime, BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -90,7 +90,11 @@ def rotas_crud(modelo: type[DaEmpresa], entrada: type[BaseModel], saida: Callabl
         return saida(db, obter(db, c, modelo, id, nome))
 
     @r.put(prefixo + "/{id}")
-    def salvar(id: uuid.UUID, dados: entrada, c: Ctx = Depends(escreve), db: Session = Depends(get_db)):
+    def salvar(id: uuid.UUID, dados: entrada, c: Ctx = Depends(escreve), db: Session = Depends(get_db),
+               x_alterado_em: AwareDatetime | None = Header(None)):
+        existente = db.get(modelo, id)
+        if existente is not None and existente.empresa_id == c.empresa_id and x_alterado_em is not None                 and x_alterado_em < existente.atualizado_em:
+            return saida(db, existente)  # edição feita offline antes da última gravação: a mais nova vence
         obj, criado = upsert(db, c, modelo, id, dados.model_dump(exclude_unset=True))
         if ao_salvar:
             ao_salvar(db, c, obj, criado)

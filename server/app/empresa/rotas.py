@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -16,11 +17,12 @@ D = Decimal
 
 
 class ConfigEmpresa(BaseModel):
-    eficiencia: Decimal = ParamEmpresa.eficiencia
-    mao_obra_hora: Decimal = ParamEmpresa.mao_obra_hora
-    kwh: Decimal = ParamEmpresa.kwh
-    reserva: Decimal = ParamEmpresa.reserva
-    margens: list[Decimal] = Field(default_factory=lambda: [D(m) for m in ParamEmpresa.margens], min_length=1)
+    eficiencia: Decimal = Field(ParamEmpresa.eficiencia, gt=0)
+    mao_obra_hora: Decimal = Field(ParamEmpresa.mao_obra_hora, ge=0)
+    kwh: Decimal = Field(ParamEmpresa.kwh, ge=0)
+    reserva: Decimal = Field(ParamEmpresa.reserva, gt=0)
+    margens: list[Annotated[Decimal, Field(ge=0, lt=100)]] = Field(
+        default_factory=lambda: [D(m) for m in ParamEmpresa.margens], min_length=1)
 
 
 def param_empresa(db: Session, empresa_id) -> ParamEmpresa:
