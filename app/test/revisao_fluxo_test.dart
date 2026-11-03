@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:cubo3/api/api.dart';
 import 'package:cubo3/api/fila.dart';
 import 'package:cubo3/telas/impressoes/confirmar_tela.dart';
+import 'package:cubo3/telas/mais/configuracoes_tela.dart';
 import 'package:cubo3/telas/vendas/venda_rapida_tela.dart';
 import 'package:cubo3/widgets/cartoes.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +16,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'apoio.dart';
 
-const _skipFila = 'BUG revisão: operação com 5xx fixo trava a fila para sempre e tudo depois vira "salvo no aparelho" (fila.dart:87,113)';
 
 void main() {
   testWidgets('venda rápida pelo "+" atualiza a receita do Início', (tester) async {
@@ -76,7 +76,7 @@ void main() {
     await fila.esvaziar();
     expect(r2.guardada, isFalse, reason: 'venda ficou "salva no aparelho" com internet');
     expect(chegaram, contains('/api/pedidos/2'));
-  }, skip: _skipFila);
+  });
 
   testWidgets('lançamento manual com uma impressora só usa essa impressora', (tester) async {
     final amb = Ambiente({
@@ -117,4 +117,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   }, skip: true); // BUG revisão: Enter num texto sem modelo correspondente chama onSelected(null) e estoura firstWhere (venda_rapida_tela.dart:211)
+
+  testWidgets('Configurações lista as pendentes e descarta uma só depois de confirmar', (tester) async {
+    final amb = Ambiente({});
+    await amb.preparar();
+    amb.online = false;
+    await amb.fila.enviarOuGuardar(Operacao.nova('PUT', '/api/pedidos/p1', {}));
+    await amb.fila.enviarOuGuardar(Operacao.nova('POST', '/api/impressoes/i1/confirmar', {}));
+    await tamanhoTela(tester, 500, 1400);
+    await tester.pumpWidget(amb.tela(const ConfiguracoesTela()));
+    await tester.pumpAndSettle();
+    expect(find.text('Pedido'), findsOneWidget);
+    expect(find.text('Impressão · confirmar'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Descartar').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+    expect(amb.fila.pendentes, 2);
+
+    await tester.tap(find.byTooltip('Descartar').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Descartar'));
+    await tester.pumpAndSettle();
+    expect(amb.fila.pendentes, 1);
+    expect(find.text('Pedido'), findsNothing);
+    expect(find.text('Impressão · confirmar'), findsOneWidget);
+  });
 }

@@ -101,6 +101,23 @@ void main() {
     expect(dadosMudaram.value, antes + 1);
   });
 
+  test('500 seguidos contam na operação guardada (sobrevive ao app reaberto); 503 não conta', () async {
+    final s = Servidor()
+      ..online = true
+      ..status = 500;
+    final fila = FilaOffline(s.api(), prefs, guardaOffline: true);
+    expect((await fila.enviarOuGuardar(venda())).guardada, isTrue);
+    expect(FilaOffline(s.api(), prefs, guardaOffline: true).operacoes.single.tentativas, 1);
+    s.status = 503;
+    await fila.esvaziar();
+    expect(FilaOffline(s.api(), prefs, guardaOffline: true).operacoes.single.tentativas, 1);
+    s.status = 500;
+    await fila.esvaziar();
+    expect(fila.pendentes, 0);
+    expect(fila.erros.single.mensagem, 'Recusado 500');
+    expect(s.recebidos, hasLength(4)); // 1 + 503 + mais 2 vezes 500
+  });
+
   test('401 (sessão expirada) não descarta a operação', () async {
     final s = Servidor();
     final fila = FilaOffline(s.api(), prefs, guardaOffline: true);

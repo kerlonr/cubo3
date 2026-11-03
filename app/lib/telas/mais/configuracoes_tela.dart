@@ -107,6 +107,23 @@ class _ConfiguracoesTelaState extends State<ConfiguracoesTela> {
             title: Text(fila.pendentes == 0 ? 'Nada pendente' : '${fila.pendentes} alteração(ões) esperando internet'),
             trailing: fila.pendentes == 0 ? null : TextButton(onPressed: fila.esvaziar, child: const Text('Enviar agora')),
           ),
+          for (final op in fila.operacoes)
+            ListTile(
+              dense: true,
+              title: Text(descreverOperacao(op)),
+              subtitle: Text('${op.metodo} · ${dataHora(op.criadaEm)}'),
+              trailing: IconButton(
+                tooltip: 'Descartar',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () async {
+                  if (await confirmar(context, 'Descartar alteração?',
+                      '${descreverOperacao(op)} não será enviada ao servidor. Isso não pode ser desfeito.',
+                      sim: 'Descartar')) {
+                    await fila.descartar(op);
+                  }
+                },
+              ),
+            ),
           for (final e in fila.erros)
             ListTile(
               leading: const Icon(Icons.error_outline, color: Colors.red),
@@ -137,4 +154,25 @@ class _ConfiguracoesTelaState extends State<ConfiguracoesTela> {
       ]),
     );
   }
+}
+
+const _nomesRecurso = {
+  'pedidos': 'Pedido',
+  'clientes': 'Cliente',
+  'impressoes': 'Impressão',
+  'impressoras': 'Impressora',
+  'modelos': 'Modelo',
+  'filamentos': 'Filamento',
+  'carreteis': 'Carretel',
+  'insumos': 'Insumo',
+  'movimentos': 'Movimento de estoque',
+  'despesas': 'Despesa',
+  'canais': 'Canal de venda',
+};
+
+/// `/api/impressoes/{id}/confirmar` → "Impressão · confirmar".
+String descreverOperacao(Operacao op) {
+  final p = op.caminho.split('/');
+  final nome = p.length > 2 ? _nomesRecurso[p[2]] ?? p[2] : op.caminho;
+  return p.length > 4 ? '$nome · ${p[4]}' : nome;
 }

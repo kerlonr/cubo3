@@ -11,7 +11,8 @@ import 'modelos.dart';
 final dadosMudaram = ValueNotifier<int>(0);
 
 class Operacao {
-  Operacao(this.id, this.metodo, this.caminho, this.corpo, this.criadaEm, {this.empresa, this.versaoBase});
+  Operacao(this.id, this.metodo, this.caminho, this.corpo, this.criadaEm,
+      {this.empresa, this.versaoBase, this.tentativas = 0});
 
   /// [versaoBase] = `atualizado_em` lido do servidor antes de editar (só em edição; criação não tem).
   Operacao.nova(this.metodo, this.caminho, [this.corpo, this.versaoBase])
@@ -20,12 +21,17 @@ class Operacao {
 
   factory Operacao.fromJson(Map j) => Operacao(j['id'] as String, j['metodo'] as String, j['caminho'] as String,
       j['corpo'] as Map?, DateTime.parse(j['criadaEm'] as String),
-      empresa: j['empresa'] as String?, versaoBase: j['versaoBase'] as String?);
+      empresa: j['empresa'] as String?,
+      versaoBase: j['versaoBase'] as String?,
+      tentativas: j['tentativas'] as int? ?? 0);
 
   final String id, metodo, caminho;
   final Map? corpo;
   final DateTime criadaEm;
   final String? versaoBase;
+
+  /// Tentativas seguidas com erro 500 (bug no servidor para esta operação, não servidor fora).
+  int tentativas = 0;
 
   /// Empresa em que foi feita: a fila manda para ela mesmo que o usuário troque de empresa antes.
   String? empresa;
@@ -38,6 +44,7 @@ class Operacao {
         'criadaEm': criadaEm.toUtc().toIso8601String(),
         'empresa': empresa,
         'versaoBase': versaoBase,
+        'tentativas': tentativas,
       };
 }
 
@@ -79,7 +86,12 @@ class FilaOffline extends ChangeNotifier {
   Future<void>? _esvaziando;
   Timer? _timer;
 
+  /// Depois de tantos 500 seguidos a operação vai para os erros e a fila segue.
+  static const maxTentativas500 = 3;
+
   int get pendentes => _ops.length;
+
+  List<Operacao> get operacoes => List.unmodifiable(_ops);
 
   List<Map> _ler(String chave) => [for (final e in jsonDecode(_prefs.getString(chave) ?? '[]') as List) e as Map];
 
@@ -109,6 +121,7 @@ class FilaOffline extends ChangeNotifier {
       return ResultadoEnvio(false, await _enviar(op));
     } on ErroApi catch (e) {
       if (!e.temporario || !guardaOffline) rethrow;
+      if (e.status == 500) op.tentativas = 1;
       _ops.add(op);
       await _gravar();
       return const ResultadoEnvio(true);
@@ -127,15 +140,27 @@ class FilaOffline extends ChangeNotifier {
           await _enviar(op);
           enviou = true;
         } on ErroApi catch (e) {
-          if (e.temporario || e.status == 401) return;
+          // 500 repetido é bug do servidor com esta operação: depois de algumas vezes, sai da frente das outras.
+          // 502/503/504 e sem rede são servidor fora: esperam sem limite.
+          if (e.status == 500 && ++op.tentativas < maxTentativas500) {
+            await _gravar();
+            continue;
+          }
+          if (e.status != 500 && (e.temporario || e.status == 401)) return;
           erros.add(ErroFila(op, e.mensagem)); // 404/409/422...: reenviar não adianta
         }
-        _ops.removeAt(0);
+        _ops.remove(op); // não removeAt(0): a operação pode ter sido descartada enquanto ia
         await _gravar();
       }
     } finally {
       if (enviou) dadosMudaram.value++;
     }
+  }
+
+  /// Tira uma pendência da fila sem enviar (o usuário confirmou na tela).
+  Future<void> descartar(Operacao op) async {
+    _ops.remove(op);
+    await _gravar();
   }
 
   Future<void> limparErros() async {
