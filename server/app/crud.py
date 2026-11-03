@@ -72,7 +72,8 @@ def consulta_lista(modelo, c: Ctx, atualizado_desde: datetime | None = None, inc
 def rotas_crud(modelo: type[DaEmpresa], entrada: type[BaseModel], saida: Callable[[Session, Any], dict],
                prefixo: str, *, so_dono_escreve: bool = False,
                ao_salvar: Callable[[Session, Ctx, Any, bool], None] | None = None,
-               nome: str = "Registro", com_listagem: bool = True) -> APIRouter:
+               nome: str = "Registro", com_listagem: bool = True,
+               ao_excluir: Callable[[Session, Ctx, Any], None] | None = None) -> APIRouter:
     """com_listagem=False: o módulo define o próprio GET da lista (filtros/ordem específicos)."""
     r = APIRouter(prefix="/api", tags=[prefixo.strip("/")])
     escreve = so_dono if so_dono_escreve else ctx
@@ -100,6 +101,8 @@ def rotas_crud(modelo: type[DaEmpresa], entrada: type[BaseModel], saida: Callabl
     def excluir(id: uuid.UUID, c: Ctx = Depends(escreve), db: Session = Depends(get_db)):
         obj = obter(db, c, modelo, id, nome)
         obj.excluido = True
+        if ao_excluir:
+            ao_excluir(db, c, obj)
         db.commit()
         return {"ok": True}
 

@@ -87,4 +87,12 @@ def gravar_config(dados: ConfigEmpresa, c: Ctx = Depends(so_dono), db: Session =
 
 
 rotas_canais = rotas_crud(CanalVenda, CanalEntrada, lambda db, o: serializar(o), "/canais", nome="Canal")
-rotas_impressoras = rotas_crud(Impressora, ImpressoraEntrada, saida_impressora, "/impressoras", nome="Impressora")
+
+
+def _reiniciar_monitor(db: Session, c: Ctx, imp: Impressora, *_) -> None:
+    from app.klipper.monitor import monitores  # import tardio: klipper depende de empresa
+    monitores.reiniciar(imp)
+
+
+rotas_impressoras = rotas_crud(Impressora, ImpressoraEntrada, saida_impressora, "/impressoras", nome="Impressora",
+                               ao_salvar=_reiniciar_monitor, ao_excluir=_reiniciar_monitor)

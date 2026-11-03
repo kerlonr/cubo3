@@ -1,5 +1,6 @@
 import os
 
+os.environ["KLIPPER_ATIVO"] = "0"  # testes não abrem conexão com impressora real
 os.environ.setdefault("JWT_SEGREDO", "segredo-de-teste-" + "x" * 40)
 
 import pytest
