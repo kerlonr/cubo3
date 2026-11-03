@@ -11,6 +11,7 @@ import '../../widgets/estado_tela.dart';
 import '../../widgets/logo.dart';
 import '../casca.dart';
 import '../impressoes/cartao_ao_vivo.dart';
+import '../impressoes/impressora_tela.dart';
 
 /// Painel: o que gastamos, vendemos, lucramos e o que falta no estoque.
 class InicioAba extends StatefulWidget {
@@ -93,7 +94,14 @@ class _InicioAbaState extends State<InicioAba> {
               ),
             ),
           ],
-          for (final i in impressoras) Padding(padding: const EdgeInsets.only(top: 8), child: CartaoAoVivo(impressora: i)),
+          for (final i in impressoras)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: InkWell(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ImpressoraTela(impressora: i))),
+                child: CartaoAoVivo(impressora: i),
+              ),
+            ),
           const Secao('Receita × gastos (12 meses)'),
           SizedBox(height: 200, child: GraficoMeses(lista(p['por_mes']))),
           if (lista(p['estoque_baixo']).isNotEmpty) ...[

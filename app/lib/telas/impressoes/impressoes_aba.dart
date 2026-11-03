@@ -8,6 +8,7 @@ import '../../widgets/estado_tela.dart';
 import '../mais/impressoras_tela.dart';
 import 'cartao_ao_vivo.dart';
 import 'confirmar_tela.dart';
+import 'impressora_tela.dart';
 
 const nomesStatus = {
   'a_confirmar': 'A confirmar',
@@ -71,7 +72,7 @@ class ImpressoesAbaState extends State<ImpressoesAba> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: InkWell(
-                onTap: () => _abrir(HistoricoImpressoraTela(impressora: i)),
+                onTap: () => _abrir(ImpressoraTela(impressora: i)),
                 child: CartaoAoVivo(impressora: i),
               ),
             ),

@@ -145,15 +145,19 @@ Future<bool> salvar(BuildContext context, String metodo, String caminho, Map cor
   }
 }
 
-Future<bool> confirmar(BuildContext context, String titulo, String texto, {String sim = 'Confirmar'}) async =>
+Future<bool> confirmar(BuildContext context, String titulo, String texto,
+        {String sim = 'Confirmar', String nao = 'Cancelar', Color? cor}) async =>
     await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text(titulo),
         content: Text(texto),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(sim)),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(nao)),
+          FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              style: cor == null ? null : FilledButton.styleFrom(backgroundColor: cor, foregroundColor: Colors.white),
+              child: Text(sim)),
         ],
       ),
     ) ==
