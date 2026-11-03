@@ -96,6 +96,8 @@ def rotas_crud(modelo: type[DaEmpresa], entrada: type[BaseModel], saida: Callabl
         # (outra pessoa/aparelho), recusa com 409 em vez de sobrescrever ou descartar em silêncio.
         existente = db.get(modelo, id)
         if existente is not None and existente.empresa_id == c.empresa_id and x_versao_base is not None                 and existente.atualizado_em > x_versao_base:
+            if all(getattr(existente, k) == v for k, v in dados.model_dump(exclude_unset=True).items()):
+                return saida(db, existente)  # reenvio da mesma edição (resposta perdida): já está gravada
             raise HTTPException(409, f"{nome} foi alterado por outra pessoa. Abra de novo e refaça a edição.")
         obj, criado = upsert(db, c, modelo, id, dados.model_dump(exclude_unset=True))
         if ao_salvar:

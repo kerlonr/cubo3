@@ -2,7 +2,9 @@ import json
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 
 from app.auth.rotas import rotas as rotas_auth
@@ -29,6 +31,12 @@ async def ciclo(app: FastAPI):
 
 def criar_app() -> FastAPI:
     app = FastAPI(title="Cubo³", docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=ciclo)
+
+    @app.exception_handler(RequestValidationError)
+    async def erro_de_validacao(request: Request, exc: RequestValidationError):
+        # Sem devolver o valor recebido: NaN/Infinity quebravam a resposta (500) ao virar JSON.
+        erros = [{"loc": list(e.get("loc", [])), "msg": e.get("msg", ""), "type": e.get("type", "")} for e in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": erros})
 
     @app.get("/api/saude")
     def saude():

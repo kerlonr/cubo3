@@ -5,7 +5,7 @@ from typing import Literal
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -82,6 +82,12 @@ ACOES = {"pausar": "/printer/print/pause", "continuar": "/printer/print/resume",
 AQUECEDORES = {"bico": ("extruder", 300), "mesa": ("heater_bed", 120)}
 OCUPADA = {"printing", "paused"}
 HOME = {"XYZ": "G28 X Y Z", "XY": "G28 X Y", "Z": "G28 Z"}
+# Movimentos que estragam a peça: imprimindo, nenhum; pausada, só home/motores (perdem a posição da retomada).
+# Mover/extrudar com a impressão pausada continuam liberados: é a troca de filamento.
+BLOQUEADOS = {"printing": ({"home", "mover", "motores_off", "extrudar"},
+                           "A impressora está imprimindo: pause a impressão antes de mover os eixos"),
+              "paused": ({"home", "motores_off"},
+                         "Com a impressão pausada, home e desligar motores perdem a posição da peça")}
 LIMITES = {"ventoinha": (0, 100), "velocidade": (10, 300), "fluxo": (50, 150)}
 
 
@@ -91,6 +97,7 @@ def _entre(valor, minimo, maximo, nome):
 
 
 class Comando(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     acao: Literal["pausar", "continuar", "cancelar", "emergencia", "reiniciar_firmware", "temperatura", "home",
                   "mover", "motores_off", "extrudar", "ventoinha", "velocidade", "fluxo", "ajuste_z", "macro"]
     alvo: Literal["bico", "mesa"] | None = None
@@ -130,7 +137,9 @@ class Comando(BaseModel):
         if a == "home":
             return HOME[self.eixos]
         if a == "mover":
-            return f"G91\nG1 {self.eixo}{self.distancia:g} F{600 if self.eixo == 'Z' else 6000}\nG90"
+            # G90 vai numa chamada separada (ver enviar_comando): se o Klipper recusar o G1, o resto do
+            # script não roda e a impressora ficaria em modo relativo.
+            return f"G91\nG1 {self.eixo}{self.distancia:g} F{600 if self.eixo == 'Z' else 6000}"
         if a == "motores_off":
             return "M84"
         if a == "extrudar":
@@ -179,6 +188,15 @@ def enviar_comando(id: uuid.UUID, dados: Comando, c: Ctx = Depends(so_dono), db:
     imp = _com_moonraker(db, c, id)
     if dados.acao in ACOES:
         return _executar(imp, ACOES[dados.acao])
+    if dados.acao in {"home", "mover", "motores_off", "extrudar"}:
+        try:
+            estado = (monitores.estado(imp.id) or {}).get("estado") or \
+                moonraker.estado_impressao(imp.moonraker_url, imp.api_key)
+        except (httpx.HTTPError, KeyError, ValueError):
+            raise HTTPException(502, "A impressora não respondeu")
+        bloqueio = BLOQUEADOS.get(estado)
+        if bloqueio and dados.acao in bloqueio[0]:
+            raise HTTPException(409, bloqueio[1])
     if dados.acao == "macro":
         try:
             existe = dados.nome in moonraker.listar_macros(imp.moonraker_url, imp.api_key)
@@ -186,6 +204,14 @@ def enviar_comando(id: uuid.UUID, dados: Comando, c: Ctx = Depends(so_dono), db:
             raise HTTPException(502, "A impressora não respondeu")
         if not existe:
             raise HTTPException(422, "Macro não existe nesta impressora")
+    if dados.acao == "mover":
+        try:
+            return _executar(imp, "/printer/gcode/script", {"script": dados.gcode()})
+        finally:  # volta ao modo absoluto mesmo se o G1 foi recusado
+            try:
+                moonraker.comando(imp.moonraker_url, imp.api_key, "/printer/gcode/script", {"script": "G90"})
+            except Exception:
+                pass
     return _executar(imp, "/printer/gcode/script", {"script": dados.gcode()})
 
 
@@ -213,7 +239,9 @@ def arquivos_da_impressora(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = D
 
 
 def _caminho_seguro(caminho: str) -> bool:
-    return ".." not in caminho and not caminho.startswith(("/", "\\")) and ":" not in caminho
+    # % ? # ficam de fora: '%2e%2e' viraria '..' do outro lado e '?'/'#' trocariam o arquivo pedido.
+    return (".." not in caminho and not caminho.startswith(("/", "\\"))
+            and not any(c in caminho for c in ":%?#\\"))
 
 
 @rotas.get("/impressoras/{id}/arquivos/miniatura")

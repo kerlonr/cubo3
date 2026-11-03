@@ -42,8 +42,8 @@ def script(feitas):
     ({"acao": "home", "eixos": "XYZ"}, "G28 X Y Z"),
     ({"acao": "home", "eixos": "XY"}, "G28 X Y"),
     ({"acao": "home", "eixos": "Z"}, "G28 Z"),
-    ({"acao": "mover", "eixo": "X", "distancia": 10}, "G91\nG1 X10 F6000\nG90"),
-    ({"acao": "mover", "eixo": "Z", "distancia": -0.1}, "G91\nG1 Z-0.1 F600\nG90"),
+    ({"acao": "mover", "eixo": "X", "distancia": 10}, "G91\nG1 X10 F6000|G90"),
+    ({"acao": "mover", "eixo": "Z", "distancia": -0.1}, "G91\nG1 Z-0.1 F600|G90"),
     ({"acao": "motores_off"}, "M84"),
     ({"acao": "extrudar", "distancia": -5}, "M83\nG1 E-5 F300"),
     ({"acao": "ventoinha", "valor": 50}, "M106 S128"),
@@ -58,7 +58,7 @@ def test_acoes_novas(cliente, dono, klipper, corpo, esperado):
     imp = impressora(cliente, dono)
     r = cliente.post(f"/api/impressoras/{imp}/comando", headers=dono, json=corpo)
     assert r.status_code == 200, r.text
-    assert script(klipper[0]) == [esperado]
+    assert script(klipper[0]) == esperado.split("|")  # mover: G90 vai numa segunda chamada
 
 
 @pytest.mark.parametrize("corpo", [

@@ -2,7 +2,7 @@
 import json
 import posixpath
 import time
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -116,7 +116,8 @@ def buscar_job(url: str, chave: str | None, job_id: str) -> dict:
 
 def baixar(url: str, chave: str | None, caminho_gcodes: str) -> bytes | None:
     try:
-        r = httpx.get(f"{url.rstrip('/')}/server/files/gcodes/{caminho_gcodes}", headers=_cabecalhos(chave),
+        r = httpx.get(f"{url.rstrip('/')}/server/files/gcodes/{quote(caminho_gcodes, safe='/')}",
+                      headers=_cabecalhos(chave),
                       timeout=TIMEOUT)
         return r.content if r.status_code == 200 else None
     except httpx.HTTPError:
