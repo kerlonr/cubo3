@@ -9,8 +9,11 @@ import '../../tema.dart';
 import '../../widgets/estado_tela.dart';
 import '../impressoes/confirmar_tela.dart';
 import '../mais/impressoras_tela.dart';
+import 'arquivos.dart';
+import 'console.dart';
 import 'controle.dart';
 import 'historico.dart';
+import 'macros.dart';
 import 'painel.dart';
 
 /// Aba Impressora (estilo Mobileraker): Painel, Controle (só dono), Arquivos, Macros, Console e Histórico.
@@ -122,9 +125,12 @@ class ImpressoraAbaState extends State<ImpressoraAba> {
             impressora: atual,
             aConfirmar: aConfirmar,
             comCamera: widget.ativa,
-            verHistorico: () => DefaultTabController.of(c).animateTo(dono ? 2 : 1)),
+            verHistorico: () => DefaultTabController.of(c).animateTo(dono ? 5 : 4)),
       ),
       if (dono) ('Controle', Icons.open_with, (_) => ControleImpressora(key: ValueKey('c$id'), impressora: atual)),
+      ('Arquivos', Icons.folder_outlined, (_) => ArquivosImpressora(key: ValueKey('a$id'), impressora: atual)),
+      ('Macros', Icons.bolt_outlined, (_) => MacrosImpressora(key: ValueKey('m$id'), impressora: atual)),
+      ('Console', Icons.terminal, (_) => ConsoleImpressora(key: ValueKey('t$id'), impressora: atual)),
       (
         aConfirmar > 0 ? 'Histórico ($aConfirmar)' : 'Histórico',
         Icons.history,

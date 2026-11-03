@@ -107,6 +107,7 @@ void main() {
     await tester.pumpWidget(amb.tela(const ImpressoraAba()));
     await tester.pumpAndSettle();
     expect(find.text('Painel'), findsOneWidget);
+    expect(find.text('Arquivos'), findsOneWidget);
     expect(find.text('Controle'), findsNothing);
     expect(find.byTooltip('Parada de emergência'), findsNothing);
   });
