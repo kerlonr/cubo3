@@ -91,10 +91,12 @@ def rotas_crud(modelo: type[DaEmpresa], entrada: type[BaseModel], saida: Callabl
 
     @r.put(prefixo + "/{id}")
     def salvar(id: uuid.UUID, dados: entrada, c: Ctx = Depends(escreve), db: Session = Depends(get_db),
-               x_alterado_em: AwareDatetime | None = Header(None)):
+               x_versao_base: AwareDatetime | None = Header(None)):
+        # X-Versao-Base = atualizado_em que o aparelho leu antes de editar. Se o registro mudou depois
+        # (outra pessoa/aparelho), recusa com 409 em vez de sobrescrever ou descartar em silêncio.
         existente = db.get(modelo, id)
-        if existente is not None and existente.empresa_id == c.empresa_id and x_alterado_em is not None                 and x_alterado_em < existente.atualizado_em:
-            return saida(db, existente)  # edição feita offline antes da última gravação: a mais nova vence
+        if existente is not None and existente.empresa_id == c.empresa_id and x_versao_base is not None                 and existente.atualizado_em > x_versao_base:
+            raise HTTPException(409, f"{nome} foi alterado por outra pessoa. Abra de novo e refaça a edição.")
         obj, criado = upsert(db, c, modelo, id, dados.model_dump(exclude_unset=True))
         if ao_salvar:
             ao_salvar(db, c, obj, criado)

@@ -158,7 +158,7 @@ Canais de venda são cadastráveis por empresa (ex.: Direto 0%; Shopee x% + R$ y
 O servidor é a fonte da verdade. No navegador o app só funciona online. No Android:
 - **Leitura:** as respostas das telas principais ficam em cache local; sem conexão, o app mostra a última versão com uma faixa "sem conexão — dados de HH:MM".
 - **Escrita:** toda criação/alteração gera o ID (UUID) no aparelho e vai para uma **fila local** (método, rota, corpo). A fila é enviada em ordem quando a conexão volta; como os IDs vêm do aparelho e o servidor trata o mesmo ID como a mesma operação (idempotência), reenviar não duplica nada.
-- Conflitos: estoque não conflita (movimentos se somam); edição do mesmo cadastro por duas pessoas usa "a última gravação vence" pelo `atualizado_em`.
+- Conflitos: estoque não conflita (movimentos se somam). Edição de cadastro manda `X-Versao-Base` (o `atualizado_em` lido antes de editar); se outra pessoa mudou o registro depois, o servidor recusa com 409 e a edição aparece nos erros da fila para refazer. (Mudado em 2026-11-03: "a última gravação vence" pelo relógio do celular perdia edições.)
 - A calculadora funciona 100% offline.
 
 Motivo: offline completo com sincronização bidirecional (como no Meu Frete) é caro para dados compartilhados entre sócios; cache + fila cobre o caso de "sem sinal na hora de lançar" com muito menos código.

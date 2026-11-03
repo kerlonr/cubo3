@@ -180,13 +180,21 @@ def test_revisao_excluir_impressao_confirmada_409(cliente, dono):
     assert cliente.delete(f"/api/impressoes/{pendente}", headers=dono).status_code == 200
 
 
-def test_revisao_ultima_gravacao_vence(cliente, dono):
+def test_revisao_versao_base_recusa_edicao_velha(cliente, dono):
+    """Edição baseada numa versão que outra pessoa já mudou volta 409 (vai para os erros da fila, não some)."""
     i = uuid.uuid4()
-    cliente.put(f"/api/canais/{i}", headers=dono, json={"nome": "Shopee", "taxa_pct": 20})
-    velho = cliente.put(f"/api/canais/{i}", headers={**dono, "X-Alterado-Em": "2020-01-01T00:00:00Z"},
-                        json={"taxa_pct": 99})
-    assert velho.status_code == 200 and velho.json()["taxa_pct"] == 20
-    novo = cliente.put(f"/api/canais/{i}", headers={**dono, "X-Alterado-Em": "2099-01-01T00:00:00Z"},
-                       json={"taxa_pct": 12})
-    assert novo.json()["taxa_pct"] == 12
+    v1 = cliente.put(f"/api/canais/{i}", headers=dono, json={"nome": "Shopee", "taxa_pct": 20}).json()["atualizado_em"]
+    r = cliente.put(f"/api/canais/{i}", headers={**dono, "X-Versao-Base": v1}, json={"taxa_pct": 12})
+    assert r.status_code == 200 and r.json()["taxa_pct"] == 12
+    velho = cliente.put(f"/api/canais/{i}", headers={**dono, "X-Versao-Base": v1}, json={"taxa_pct": 99})
+    assert velho.status_code == 409
+    assert cliente.get(f"/api/canais/{i}", headers=dono).json()["taxa_pct"] == 12
     assert cliente.put(f"/api/canais/{i}", headers=dono, json={"taxa_pct": 15}).json()["taxa_pct"] == 15
+
+
+def test_revisao_versao_base_ignorada_na_criacao(cliente, dono):
+    """Criar e editar sem internet: a criação não tem versão base; a edição usa a versão devolvida."""
+    i = uuid.uuid4()
+    r = cliente.put(f"/api/canais/{i}", headers={**dono, "X-Versao-Base": "2020-01-01T00:00:00+00:00"},
+                    json={"nome": "Novo", "taxa_pct": 5})
+    assert r.status_code == 200 and r.json()["nome"] == "Novo"
