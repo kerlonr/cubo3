@@ -1,0 +1,13 @@
+# Segredos e dados locais
+.env
+*.local.md
+*.jks
+key.properties
+servidor.json
+
+# Build
+build/
+.dart_tool/
+__pycache__/
+.venv/
+.pytest_cache/
