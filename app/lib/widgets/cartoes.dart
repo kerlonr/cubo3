@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../api/api.dart';
 import '../tema.dart';
 
 /// Total grande com rótulo pequeno acima.
@@ -104,4 +106,23 @@ class BolinhaCor extends StatelessWidget {
           border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         ),
       );
+}
+
+/// Imagem protegida da API (capa, miniatura): manda o token junto.
+class ImagemApi extends StatelessWidget {
+  const ImagemApi(this.caminho, {super.key, this.ajuste = BoxFit.cover});
+  final String? caminho;
+  final BoxFit ajuste;
+
+  @override
+  Widget build(BuildContext context) {
+    final vazio = Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+      child: Icon(Icons.view_in_ar_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
+    );
+    if (caminho == null) return vazio;
+    final api = context.read<ApiCliente>();
+    return Image.network(api.url(caminho!).toString(),
+        headers: api.cabecalhosAuth, fit: ajuste, errorBuilder: (_, _, _) => vazio);
+  }
 }

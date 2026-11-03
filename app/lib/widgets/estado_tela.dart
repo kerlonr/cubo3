@@ -17,6 +17,14 @@ Future<RespostaCache> buscar(BuildContext context, String caminho, {Map<String, 
   return cache.obter(chave, () => api.get(caminho, query: query));
 }
 
+/// Vários GETs juntos: dados = {chave: resposta}; deCache se algum veio do cache.
+Future<RespostaCache> buscarVarios(BuildContext context, Map<String, String> caminhos) async {
+  final chaves = caminhos.keys.toList();
+  final rs = await Future.wait([for (final k in chaves) buscar(context, caminhos[k]!)]);
+  return RespostaCache({for (var i = 0; i < chaves.length; i++) chaves[i]: rs[i].dados}, rs.any((r) => r.deCache),
+      rs.map((r) => r.quando).reduce((a, b) => a.isBefore(b) ? a : b));
+}
+
 /// Carregando / erro com "Tentar de novo" / vazio / conteúdo (+ faixa "Sem conexão — dados de HH:MM").
 /// Para recarregar de fora, troque a `key`.
 class EstadoTela<T> extends StatefulWidget {

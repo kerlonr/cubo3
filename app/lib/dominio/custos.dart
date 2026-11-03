@@ -99,6 +99,48 @@ Custo calcularCusto(Receita r, ParamImpressora imp, ParamEmpresa emp) {
   return Custo(arred2(material), arred2(maoObra), arred2(maquina), arred2(insumos), arred2(embalagem), arred2(total));
 }
 
+/// Custo de uma receita no formato do servidor (`modelo.receita` / calculadora), com os cadastros
+/// em JSON. Mesmas regras de `server/app/catalogo/custo.py`: preço do filamento cadastrado
+/// (ou `preco_kg` avulso), insumo de categoria "embalagem" vai para embalagem, impressora
+/// escolhida ou a primeira cadastrada.
+Custo custoDaReceita(
+  Map receita, {
+  required List filamentos,
+  required List insumos,
+  required List impressoras,
+  required Map config,
+  String? impressoraId,
+}) {
+  Map? achar(List l, Object? id) {
+    for (final e in l) {
+      if (e is Map && e['id'] == id && id != null) return e;
+    }
+    return null;
+  }
+
+  final fils = <ItemFilamento>[];
+  for (final f in (receita['filamentos'] as List? ?? const [])) {
+    final cad = achar(filamentos, f['filamento_id']);
+    fils.add(ItemFilamento(_n(f['gramas'], 0), cad != null ? _n(cad['preco_kg'], 0) : _n(f['preco_kg'], 0)));
+  }
+  final ins = <ItemCusto>[], emb = <ItemCusto>[];
+  for (final i in (receita['insumos'] as List? ?? const [])) {
+    final cad = achar(insumos, i['insumo_id']);
+    final custo = cad != null ? _n(cad['custo_unitario'], 0) : _n(i['custo_unitario'], 0);
+    final embalagem = cad != null ? cad['categoria'] == 'embalagem' : i['embalagem'] == true;
+    if (cad == null && i['insumo_id'] != null) continue; // insumo excluído: o servidor também ignora
+    (embalagem ? emb : ins).add(ItemCusto(_n(i['qtd'], 0), custo));
+  }
+  final ativas = [for (final i in impressoras) if (i is Map && i['excluido'] != true) i];
+  final imp = achar(impressoras, impressoraId) ?? (ativas.isEmpty ? null : ativas.first);
+  return calcularCusto(
+    Receita(fils, _n(receita['horas'], 0), _n(receita['mao_obra_min'], 0),
+        insumos: ins, embalagem: emb, custoEnvio: _n(receita['custo_envio'], 0)),
+    imp == null ? const ParamImpressora() : ParamImpressora.fromJson(imp),
+    ParamEmpresa.fromJson(config),
+  );
+}
+
 double precoComMargem(double custo, num margemPct) => arred2(custo / (1 - margemPct / 100));
 
 /// null quando margem + taxa chegam a 100% ou mais (preço inviável).

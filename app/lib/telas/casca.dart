@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'catalogo/catalogo_aba.dart';
 import 'estoque/carretel_form.dart';
 import 'estoque/estoque_aba.dart';
 import 'mais/mais_tela.dart';
@@ -28,7 +29,7 @@ class CascaState extends State<Casca> {
   List<Widget> get _abas => [
         _AbaProvisoria(_destinos[0].$3),
         _AbaProvisoria(_destinos[1].$3),
-        _AbaProvisoria(_destinos[2].$3),
+        const CatalogoAba(),
         const EstoqueAba(),
         _AbaProvisoria(_destinos[4].$3),
       ];
