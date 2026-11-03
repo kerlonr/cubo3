@@ -3,13 +3,15 @@ import uuid
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Response, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ao_vivo import hub
 from app.auth.deps import Ctx, ctx, papel_na_empresa, so_dono, usuario_do_token
+from app.auth.seguranca import ler_token, token_link
 from app.catalogo.modelos import Arquivo
 from app.config import config
 from app.crud import obter
@@ -123,6 +125,53 @@ def imprimir_arquivo(id: uuid.UUID, dados: Imprimir, c: Ctx = Depends(so_dono), 
     except (httpx.HTTPError, KeyError, ValueError):
         raise HTTPException(502, "A impressora não respondeu")
     return {"ok": True, "arquivo": a.nome_original}
+
+
+def _camera(imp: Impressora) -> dict:
+    try:
+        cam = moonraker.webcam(imp.moonraker_url, imp.api_key)
+    except (httpx.HTTPError, KeyError, ValueError):
+        raise HTTPException(502, "A impressora não respondeu")
+    if cam is None:
+        raise HTTPException(404, "Sem câmera")
+    return cam
+
+
+@rotas.get("/impressoras/{id}/camera/foto")
+def camera_foto(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    cam = _camera(_com_moonraker(db, c, id))
+    try:
+        return Response(moonraker.foto(cam["foto"]), media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+    except httpx.HTTPError:
+        raise HTTPException(502, "A câmera não respondeu")
+
+
+@rotas.post("/impressoras/{id}/camera/link")
+def camera_link(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    imp = _com_moonraker(db, c, id)
+    return {"url": f"/api/camera/{token_link('camera', imp.id)}", "validade_s": 60}
+
+
+@rotas.get("/camera/{token}")
+async def camera_video(token: str, db: Session = Depends(get_db)):
+    imp = db.get(Impressora, uuid.UUID(ler_token(token, "camera")["sub"]))
+    db.close()  # o vídeo pode ficar aberto por muito tempo: não segura conexão do banco
+    if imp is None or imp.excluido or not imp.moonraker_url:
+        raise HTTPException(404, "Impressora não encontrada")
+    cam = await asyncio.to_thread(_camera, imp)
+    try:
+        tipo, pedacos, fechar = await moonraker.abrir_video(cam["video"])
+    except Exception:
+        raise HTTPException(502, "A câmera não respondeu")
+
+    async def repassar():
+        try:
+            async for pedaco in pedacos:
+                yield pedaco
+        finally:  # cliente fechou a tela (ou a câmera caiu): solta a conexão com a impressora
+            await fechar()
+
+    return StreamingResponse(repassar(), media_type=tipo, headers={"Cache-Control": "no-store"})
 
 
 @rotas.websocket("/ao-vivo")

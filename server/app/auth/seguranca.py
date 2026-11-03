@@ -9,7 +9,7 @@ from app.config import config
 from app.db import agora
 
 _ph = PasswordHasher()
-DURACAO = {"acesso": timedelta(minutes=30), "refresh": timedelta(days=60), "download": timedelta(minutes=10)}
+DURACAO = {"acesso": timedelta(minutes=30), "refresh": timedelta(days=60), "download": timedelta(minutes=10), "camera": timedelta(seconds=60)}
 
 
 def hash_senha(s: str) -> str:
@@ -28,10 +28,14 @@ def _token(u, tipo: str) -> str:
     return jwt.encode(claims, config().jwt_segredo, algorithm="HS256")
 
 
-def token_download(arquivo_id) -> str:
-    """Link curto para baixar um arquivo sem cabeçalho de login (navegador, outro app)."""
-    claims = {"sub": str(arquivo_id), "tipo": "download", "exp": agora() + DURACAO["download"]}
+def token_link(tipo: str, sub) -> str:
+    """Link curto que autoriza sem cabeçalho de login (download no navegador, vídeo num <img>)."""
+    claims = {"sub": str(sub), "tipo": tipo, "exp": agora() + DURACAO[tipo]}
     return jwt.encode(claims, config().jwt_segredo, algorithm="HS256")
+
+
+def token_download(arquivo_id) -> str:
+    return token_link("download", arquivo_id)
 
 
 def emitir_tokens(u) -> dict:
