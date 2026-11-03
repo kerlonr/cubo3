@@ -2,13 +2,14 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.deps import Ctx, ctx
+from app.auth.seguranca import ler_token, token_download
 from app.catalogo.arquivos import salvar_upload, tipo_do_arquivo
 from app.catalogo.custo import custo_do_modelo, custo_json
 from app.catalogo.modelos import Arquivo, Modelo
@@ -128,6 +129,21 @@ async def enviar_arquivo(id: uuid.UUID, arquivo: UploadFile, c: Ctx = Depends(ct
 def baixar_arquivo(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     a = obter(db, c, Arquivo, id, "Arquivo")
     return FileResponse(config().arquivos_dir / a.caminho, filename=a.nome_original)
+
+
+@rotas.post("/arquivos/{id}/link")
+def link_download(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    a = obter(db, c, Arquivo, id, "Arquivo")
+    return {"url": f"/api/download/{token_download(a.id)}", "validade_min": 10}
+
+
+@rotas.get("/download/{token}")
+def baixar_por_link(token: str, db: Session = Depends(get_db)):
+    a = db.get(Arquivo, uuid.UUID(ler_token(token, "download")["sub"]))
+    caminho = config().arquivos_dir / a.caminho if a else None
+    if caminho is None or not caminho.is_file():
+        raise HTTPException(404, "Arquivo não encontrado")
+    return FileResponse(caminho, filename=a.nome_original)
 
 
 @rotas.delete("/arquivos/{id}")

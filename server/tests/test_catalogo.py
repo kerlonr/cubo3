@@ -81,3 +81,16 @@ def test_busca_e_tag(cliente, dono):
     assert nomes(tag="útil") == ["Suporte Celular"]
     assert nomes(categoria="Casa") == ["Vaso Espiral"]
     assert nomes(ordem="nome") == ["Suporte Celular", "Vaso Espiral"]
+
+
+def test_link_de_download_assinado(cliente, dono, outro):
+    m = criar_modelo(cliente, dono)
+    a = enviar(cliente, dono, m["id"]).json()
+    r = cliente.post(f"/api/arquivos/{a['id']}/link", headers=dono)
+    assert r.status_code == 200 and r.json()["url"].startswith("/api/download/")
+    baixado = cliente.get(r.json()["url"])  # sem cabeçalho de login: o link é a autorização
+    assert baixado.content == b"solid cubo" and "peca.stl" in baixado.headers["content-disposition"]
+    assert cliente.post(f"/api/arquivos/{a['id']}/link", headers=outro).status_code == 404
+    acesso = dono["Authorization"].removeprefix("Bearer ")
+    assert cliente.get(f"/api/download/{acesso}").status_code == 401
+    assert cliente.get("/api/download/lixo").status_code == 401
