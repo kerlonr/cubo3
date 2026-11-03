@@ -1,13 +1,17 @@
 import asyncio
 import uuid
+from typing import Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ao_vivo import hub
-from app.auth.deps import Ctx, ctx, papel_na_empresa, usuario_do_token
+from app.auth.deps import Ctx, ctx, papel_na_empresa, so_dono, usuario_do_token
+from app.catalogo.modelos import Arquivo
+from app.config import config
 from app.crud import obter
 from app.db import get_db
 from app.empresa.modelos import Impressora
@@ -62,6 +66,63 @@ def trazer(id: uuid.UUID, job_id: str, c: Ctx = Depends(ctx), db: Session = Depe
     i = registrar_trabalho(db, c.empresa_id, imp.id, moonraker.trabalho_de_historico(job), arquivada=True)
     db.commit()
     return saida_impressao(db, i)
+
+
+ACOES = {"pausar": "/printer/print/pause", "continuar": "/printer/print/resume",
+         "cancelar": "/printer/print/cancel", "emergencia": "/printer/emergency_stop"}
+AQUECEDORES = {"bico": ("extruder", 300), "mesa": ("heater_bed", 120)}
+OCUPADA = {"printing", "paused"}
+
+
+class Comando(BaseModel):
+    acao: Literal["pausar", "continuar", "cancelar", "emergencia", "temperatura"]
+    alvo: Literal["bico", "mesa"] | None = None
+    valor: float | None = None
+
+    @model_validator(mode="after")
+    def _temperatura(self):
+        if self.acao == "temperatura":
+            if self.alvo is None or self.valor is None:
+                raise ValueError("Informe o aquecedor (bico ou mesa) e a temperatura")
+            if not 0 <= self.valor <= AQUECEDORES[self.alvo][1]:
+                raise ValueError(f"Temperatura do {self.alvo} deve ficar entre 0 e {AQUECEDORES[self.alvo][1]} °C")
+        return self
+
+
+class Imprimir(BaseModel):
+    impressora_id: uuid.UUID
+
+
+@rotas.post("/impressoras/{id}/comando")
+def enviar_comando(id: uuid.UUID, dados: Comando, c: Ctx = Depends(so_dono), db: Session = Depends(get_db)):
+    imp = _com_moonraker(db, c, id)
+    if dados.acao == "temperatura":
+        aquecedor = AQUECEDORES[dados.alvo][0]
+        caminho, params = "/printer/gcode/script", {
+            "script": f"SET_HEATER_TEMPERATURE HEATER={aquecedor} TARGET={dados.valor:g}"}
+    else:
+        caminho, params = ACOES[dados.acao], None
+    try:
+        moonraker.comando(imp.moonraker_url, imp.api_key, caminho, params)
+    except httpx.HTTPError:
+        raise HTTPException(502, "A impressora não respondeu")
+    return {"ok": True}
+
+
+@rotas.post("/arquivos/{id}/imprimir")
+def imprimir_arquivo(id: uuid.UUID, dados: Imprimir, c: Ctx = Depends(so_dono), db: Session = Depends(get_db)):
+    a = obter(db, c, Arquivo, id, "Arquivo")
+    if a.tipo != "gcode":
+        raise HTTPException(422, "Só dá para imprimir arquivo .gcode")
+    imp = _com_moonraker(db, c, dados.impressora_id)
+    try:
+        estado = (monitores.estado(imp.id) or {}).get("estado") or moonraker.estado_impressao(imp.moonraker_url, imp.api_key)
+        if estado in OCUPADA:
+            raise HTTPException(409, "A impressora está ocupada")
+        moonraker.enviar_e_imprimir(imp.moonraker_url, imp.api_key, a.nome_original, config().arquivos_dir / a.caminho)
+    except (httpx.HTTPError, KeyError, ValueError):
+        raise HTTPException(502, "A impressora não respondeu")
+    return {"ok": True, "arquivo": a.nome_original}
 
 
 @rotas.websocket("/ao-vivo")

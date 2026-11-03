@@ -3,6 +3,7 @@ import json
 import posixpath
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 
@@ -108,3 +109,24 @@ def baixar(url: str, chave: str | None, caminho_gcodes: str) -> bytes | None:
         return r.content if r.status_code == 200 else None
     except httpx.HTTPError:
         return None
+
+
+def comando(url: str, chave: str | None, caminho: str, params: dict | None = None) -> dict:
+    r = httpx.post(f"{url.rstrip('/')}{caminho}", params=params, headers=_cabecalhos(chave), timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+
+def estado_impressao(url: str, chave: str | None) -> str:
+    r = httpx.get(f"{url.rstrip('/')}/printer/objects/query", params={"print_stats": "state"},
+                  headers=_cabecalhos(chave), timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.json()["result"]["status"]["print_stats"]["state"]
+
+
+def enviar_e_imprimir(url: str, chave: str | None, nome: str, caminho: Path) -> dict:
+    with caminho.open("rb") as f:
+        r = httpx.post(f"{url.rstrip('/')}/server/files/upload", files={"file": (nome, f, "application/octet-stream")},
+                       data={"print": "true"}, headers=_cabecalhos(chave), timeout=300)
+    r.raise_for_status()
+    return r.json()
