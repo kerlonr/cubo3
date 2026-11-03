@@ -1,8 +1,11 @@
 """Leitura dos dados do Moonraker (API do Klipper): histórico, estado ao vivo e arquivos."""
 import json
 import posixpath
+import time
+from urllib.parse import urlsplit
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 
@@ -108,3 +111,72 @@ def baixar(url: str, chave: str | None, caminho_gcodes: str) -> bytes | None:
         return r.content if r.status_code == 200 else None
     except httpx.HTTPError:
         return None
+
+
+def comando(url: str, chave: str | None, caminho: str, params: dict | None = None) -> dict:
+    r = httpx.post(f"{url.rstrip('/')}{caminho}", params=params, headers=_cabecalhos(chave), timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+
+def estado_impressao(url: str, chave: str | None) -> str:
+    r = httpx.get(f"{url.rstrip('/')}/printer/objects/query", params={"print_stats": "state"},
+                  headers=_cabecalhos(chave), timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.json()["result"]["status"]["print_stats"]["state"]
+
+
+def enviar_e_imprimir(url: str, chave: str | None, nome: str, caminho: Path) -> dict:
+    with caminho.open("rb") as f:
+        r = httpx.post(f"{url.rstrip('/')}/server/files/upload", files={"file": (nome, f, "application/octet-stream")},
+                       data={"print": "true"}, headers=_cabecalhos(chave), timeout=300)
+    r.raise_for_status()
+    return r.json()
+
+
+def urls_webcam(url: str, webcams: list[dict]) -> dict | None:
+    """Endereços da primeira câmera ligada; os relativos (crowsnest) ficam no host da impressora, porta 80."""
+    cam = next((w for w in webcams if w.get("enabled", True)), None)
+    if cam is None or not cam.get("stream_url"):
+        return None
+    p = urlsplit(url)
+    base = f"{p.scheme}://{p.hostname}"
+    resolver = lambda u: u if u.startswith("http") else base + u
+    return {"foto": resolver(cam.get("snapshot_url") or cam["stream_url"]), "video": resolver(cam["stream_url"])}
+
+
+_cache_webcam: dict[str, tuple[float, dict | None]] = {}
+
+
+def webcam(url: str, chave: str | None) -> dict | None:
+    agora_s = time.monotonic()
+    if url in _cache_webcam and agora_s - _cache_webcam[url][0] < 300:
+        return _cache_webcam[url][1]
+    r = httpx.get(f"{url.rstrip('/')}/server/webcams/list", headers=_cabecalhos(chave), timeout=TIMEOUT)
+    r.raise_for_status()
+    cam = urls_webcam(url, r.json()["result"]["webcams"])
+    _cache_webcam[url] = (agora_s, cam)
+    return cam
+
+
+def foto(url_foto: str) -> bytes:
+    r = httpx.get(url_foto, timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.content
+
+
+async def abrir_video(url_video: str):
+    """Abre o MJPEG da câmera: (content-type, iterador de pedaços, função que fecha a conexão)."""
+    cliente = httpx.AsyncClient(timeout=httpx.Timeout(10, read=None))
+    try:
+        resp = await cliente.send(cliente.build_request("GET", url_video), stream=True)
+        resp.raise_for_status()
+    except Exception:
+        await cliente.aclose()
+        raise
+
+    async def fechar():
+        await resp.aclose()
+        await cliente.aclose()
+
+    return resp.headers.get("content-type", "multipart/x-mixed-replace"), resp.aiter_raw(), fechar
