@@ -21,7 +21,10 @@ const _paleta = [
   ('Transparente', '#E0F7FA'),
 ];
 
-const _materiais = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU'];
+const _materiais = ['PLA', 'PETG', 'ABS', 'TPU', 'ASA'];
+
+/// O servidor exige marca; sem ela o filamento fica como "Genérico".
+const marcaPadrao = 'Genérico';
 
 class FilamentoForm extends StatefulWidget {
   const FilamentoForm({super.key, this.dados});
@@ -36,6 +39,7 @@ class _FilamentoFormState extends State<FilamentoForm> {
   late final Json d = widget.dados ?? {};
   late final _marca = TextEditingController(text: d['marca'] as String?);
   late final _material = TextEditingController(text: d['material'] as String? ?? 'PLA');
+  late bool _outroMaterial = !_materiais.contains(_material.text.toUpperCase());
   late final _corNome = TextEditingController(text: d['cor_nome'] as String?);
   late final _corHex = TextEditingController(text: d['cor_hex'] as String?);
   late final _precoKg = ctrlDinheiro(numOu(d['preco_kg']));
@@ -48,7 +52,7 @@ class _FilamentoFormState extends State<FilamentoForm> {
     if (!_form.currentState!.validate()) return;
     final hex = _corHex.text.trim().toUpperCase();
     final ok = await salvar(context, 'PUT', '/api/filamentos/${d['id'] ?? novoId()}', versaoBase: d['atualizado_em'] as String?, {
-      'marca': _marca.text.trim(),
+      'marca': _marca.text.trim().isEmpty ? marcaPadrao : _marca.text.trim(),
       'material': _material.text.trim().toUpperCase(),
       'cor_nome': _corNome.text.trim().isEmpty ? null : _corNome.text.trim(),
       'cor_hex': RegExp(r'^#[0-9A-F]{6}$').hasMatch(hex) ? hex : null,
@@ -63,57 +67,63 @@ class _FilamentoFormState extends State<FilamentoForm> {
 
   @override
   Widget build(BuildContext context) {
+    final material = _outroMaterial ? 'Outro' : _material.text.toUpperCase();
     return Scaffold(
       appBar: AppBar(title: Text(widget.dados == null ? 'Novo filamento' : 'Editar filamento')),
+      bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
       body: CorpoFormulario(chave: _form, children: [
-        CampoTexto(_marca, 'Marca', obrigatorio: true),
-        Wrap(spacing: 8, children: [
-          for (final m in _materiais)
-            ChoiceChip(
-              label: Text(m),
-              selected: _material.text.toUpperCase() == m,
-              onSelected: (_) => setState(() => _material.text = m),
-            ),
-        ]),
-        CampoTexto(_material, 'Material', obrigatorio: true, aoMudar: (_) => setState(() {})),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          for (final (nome, hex) in _paleta)
-            InkWell(
-              onTap: () => setState(() {
-                _corNome.text = nome;
-                _corHex.text = hex;
-              }),
-              child: Tooltip(
+        CampoComAjuda(
+          rotulo: 'Material',
+          child: SeletorChips<String>(
+            opcoes: {for (final m in [..._materiais, 'Outro']) m: m},
+            valor: material,
+            aoMudar: (m) => setState(() {
+              _outroMaterial = m == 'Outro';
+              _material.text = _outroMaterial ? '' : m;
+            }),
+          ),
+        ),
+        if (_outroMaterial) CampoTexto(_material, 'Qual material?', obrigatorio: true, dica: 'PLA Silk, Nylon...'),
+        CampoComAjuda(
+          rotulo: 'Cor',
+          ajuda: _corNome.text.isEmpty ? 'Toque na cor do carretel' : _corNome.text,
+          child: Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final (nome, hex) in _paleta)
+              Tooltip(
                 message: nome,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        width: 2,
-                        color: _corHex.text.toUpperCase() == hex ? Theme.of(context).colorScheme.primary : Colors.transparent),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => setState(() {
+                    _corNome.text = nome;
+                    _corHex.text = hex;
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          width: 2,
+                          color:
+                              _corHex.text.toUpperCase() == hex ? Theme.of(context).colorScheme.primary : Colors.transparent),
+                    ),
+                    child: BolinhaCor(corHex(hex), tamanho: 34),
                   ),
-                  child: BolinhaCor(corHex(hex), tamanho: 28),
                 ),
               ),
-            ),
-        ]),
-        Row(children: [
-          Expanded(child: CampoTexto(_corNome, 'Nome da cor')),
-          const SizedBox(width: 12),
-          SizedBox(
-              width: 130, child: CampoTexto(_corHex, 'Hex', dica: '#FFFFFF', aoMudar: (_) => setState(() {}))),
-        ]),
-        CampoDinheiro(_precoKg, 'Preço por kg', obrigatorio: true),
+          ]),
+        ),
+        CampoDinheiro(_precoKg, 'Preço por kg',
+            key: const Key('preco_kg'), obrigatorio: true, ajuda: 'Quanto você pagou por 1 kg de filamento.'),
         MaisDetalhes(children: [
+          CampoTexto(_marca, 'Marca', dica: marcaPadrao, ajuda: 'Ajuda a achar o filamento nas listas.'),
+          CampoTexto(_corNome, 'Nome da cor', ajuda: 'Use quando a cor não está na paleta (ex.: Azul petróleo).'),
+          CampoTexto(_corHex, 'Código da cor', dica: '#FFFFFF', aoMudar: (_) => setState(() {})),
           CampoNumero(_diametro, 'Diâmetro', sufixo: 'mm'),
           CampoNumero(_densidade, 'Densidade', sufixo: 'g/cm³'),
-          CampoNumero(_vazio, 'Peso do carretel vazio', sufixo: 'g'),
-          CampoNumero(_minimo, 'Estoque mínimo (alerta)', sufixo: 'g'),
+          CampoNumero(_vazio, 'Peso do carretel vazio',
+              sufixo: 'g', ajuda: 'Para pesar o carretel na balança e saber quanto sobrou.'),
+          CampoNumero(_minimo, 'Avisar quando ficar abaixo de', sufixo: 'g', ajuda: 'O Início mostra "Repor".'),
         ]),
-        const SizedBox(height: 16),
-        FilledButton(onPressed: _salvar, child: const Text('Salvar')),
       ]),
     );
   }

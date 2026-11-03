@@ -133,16 +133,15 @@ class _DespesaFormState extends State<DespesaForm> {
           if (widget.dados != null)
             IconButton(onPressed: _excluir, icon: const Icon(Icons.delete_outline, color: vermelho)),
         ]),
+        bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
         body: CorpoFormulario(chave: _form, children: [
           CampoDinheiro(_valor, 'Valor', obrigatorio: true),
-          DropdownButtonFormField<String>(
-            initialValue: _categoria,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Categoria'),
-            items: [for (final e in categoriasDespesa.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-            onChanged: (v) => setState(() => _categoria = v!),
+          CampoComAjuda(
+            rotulo: 'Categoria',
+            child: SeletorChips<String>(
+                opcoes: categoriasDespesa, valor: _categoria, aoMudar: (v) => setState(() => _categoria = v)),
           ),
-          CampoTexto(_descricao, 'Descrição'),
+          CampoTexto(_descricao, 'Descrição', ajuda: 'Opcional.', dica: 'Conta de luz de outubro...'),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.event),
@@ -153,8 +152,6 @@ class _DespesaFormState extends State<DespesaForm> {
               if (novo != null) setState(() => _data = novo);
             },
           ),
-          const SizedBox(height: 16),
-          FilledButton(onPressed: _salvar, child: const Text('Salvar')),
         ]),
       );
 }

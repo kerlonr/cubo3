@@ -143,12 +143,13 @@ class _VendaRapidaTelaState extends State<VendaRapidaTela> {
             onPressed: () => setState(() => _itens.add(_Item())), icon: const Icon(Icons.add), label: const Text('Item')),
       ),
       if (canais.length > 1)
-        DropdownButtonFormField<String>(
-          initialValue: _canal,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Canal de venda'),
-          items: [for (final c in canais) DropdownMenuItem(value: c['id'] as String, child: Text('${c['nome']}'))],
-          onChanged: (v) => setState(() => _canal = v),
+        CampoComAjuda(
+          rotulo: 'Canal de venda',
+          child: SeletorChips<String>(
+            opcoes: {for (final c in canais) c['id'] as String: '${c['nome']}'},
+            valor: _canal,
+            aoMudar: (v) => setState(() => _canal = v),
+          ),
         ),
       const SizedBox(height: 12),
       Row(children: [
@@ -223,14 +224,11 @@ class _VendaRapidaTelaState extends State<VendaRapidaTela> {
           if (_itens.length > 1)
             IconButton(onPressed: () => setState(() => _itens.removeAt(i)), icon: const Icon(Icons.close)),
         ]),
-        Row(children: [
-          IconButton.outlined(onPressed: it.qtd > 1 ? () => setState(() => it.qtd--) : null, icon: const Icon(Icons.remove)),
-          SizedBox(
-            width: 40,
-            child: Text('${it.qtd}',
-                textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Quantidade(valor: it.qtd, aoMudar: (v) => setState(() => it.qtd = v)),
           ),
-          IconButton.outlined(onPressed: () => setState(() => it.qtd++), icon: const Icon(Icons.add)),
           const SizedBox(width: 12),
           Expanded(child: CampoDinheiro(it.preco, 'Preço unitário', aoMudar: (_) => setState(() {}))),
         ]),

@@ -95,6 +95,7 @@ class _ModeloFormState extends State<ModeloForm> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.dados?['id'] == null ? 'Novo modelo' : 'Editar modelo')),
+      bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
       body: EstadoTela<Map>(
         carregar: () => buscarVarios(context, caminhosCusto),
         construir: (context, cad) {
@@ -108,24 +109,22 @@ class _ModeloFormState extends State<ModeloForm> {
               config: mapa(cad['config']),
               impressoraId: _impressora);
           final preco = lerNumero(_preco.text);
+          final margem = ParamEmpresa.fromJson(mapa(cad['config'])).margemMeio;
+          final sugerido = custo.total > 0 ? precoComMargem(custo.total, margem) : null;
           return CorpoFormulario(chave: _form, children: [
-            CampoTexto(_nome, 'Nome', key: const Key('nome'), obrigatorio: true),
-            CampoDinheiro(_preco, 'Preço de venda', aoMudar: _mudou),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(children: [
-                Text('Custo ${moeda(custo.total)}', style: const TextStyle(fontFeatures: tabular)),
-                const SizedBox(width: 16),
-                if (preco != null)
-                  Text('Lucro ${moeda(preco - custo.total)}',
-                      style: TextStyle(fontFeatures: tabular, color: corResultado(preco - custo.total))),
-              ]),
-            ),
-            MaisDetalhes(children: [
-              CampoTexto(_descricao, 'Descrição', linhas: 3),
-              CampoTexto(_categoria, 'Categoria'),
-              CampoTexto(_tags, 'Tags (separadas por vírgula)'),
-              CampoTexto(_links, 'Links (um por linha; "título | endereço")', linhas: 3, teclado: TextInputType.multiline),
+            CampoTexto(_nome, 'Nome', key: const Key('nome'), obrigatorio: true, dica: 'Vaso geométrico, chaveiro...'),
+            CampoDinheiro(_preco, 'Preço de venda', aoMudar: _mudou, ajuda: 'Pode deixar para depois.'),
+            Wrap(spacing: 16, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text('Custo ${moeda(custo.total)}', style: const TextStyle(fontFeatures: tabular)),
+              if (preco != null)
+                Text('Lucro ${moeda(preco - custo.total)}',
+                    style: TextStyle(fontFeatures: tabular, color: corResultado(preco - custo.total))),
+              if (sugerido != null && preco != sugerido)
+                ActionChip(
+                  avatar: const Icon(Icons.auto_awesome, size: 16),
+                  label: Text('Usar ${moeda(sugerido)} (margem ${numero(margem)}%)'),
+                  onPressed: () => setState(() => _preco.text = DinheiroFormatter.formatar(sugerido)),
+                ),
             ]),
             MaisDetalhes(titulo: 'Receita e custo', children: [
               for (var i = 0; i < _filamentos.length; i++)
@@ -203,8 +202,12 @@ class _ModeloFormState extends State<ModeloForm> {
               const SizedBox(height: 8),
               QuebraCusto(custo),
             ]),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: _salvar, child: const Text('Salvar')),
+            MaisDetalhes(children: [
+              CampoTexto(_descricao, 'Descrição', linhas: 3),
+              CampoTexto(_categoria, 'Categoria', dica: 'Casa, Presentes...'),
+              CampoTexto(_tags, 'Tags', ajuda: 'Separadas por vírgula; viram filtros no catálogo.'),
+              CampoTexto(_links, 'Links', ajuda: 'Um por linha; "título | endereço".', linhas: 3, teclado: TextInputType.multiline),
+            ]),
           ]);
         },
       ),

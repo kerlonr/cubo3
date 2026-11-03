@@ -4,9 +4,14 @@ import 'dart:io';
 
 import 'package:cubo3/api/fila.dart';
 import 'package:cubo3/telas/casca.dart';
+import 'package:cubo3/telas/catalogo/modelo_form.dart';
 import 'package:cubo3/telas/catalogo/modelo_tela.dart';
+import 'package:cubo3/telas/estoque/carretel_form.dart';
+import 'package:cubo3/telas/estoque/filamento_form.dart';
 import 'package:cubo3/telas/impressoes/confirmar_tela.dart';
 import 'package:cubo3/telas/mais/configuracoes_tela.dart';
+import 'package:cubo3/telas/mais/empresa_tela.dart';
+import 'package:cubo3/telas/mais/impressoras_tela.dart';
 import 'package:cubo3/telas/vendas/venda_rapida_tela.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -131,6 +136,7 @@ Ambiente cheio() => Ambiente({
           ],
       'GET /api/modelos': (_) => [for (var i = 1; i <= 6; i++) modelo('m$i')],
       'GET /api/modelos/m1': (_) => modelo('m1'),
+      'GET /api/filamentos': (_) => [filamento('f1'), filamento('f2')],
       'GET /api/estoque': (_) => {
             'filamentos': [filamento('f1'), filamento('f2')],
             'carreteis': [
@@ -174,6 +180,12 @@ final telas = <String, Widget Function()>{
       ]),
   'confirmar': () => ConfirmarTela(impressao: Map<String, dynamic>.from(impressao)),
   'configuracoes': () => const ConfiguracoesTela(),
+  'filamento_form': () => const FilamentoForm(),
+  'carretel_form': () => const CarretelForm(),
+  'modelo_form': () => ModeloForm(dados: modelo('m1')),
+  'impressora_form': () => const ImpressoraForm(),
+  'custos_form': () => const ConfigEmpresaForm(dados: {}),
+  'canal_form': () => const CanalForm(dados: {'id': 'c2', 'nome': 'Shopee com frete grátis e cupom', 'taxa_pct': 20, 'taxa_fixa': 4}),
 };
 
 const larguras = [320.0, 360.0, 412.0, 600.0, 840.0, 1280.0];

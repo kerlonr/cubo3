@@ -4,12 +4,13 @@ import 'package:provider/provider.dart';
 import '../../api/api.dart';
 import '../../api/modelos.dart';
 import '../../api/sessao.dart';
+import '../../dominio/custos.dart';
 import '../../util/formatos.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/campos.dart';
 import '../../widgets/estado_tela.dart';
 
-/// Empresa: usuários (só o dono mexe), custos da planilha e canais de venda.
+/// Empresa: quem tem acesso (só o dono adiciona e remove).
 class EmpresaTela extends StatefulWidget {
   const EmpresaTela({super.key});
 
@@ -87,9 +88,6 @@ class _EmpresaTelaState extends State<EmpresaTela> {
     }
   }
 
-  Future<void> _abrir(Widget tela) async =>
-      _recarregar(await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => tela)) == true);
-
   @override
   Widget build(BuildContext context) {
     final dono = context.watch<Sessao>().dono;
@@ -97,10 +95,8 @@ class _EmpresaTelaState extends State<EmpresaTela> {
       appBar: AppBar(title: Text('${context.read<Sessao>().empresaAtual?['nome'] ?? 'Empresa'}')),
       body: EstadoTela<Map>(
         key: ValueKey(_versao),
-        carregar: () =>
-            buscarVarios(context, {'membros': '/api/empresa/membros', 'config': '/api/empresa/config', 'canais': '/api/canais'}),
+        carregar: () => buscarVarios(context, {'membros': '/api/empresa/membros'}),
         construir: (context, d) {
-          final cfg = mapa(d['config']);
           return Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
@@ -117,26 +113,6 @@ class _EmpresaTelaState extends State<EmpresaTela> {
                         ? IconButton(tooltip: 'Remover', icon: const Icon(Icons.person_remove_outlined), onPressed: () => _remover(m))
                         : null,
                   ),
-                Secao('Custos da empresa',
-                    acao: dono
-                        ? TextButton(onPressed: () => _abrir(ConfigEmpresaForm(dados: cfg)), child: const Text('Editar'))
-                        : null),
-                Text([
-                  'Eficiência ${numero(num0(cfg['eficiencia']))}',
-                  'Mão de obra ${moeda(num0(cfg['mao_obra_hora']))}/h',
-                  'Energia ${moeda(num0(cfg['kwh']))}/kWh',
-                  'Reserva ${numero(num0(cfg['reserva']))}',
-                  'Margens ${(cfg['margens'] as List? ?? const []).map((m) => '${numero(num0(m))}%').join(' / ')}',
-                ].join('\n')),
-                Secao('Canais de venda',
-                    acao: TextButton(onPressed: () => _abrir(const CanalForm()), child: const Text('Novo canal'))),
-                for (final c in lista(d['canais']))
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('${c['nome']}'),
-                    subtitle: Text('${numero(num0(c['taxa_pct']))}% + ${moeda(num0(c['taxa_fixa']))} por venda'),
-                    onTap: () => _abrir(CanalForm(dados: c)),
-                  ),
               ]),
             ),
           );
@@ -144,6 +120,53 @@ class _EmpresaTelaState extends State<EmpresaTela> {
       ),
     );
   }
+}
+
+/// Canais de venda com a taxa e o exemplo do que sobra numa venda de R$ 100.
+class CanaisTela extends StatefulWidget {
+  const CanaisTela({super.key});
+
+  @override
+  State<CanaisTela> createState() => _CanaisTelaState();
+}
+
+class _CanaisTelaState extends State<CanaisTela> {
+  int _versao = 0;
+
+  Future<void> _abrir(Widget tela) async {
+    if (await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => tela)) == true) setState(() => _versao++);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Canais de venda'), actions: [
+          IconButton(tooltip: 'Novo canal', icon: const Icon(Icons.add), onPressed: () => _abrir(const CanalForm())),
+        ]),
+        body: EstadoTela<List>(
+          key: ValueKey(_versao),
+          carregar: () => buscar(context, '/api/canais'),
+          vazio: (l) => l.isEmpty,
+          estadoVazio: EstadoVazio(
+            icone: Icons.storefront_outlined,
+            titulo: 'Nenhum canal de venda',
+            explicacao: 'Canal é onde você vende (Direto, Shopee, Mercado Livre). A taxa de cada um entra no lucro.',
+            acao: 'Cadastrar canal',
+            aoTocar: () => _abrir(const CanalForm()),
+          ),
+          construir: (context, l) => ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
+            for (final c in lista(l))
+              Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  title: Text('${c['nome']}'),
+                  subtitle: Text('${numero(num0(c['taxa_pct']))}% + ${moeda(num0(c['taxa_fixa']))} por venda\n'
+                      '${exemploCanal(num0(c['taxa_pct']), num0(c['taxa_fixa']))}'),
+                  onTap: () => _abrir(CanalForm(dados: c)),
+                ),
+              ),
+          ]),
+        ),
+      );
 }
 
 class ConfigEmpresaForm extends StatefulWidget {
@@ -181,20 +204,50 @@ class _ConfigEmpresaFormState extends State<ConfigEmpresaForm> {
     }
   }
 
+  void _mudou([_]) => setState(() {});
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Custos da empresa')),
-        body: CorpoFormulario(chave: _form, children: [
-          CampoNumero(_eficiencia, 'Eficiência do material (perda)', obrigatorio: true, minimo: 0.01),
-          CampoDinheiro(_maoObra, 'Mão de obra por hora'),
-          CampoNumero(_kwh, 'Energia', sufixo: 'R\$/kWh', obrigatorio: true),
-          CampoNumero(_reserva, 'Fator de reserva', obrigatorio: true, minimo: 0.01),
-          CampoTexto(_margens, 'Margens sugeridas em % (separe com ;)'),
-          const SizedBox(height: 16),
-          FilledButton(onPressed: _salvar, child: const Text('Salvar')),
+  Widget build(BuildContext context) {
+    final p = ParamEmpresa(
+      eficiencia: lerNumero(_eficiencia.text) ?? 1.1,
+      maoObraHora: lerNumero(_maoObra.text) ?? 0,
+      kwh: lerNumero(_kwh.text) ?? 0.656,
+      reserva: lerNumero(_reserva.text) ?? 1.3,
+    );
+    // O caso da planilha: PLA a R$ 100/kg, 33 g, 3 h de impressão, 10 min de trabalho, impressora padrão.
+    final exemplo = calcularCusto(const Receita([ItemFilamento(33, 100)], 3, 10), const ParamImpressora(), p);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Custos da empresa')),
+      bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
+      body: CorpoFormulario(chave: _form, children: [
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.lightbulb_outline),
+            title: Text('Uma peça de 33 g e 3 h custa ${moeda(exemplo.total)}'),
+            subtitle: const Text('PLA a R\$ 100/kg e 10 min de trabalho. Muda na hora conforme você ajusta abaixo.'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        CampoDinheiro(_maoObra, 'Mão de obra por hora',
+            aoMudar: _mudou, ajuda: 'Quanto vale 1 hora do seu trabalho (preparar, tirar da mesa, acabamento).'),
+        CampoNumero(_kwh, 'Energia',
+            sufixo: 'R\$/kWh', obrigatorio: true, aoMudar: _mudou, ajuda: 'Preço do kWh na conta de luz.'),
+        CampoTexto(_margens, 'Margens sugeridas (%)',
+            ajuda: 'Separe com ";". A do meio é a usada para sugerir preço.', dica: '20; 30; 50'),
+        MaisDetalhes(children: [
+          CampoNumero(_eficiencia, 'Perda de material',
+              obrigatorio: true, minimo: 0.01, aoMudar: _mudou, ajuda: '1,1 = 10% a mais de filamento (purga, falhas).'),
+          CampoNumero(_reserva, 'Fator de reserva',
+              obrigatorio: true, minimo: 0.01, aoMudar: _mudou, ajuda: '1,3 = 30% a mais no custo da máquina para imprevistos.'),
         ]),
-      );
+      ]),
+    );
+  }
 }
+
+/// "Numa venda de R$ 100,00 você recebe R$ 76,00" (20 % + R$ 4).
+String exemploCanal(num taxaPct, num taxaFixa) =>
+    'Numa venda de ${moeda(100)} você recebe ${moeda(100 - taxaPct - taxaFixa)}';
 
 class CanalForm extends StatefulWidget {
   const CanalForm({super.key, this.dados});
@@ -233,14 +286,21 @@ class _CanalFormState extends State<CanalForm> {
         appBar: AppBar(title: Text(widget.dados == null ? 'Novo canal' : 'Editar canal'), actions: [
           if (widget.dados != null) IconButton(onPressed: _excluir, icon: const Icon(Icons.delete_outline)),
         ]),
+        bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
         body: CorpoFormulario(chave: _form, children: [
-          CampoTexto(_nome, 'Nome (Direto, Shopee, Mercado Livre...)', obrigatorio: true),
-          CampoNumero(_taxaPct, 'Taxa', sufixo: '%'),
-          CampoDinheiro(_taxaFixa, 'Taxa fixa por venda'),
-          const Text('Digite as taxas atuais do canal; o app não pré-preenche valores "oficiais".',
-              style: TextStyle(fontSize: 12)),
-          const SizedBox(height: 16),
-          FilledButton(onPressed: _salvar, child: const Text('Salvar')),
+          CampoTexto(_nome, 'Nome', obrigatorio: true, dica: 'Direto, Shopee, Mercado Livre...'),
+          CampoNumero(_taxaPct, 'Taxa sobre a venda',
+              key: const Key('taxa_pct'), sufixo: '%', aoMudar: (_) => setState(() {}), ajuda: 'Comissão do canal.'),
+          CampoDinheiro(_taxaFixa, 'Taxa fixa por venda',
+              key: const Key('taxa_fixa'), aoMudar: (_) => setState(() {}), ajuda: 'Valor cobrado em toda venda, se houver.'),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.lightbulb_outline),
+              title: Text(exemploCanal(lerNumero(_taxaPct.text) ?? 0, lerNumero(_taxaFixa.text) ?? 0)),
+              subtitle: const Text('Use as taxas atuais do canal; o app não preenche valores "oficiais".'),
+            ),
+          ),
         ]),
       );
 }

@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/api.dart';
+import '../../api/fila.dart';
 import '../../api/modelos.dart';
 import '../../util/formatos.dart';
 import '../../widgets/campos.dart';
 import '../../widgets/estado_tela.dart';
+import '../impressoes/cartao_ao_vivo.dart';
 
 /// R$ por hora com 4 casas (como a planilha: R$ 0,3414/h).
 String custoHora(num v) => 'R\$ ${v.toStringAsFixed(4).replaceAll('.', ',')}/h';
@@ -77,6 +79,8 @@ class ImpressoraForm extends StatefulWidget {
 class _ImpressoraFormState extends State<ImpressoraForm> {
   final _form = GlobalKey<FormState>();
   late final Json d = widget.dados ?? {};
+  late final String _id = d['id'] as String? ?? novoId();
+  late String? _versaoBase = d['atualizado_em'] as String?;
   late final _nome = TextEditingController(text: d['nome'] as String?);
   late final _url = TextEditingController(text: d['moonraker_url'] as String?);
   late final _modelo = TextEditingController(text: d['modelo'] as String?);
@@ -87,49 +91,122 @@ class _ImpressoraFormState extends State<ImpressoraForm> {
   late final _uso = ctrlNumero(numOu(d['uso_pct']) ?? 50);
   late final _manutencao = ctrlNumero(numOu(d['manutencao_pct_ano']) ?? 10);
   final _chave = TextEditingController();
+  bool _testando = false;
+  String? _teste;
+
+  Map<String, Object?> get _corpo => {
+        'nome': _nome.text.trim(),
+        'moonraker_url': _url.text.trim().isEmpty ? null : _url.text.trim(),
+        'modelo': _modelo.text.trim().isEmpty ? null : _modelo.text.trim(),
+        'preco': lerNumero(_preco.text) ?? 0,
+        'adicionais': lerNumero(_adicionais.text) ?? 0,
+        'potencia_w': lerNumero(_potencia.text) ?? 0,
+        'vida_anos': lerNumero(_vida.text) ?? 3,
+        'uso_pct': lerNumero(_uso.text) ?? 50,
+        'manutencao_pct_ano': lerNumero(_manutencao.text) ?? 0,
+        if (_chave.text.trim().isNotEmpty) 'api_key': _chave.text.trim(),
+      };
 
   Future<void> _salvar() async {
     if (!_form.currentState!.validate()) return;
-    final ok = await salvar(context, 'PUT', '/api/impressoras/${d['id'] ?? novoId()}', versaoBase: d['atualizado_em'] as String?, {
-      'nome': _nome.text.trim(),
-      'moonraker_url': _url.text.trim().isEmpty ? null : _url.text.trim(),
-      'modelo': _modelo.text.trim().isEmpty ? null : _modelo.text.trim(),
-      'preco': lerNumero(_preco.text) ?? 0,
-      'adicionais': lerNumero(_adicionais.text) ?? 0,
-      'potencia_w': lerNumero(_potencia.text) ?? 0,
-      'vida_anos': lerNumero(_vida.text) ?? 3,
-      'uso_pct': lerNumero(_uso.text) ?? 50,
-      'manutencao_pct_ano': lerNumero(_manutencao.text) ?? 0,
-      if (_chave.text.trim().isNotEmpty) 'api_key': _chave.text.trim(),
-    });
+    final ok = await salvar(context, 'PUT', '/api/impressoras/$_id', versaoBase: _versaoBase, _corpo);
     if (ok && mounted) Navigator.pop(context, true);
+  }
+
+  /// O servidor só conversa com o Klipper de impressora salva: grava e pergunta o estado ao vivo.
+  Future<void> _testar() async {
+    if (!_form.currentState!.validate()) return;
+    final api = context.read<ApiCliente>();
+    final fila = context.read<FilaOffline>();
+    setState(() {
+      _testando = true;
+      _teste = null;
+    });
+    String resultado;
+    try {
+      final r = await fila.enviarOuGuardar(Operacao.nova('PUT', '/api/impressoras/$_id', _corpo, _versaoBase));
+      if (r.recusada != null) {
+        resultado = r.recusada!;
+      } else if (r.guardada) {
+        resultado = 'Sem internet: a impressora ficou salva no aparelho. Teste quando a conexão voltar.';
+      } else {
+        _versaoBase = mapa(r.resposta)['atualizado_em'] as String? ?? _versaoBase;
+        final estado = mapa(await api.get('/api/impressoras/$_id/ao-vivo'))['estado'] as String?;
+        resultado = switch (estado) {
+          'desconectada' => 'Ainda sem resposta do Klipper. Confira o endereço e se a impressora está ligada, '
+              'e tente de novo em alguns segundos.',
+          'sem_integracao' => 'Sem endereço do Klipper.',
+          _ => 'Conectou! A impressora está: ${nomeEstado(estado)}',
+        };
+      }
+    } on ErroApi catch (e) {
+      resultado = e.mensagem;
+    }
+    if (mounted) {
+      setState(() {
+        _testando = false;
+        _teste = resultado;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    Widget passo(int n, String titulo) => Padding(
+          padding: const EdgeInsets.only(top: 16, bottom: 4),
+          child: Row(children: [
+            CircleAvatar(radius: 12, child: Text('$n', style: const TextStyle(fontSize: 12))),
+            const SizedBox(width: 8),
+            Expanded(child: Text(titulo, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
+          ]),
+        );
     return Scaffold(
       appBar: AppBar(title: Text(widget.dados == null ? 'Nova impressora' : 'Editar impressora')),
+      bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
       body: CorpoFormulario(chave: _form, children: [
-        CampoTexto(_nome, 'Nome', obrigatorio: true),
-        CampoTexto(_url, 'Endereço do Klipper (Moonraker)', dica: 'http://192.168.1.110:7125', teclado: TextInputType.url),
-        MaisDetalhes(children: [
-          CampoTexto(_modelo, 'Modelo'),
-          CampoDinheiro(_preco, 'Preço da impressora'),
-          CampoDinheiro(_adicionais, 'Custos adicionais'),
-          CampoNumero(_potencia, 'Potência', sufixo: 'W'),
-          CampoNumero(_vida, 'Vida útil', sufixo: 'anos', minimo: 0.1),
-          CampoNumero(_uso, 'Uso do ano', sufixo: '%', minimo: 1),
-          CampoNumero(_manutencao, 'Manutenção por ano', sufixo: '% do preço'),
-          TextField(
-            controller: _chave,
-            obscureText: true,
-            decoration: InputDecoration(
-                labelText: 'Chave de API do Moonraker',
-                helperText: d['tem_api_key'] == true ? 'Já cadastrada; deixe vazio para manter' : 'Opcional'),
+        passo(1, 'Nome'),
+        CampoTexto(_nome, 'Como você chama esta impressora?',
+            key: const Key('nome'), obrigatorio: true, dica: 'Ender 3 da bancada'),
+        passo(2, 'Klipper (opcional)'),
+        CampoTexto(_url, 'Endereço do Klipper (Moonraker)',
+            key: const Key('url'),
+            dica: 'http://192.168.1.110:7125',
+            teclado: TextInputType.url,
+            aoMudar: (_) => setState(() => _teste = null),
+            ajuda: 'Com o Klipper você vê a impressão ao vivo, a câmera e os gramas chegam sozinhos.'),
+        Row(children: [
+          OutlinedButton.icon(
+            onPressed: _testando || _url.text.trim().isEmpty ? null : _testar,
+            icon: _testando
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.wifi_tethering),
+            label: const Text('Testar conexão'),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('O teste já salva a impressora.',
+                style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
           ),
         ]),
-        const SizedBox(height: 16),
-        FilledButton(onPressed: _salvar, child: const Text('Salvar')),
+        if (_teste != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_teste!)),
+        passo(3, 'Custos'),
+        Text('Já vem com valores comuns; ajuste se souber. Eles entram no custo de máquina (energia e desgaste) de cada peça.',
+            style: TextStyle(fontSize: 13, color: t.colorScheme.onSurfaceVariant)),
+        CampoDinheiro(_preco, 'Preço da impressora', ajuda: 'Quanto você pagou nela.'),
+        CampoNumero(_potencia, 'Potência', sufixo: 'W', ajuda: 'Consumo médio imprimindo; 150 W é comum.'),
+        MaisDetalhes(children: [
+          CampoTexto(_modelo, 'Modelo', dica: 'Ender 3 V3 SE'),
+          CampoDinheiro(_adicionais, 'Custos adicionais', ajuda: 'Peças e melhorias que você comprou para ela.'),
+          CampoNumero(_vida, 'Vida útil', sufixo: 'anos', minimo: 0.1, ajuda: 'Em quantos anos ela se paga.'),
+          CampoNumero(_uso, 'Uso do ano', sufixo: '%', minimo: 1, ajuda: '50% = imprime metade das horas do ano.'),
+          CampoNumero(_manutencao, 'Manutenção por ano', sufixo: '% do preço', ajuda: 'Bicos, correias, mesa...'),
+          CampoComAjuda(
+            rotulo: 'Chave de API do Moonraker',
+            ajuda: d['tem_api_key'] == true ? 'Já cadastrada; deixe vazio para manter.' : 'Só se o seu Moonraker pedir.',
+            child: TextField(controller: _chave, obscureText: true),
+          ),
+        ]),
       ]),
     );
   }

@@ -32,7 +32,6 @@ void main() {
     await amb.preparar();
     await tester.pumpWidget(amb.tela(const CarretelForm()));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('peso')), '1000');
     await tester.enterText(find.byKey(const Key('preco')), '8990');
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();

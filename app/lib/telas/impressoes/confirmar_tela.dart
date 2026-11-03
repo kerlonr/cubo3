@@ -248,13 +248,7 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
       const SizedBox(height: 8),
       Row(children: [
         const Expanded(child: Text('Peças boas')),
-        IconButton.outlined(onPressed: _pecas > 0 ? () => setState(() => _pecas--) : null, icon: const Icon(Icons.remove)),
-        SizedBox(
-          width: 48,
-          child: Text('$_pecas',
-              textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, fontFeatures: tabular)),
-        ),
-        IconButton.outlined(onPressed: () => setState(() => _pecas++), icon: const Icon(Icons.add)),
+        Quantidade(valor: _pecas, minimo: 0, aoMudar: (v) => setState(() => _pecas = v)),
       ]),
       const Secao('Filamento usado'),
       if (_aviso)

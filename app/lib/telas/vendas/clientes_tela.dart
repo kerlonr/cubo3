@@ -112,13 +112,12 @@ class _ClienteFormState extends State<ClienteForm> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.dados == null ? 'Novo cliente' : 'Editar cliente')),
+      bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
       body: CorpoFormulario(chave: _form, children: [
         CampoTexto(_nome, 'Nome', obrigatorio: true),
-        CampoTexto(_telefone, 'Telefone (WhatsApp)', teclado: TextInputType.phone),
-        CampoTexto(_email, 'E-mail', teclado: TextInputType.emailAddress),
-        MaisDetalhes(children: [CampoTexto(_obs, 'Observações', linhas: 3)]),
-        const SizedBox(height: 16),
-        FilledButton(onPressed: _salvar, child: const Text('Salvar')),
+        CampoTexto(_telefone, 'Telefone (WhatsApp)', teclado: TextInputType.phone, ajuda: 'Opcional.'),
+        CampoTexto(_email, 'E-mail', teclado: TextInputType.emailAddress, ajuda: 'Opcional.'),
+        MaisDetalhes(children: [CampoTexto(_obs, 'Observações', linhas: 3, dica: 'Endereço, preferências...')]),
       ]),
     );
   }

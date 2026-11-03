@@ -11,9 +11,11 @@ import '../../api/sessao.dart';
 import '../../config.dart';
 import '../../main.dart' show chaveServidor;
 import '../../util/formatos.dart';
-import '../../widgets/cartoes.dart';
+import '../../api/modelos.dart';
 import '../../widgets/estado_tela.dart';
 import '../login/trocar_senha_tela.dart';
+import 'empresa_tela.dart';
+import 'impressoras_tela.dart';
 
 class ConfiguracoesTela extends StatefulWidget {
   const ConfiguracoesTela({super.key});
@@ -57,14 +59,62 @@ class _ConfiguracoesTelaState extends State<ConfiguracoesTela> {
     setState(() {});
   }
 
+  void _abrir(Widget tela) => Navigator.push(context, MaterialPageRoute(builder: (_) => tela));
+
+  Future<void> _custos() async {
+    try {
+      final cfg = mapa((await buscar(context, '/api/empresa/config')).dados);
+      if (mounted) _abrir(ConfigEmpresaForm(dados: cfg));
+    } catch (e) {
+      if (mounted) avisarErro(context, e);
+    }
+  }
+
+  /// Seção que abre outra tela: ícone, nome e uma linha dizendo para que serve.
+  Widget _item(IconData icone, String titulo, String descricao, VoidCallback aoTocar) => ListTile(
+        leading: Icon(icone, color: Theme.of(context).colorScheme.primary),
+        title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(descricao),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: aoTocar,
+      );
+
+  /// Cabeçalho de seção com os ajustes logo abaixo.
+  Widget _secao(IconData icone, String titulo, String descricao) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+        child: Row(children: [
+          Icon(icone, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(titulo, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              Text(descricao,
+                  style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ]),
+          ),
+        ]),
+      );
+
   @override
   Widget build(BuildContext context) {
     final fila = context.watch<FilaOffline>();
     final api = context.read<ApiCliente>();
+    final dono = context.watch<Sessao>().dono;
     return Scaffold(
       appBar: AppBar(title: const Text('Configurações')),
-      body: ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
-        const Secao('  Notificações'),
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
+        _item(Icons.business_outlined, 'Empresa', 'Quem tem acesso e o papel de cada um', () => _abrir(const EmpresaTela())),
+        if (dono)
+          _item(Icons.calculate_outlined, 'Custos', 'Mão de obra, energia e margens, com exemplo ao vivo', _custos),
+        _item(Icons.storefront_outlined, 'Canais de venda', 'Onde você vende e quanto cada um cobra',
+            () => _abrir(const CanaisTela())),
+        _item(Icons.print_outlined, 'Impressoras', 'Custo de máquina e conexão com o Klipper',
+            () => _abrir(const ImpressorasTela())),
+        _secao(Icons.notifications_outlined, 'Notificações', 'Avisos de impressão terminando ou com problema'),
         if (kIsWeb)
           ListTile(
             leading: const Icon(Icons.notifications_outlined),
@@ -93,15 +143,28 @@ class _ConfiguracoesTelaState extends State<ConfiguracoesTela> {
               if (mounted) setState(() => _monitor = agora);
             },
           ),
+        _secao(Icons.person_outline, 'Conta', 'Sua senha e sair deste aparelho'),
+        ListTile(
+          leading: const Icon(Icons.password),
+          title: const Text('Trocar senha'),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TrocarSenhaTela(voluntaria: true))),
+        ),
+        ListTile(
+          leading: const Icon(Icons.logout),
+          title: const Text('Sair'),
+          onTap: () {
+            Navigator.popUntil(context, (r) => r.isFirst);
+            context.read<Sessao>().sair();
+          },
+        ),
         if (!kIsWeb) ...[
-          const Secao('  Servidor'),
+          _secao(Icons.tune, 'Avançado', 'Endereço do servidor e alterações esperando internet'),
           ListTile(
             leading: const Icon(Icons.dns_outlined),
             title: const Text('Endereço do servidor'),
             subtitle: Text(api.base.toString()),
             onTap: _servidor,
           ),
-          const Secao('  Sem internet'),
           ListTile(
             leading: const Icon(Icons.cloud_upload_outlined),
             title: Text(fila.pendentes == 0 ? 'Nada pendente' : '${fila.pendentes} alteração(ões) esperando internet'),
@@ -136,22 +199,10 @@ class _ConfiguracoesTelaState extends State<ConfiguracoesTela> {
               child: TextButton(onPressed: fila.limparErros, child: const Text('Limpar erros')),
             ),
         ],
-        const Secao('  Conta'),
-        ListTile(
-          leading: const Icon(Icons.password),
-          title: const Text('Trocar senha'),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TrocarSenhaTela(voluntaria: true))),
-        ),
-        ListTile(
-          leading: const Icon(Icons.logout),
-          title: const Text('Sair'),
-          onTap: () {
-            Navigator.popUntil(context, (r) => r.isFirst);
-            context.read<Sessao>().sair();
-          },
-        ),
         ListTile(leading: const Icon(Icons.info_outline), title: const Text('Versão'), subtitle: Text(_versao)),
-      ]),
+          ]),
+        ),
+      ),
     );
   }
 }
