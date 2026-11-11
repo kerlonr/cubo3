@@ -99,6 +99,8 @@ def test_erro_do_klipper_chega_com_a_mensagem(cliente, dono, monkeypatch):
     def recusa(url, chave, caminho, params=None):
         raise moonraker.ErroKlipper("Must home axis first: 10.000 0.000 0.000 [0.000]")
     monkeypatch.setattr(moonraker, "comando", recusa)
+    # sem isso o teste perguntava o estado à impressora real da rede (e dava 409 com ela imprimindo)
+    monkeypatch.setattr(moonraker, "estado_impressao", lambda url, chave: "standby")
     imp = impressora(cliente, dono)
     r = cliente.post(f"/api/impressoras/{imp}/comando", headers=dono, json={"acao": "mover", "eixo": "X", "distancia": 10})
     assert r.status_code == 400 and r.json()["detail"] == "Klipper: Must home axis first: 10.000 0.000 0.000 [0.000]"
