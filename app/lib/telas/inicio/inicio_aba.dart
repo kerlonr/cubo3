@@ -9,7 +9,7 @@ import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../../widgets/logo.dart';
 import '../casca.dart';
-import '../mais/calculadora_tela.dart';
+import '../orcar/orcar_tela.dart';
 
 /// Início: lucro do mês, quanto já foi investido e quanto voltou, atalho para orçar e o gráfico.
 class InicioAba extends StatefulWidget {
@@ -50,7 +50,7 @@ class _InicioAbaState extends State<InicioAba> {
         constraints: const BoxConstraints(maxWidth: 720),
         child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 96), children: [
           FilledButton.icon(
-            onPressed: () => abrirTela(context, const CalculadoraTela()),
+            onPressed: () => abrirTela(context, const OrcarTela()),
             icon: const Icon(Icons.calculate_outlined),
             label: const Text('Orçar peça'),
           ),

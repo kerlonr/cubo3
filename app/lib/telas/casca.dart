@@ -15,7 +15,7 @@ import 'catalogo/modelo_form.dart';
 import 'impressoes/confirmar_tela.dart';
 import 'impressora/impressora_aba.dart';
 import 'inicio/inicio_aba.dart';
-import 'mais/calculadora_tela.dart';
+import 'orcar/orcar_tela.dart';
 import 'mais/mais_tela.dart';
 import 'vendas/venda_rapida_tela.dart';
 import 'vendas/vendas_aba.dart';
@@ -176,7 +176,7 @@ Future<void> abrirAcoesRapidas(BuildContext context) => showModalBottomSheet(
             ListTile(
                 leading: const Icon(Icons.calculate_outlined),
                 title: const Text('Orçar peça'),
-                onTap: () => abrir(const CalculadoraTela())),
+                onTap: () => abrir(const OrcarTela())),
             ListTile(
                 leading: const Icon(Icons.note_add_outlined),
                 title: const Text('Novo pedido'),

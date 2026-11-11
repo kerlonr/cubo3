@@ -5,6 +5,7 @@ import '../../api/controle.dart';
 import '../../api/modelos.dart';
 import '../../api/sessao.dart';
 import '../../util/formatos.dart';
+import '../orcar/orcar_tela.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import 'envio.dart';
@@ -137,6 +138,21 @@ class _DetalheArquivoState extends State<DetalheArquivo> with EnvioComando {
                   : const Icon(Icons.print),
               label: const Text('Imprimir'),
             ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => OrcarTela(inicial: {
+                          'itens': [
+                            itemDeArquivo('${widget.arquivo['nome']}', widget.arquivo['gramas'] as num?,
+                                widget.arquivo['tempo_estimado_s'] as num?)
+                          ]
+                        }))),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            icon: const Icon(Icons.calculate_outlined),
+            label: const Text('Orçar'),
+          ),
         ]),
       ),
     );
