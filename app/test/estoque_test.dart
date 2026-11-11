@@ -90,4 +90,14 @@ void main() {
     expect(find.text('Repor'), findsOneWidget);
     expect(find.text('120 g'), findsOneWidget);
   });
+
+  testWidgets('em 320 dp "Filamentos" selecionado cabe em uma linha', (tester) async {
+    final amb = Ambiente({});
+    await amb.preparar();
+    await tamanhoTela(tester, 320, 800);
+    await tester.pumpWidget(amb.tela(const EstoqueAba(), brilho: Brightness.dark));
+    await tester.pumpAndSettle();
+    final linha = tester.getSize(find.text('Peças')).height;
+    expect(tester.getSize(find.text('Filamentos')).height, linha);
+  });
 }

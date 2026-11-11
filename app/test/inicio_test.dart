@@ -37,9 +37,40 @@ void main() {
     expect(lucro.style!.color, vermelho);
     expect(find.text('Faltam R\$ 1.500,00 para se pagar'), findsOneWidget);
     expect(find.text('A confirmar (2)'), findsOneWidget);
-    expect(find.text('Orçar peça'), findsOneWidget);
+    expect(find.text('Orçar peça'), findsNothing, reason: 'orçar fica no "+"');
+    expect(find.text('Voolt PLA Branco'), findsOneWidget, reason: 'filamento acabando');
     final q = amb.ultimo('GET /api/painel')!.url.queryParameters;
     expect(q['inicio'], endsWith('-01'));
+  });
+
+  testWidgets('impressão em andamento e pedidos em aberto aparecem; impressora parada não', (tester) async {
+    var estado = 'printing';
+    final amb = Ambiente({
+      'GET /api/painel': (_) => painel(resultado: 10),
+      'GET /api/impressoras': (_) => [
+            {'id': 'i1', 'nome': 'Ender', 'moonraker_url': 'http://192.168.1.110:7125'}
+          ],
+      'GET /api/impressoras/i1/ao-vivo': (_) => {'estado': estado, 'arquivo': 'vaso.gcode', 'progresso': 0.4, 'restante_s': 3600},
+      'GET /api/pedidos': (_) => [
+            {'id': 'p1', 'status': 'produzindo'},
+            {'id': 'p2', 'status': 'aprovado'},
+            {'id': 'p3', 'status': 'orcamento'},
+            {'id': 'p4', 'status': 'entregue'},
+          ],
+    });
+    await amb.preparar();
+    await tamanhoTela(tester, 360, 2000);
+    await tester.pumpWidget(amb.tela(const InicioAba()));
+    await tester.pumpAndSettle();
+    expect(find.text('vaso.gcode'), findsOneWidget);
+    expect(find.text('40%'), findsOneWidget);
+    expect(find.text('2 produzindo · 1 orçamento'), findsOneWidget);
+
+    estado = 'standby';
+    await tester.pumpWidget(amb.tela(const SizedBox()));
+    await tester.pumpWidget(amb.tela(const InicioAba()));
+    await tester.pumpAndSettle();
+    expect(find.text('Ender'), findsNothing);
   });
 
   testWidgets('investimento já pago mostra o que sobrou', (tester) async {

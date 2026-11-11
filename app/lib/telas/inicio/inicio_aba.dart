@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../api/cache.dart';
 import '../../api/modelos.dart';
 import '../../tema.dart';
 import '../../util/formatos.dart';
@@ -9,9 +10,11 @@ import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../../widgets/logo.dart';
 import '../casca.dart';
-import '../orcar/orcar_tela.dart';
+import '../estoque/estoque_aba.dart';
+import '../impressoes/cartao_ao_vivo.dart';
 
-/// Início: lucro do mês, quanto já foi investido e quanto voltou, atalho para orçar e o gráfico.
+/// Início: impressão em andamento, o que pede atenção (a confirmar, pedidos, filamento acabando), lucro do mês,
+/// investimento e gráfico. Orçar fica no "+".
 class InicioAba extends StatefulWidget {
   const InicioAba({super.key});
 
@@ -35,10 +38,42 @@ class _InicioAbaState extends State<InicioAba> {
       ),
       body: EstadoTela<Map>(
         key: ValueKey(_mes),
-        carregar: () => buscar(context, '/api/painel', query: {'inicio': diaIso(_mes), 'fim': diaIso(fim)}),
+        carregar: () async {
+          final painel = await buscar(context, '/api/painel', query: {'inicio': diaIso(_mes), 'fim': diaIso(fim)});
+          // Impressoras e pedidos são extra: sem eles o Início ainda abre.
+          List impressoras = const [], pedidos = const [];
+          try {
+            if (context.mounted) impressoras = lista((await buscar(context, '/api/impressoras')).dados);
+            if (context.mounted) pedidos = lista((await buscar(context, '/api/pedidos')).dados);
+          } catch (_) {}
+          return RespostaCache({...mapa(painel.dados), 'impressoras': impressoras, 'pedidos': pedidos}, painel.deCache,
+              painel.quando);
+        },
         construir: (context, p) => _corpo(p, nomeMes[0].toUpperCase() + nomeMes.substring(1)),
       ),
     );
+  }
+
+  Widget? _pedidosAbertos(List pedidos) => _pedidosAbertosDe(context, pedidos);
+
+  /// Filamentos abaixo do mínimo (insumos ficam de fora: não são usados).
+  List<Widget> _filamentoAcabando(List baixo) {
+    final fil = [for (final e in baixo) if (e['tipo'] == 'filamento') e];
+    if (fil.isEmpty) return const [];
+    return [
+      const Secao('Filamento acabando'),
+      Card(
+        child: Column(children: [
+          for (final e in fil)
+            ListTile(
+              dense: true,
+              title: Text('${e['nome']}'),
+              trailing: Text(gramas(num0(e['saldo'])), style: const TextStyle(fontFeatures: tabular)),
+              onTap: () => abrirTela(context, const EstoqueAba()),
+            ),
+        ]),
+      ),
+    ];
   }
 
   Widget _corpo(Map p, String nomeMes) {
@@ -49,14 +84,16 @@ class _InicioAbaState extends State<InicioAba> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 720),
         child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 96), children: [
-          FilledButton.icon(
-            onPressed: () => abrirTela(context, const OrcarTela()),
-            icon: const Icon(Icons.calculate_outlined),
-            label: const Text('Orçar peça'),
-          ),
-          if (num0(p['a_confirmar']) > 0) ...[
-            const SizedBox(height: 8),
+          for (final i in lista(p['impressoras']))
+            if ('${i['moonraker_url'] ?? ''}'.isNotEmpty)
+              InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: () => context.findAncestorStateOfType<CascaState>()?.irPara(1),
+                child: Padding(padding: const EdgeInsets.only(bottom: 8), child: CartaoAoVivo(impressora: i, soAtiva: true)),
+              ),
+          if (num0(p['a_confirmar']) > 0)
             Card(
+              margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 leading: const Icon(Icons.pending_actions, color: amarelo),
                 title: Text('A confirmar (${num0(p['a_confirmar']).toInt()})'),
@@ -65,8 +102,7 @@ class _InicioAbaState extends State<InicioAba> {
                 onTap: () => context.findAncestorStateOfType<CascaState>()?.irPara(1),
               ),
             ),
-          ],
-          const SizedBox(height: 8),
+          ?_pedidosAbertos(lista(p['pedidos'])),
           Row(children: [
             IconButton(tooltip: 'Mês anterior', onPressed: () => _mudarMes(-1), icon: const Icon(Icons.chevron_left)),
             Expanded(child: Text(nomeMes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600))),
@@ -75,6 +111,7 @@ class _InicioAbaState extends State<InicioAba> {
           CartaoLucro(entrou: num0(p['receita']), saiu: num0(p['gastos'])),
           const SizedBox(height: 8),
           CartaoInvestimento(investido: num0(p['investido']), recebido: num0(p['recebido'])),
+          ..._filamentoAcabando(lista(p['estoque_baixo'])),
           const Secao('Receita × gastos (12 meses)'),
           if (semMovimento)
             Text('Sem vendas nem gastos ainda', style: TextStyle(color: t.colorScheme.onSurfaceVariant))
@@ -88,6 +125,26 @@ class _InicioAbaState extends State<InicioAba> {
       ),
     );
   }
+}
+
+/// "2 produzindo · 1 orçamento", só quando há pedido em aberto; tocar leva para Vendas.
+Widget? _pedidosAbertosDe(BuildContext context, List pedidos) {
+  int conta(Set<String> s) => pedidos.where((p) => s.contains(p['status'])).length;
+  final produzindo = conta({'aprovado', 'produzindo', 'pronto'}), orcamentos = conta({'orcamento'});
+  if (produzindo + orcamentos == 0) return null;
+  return Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: ListTile(
+      leading: const Icon(Icons.receipt_long_outlined),
+      title: const Text('Pedidos em aberto'),
+      subtitle: Text([
+        if (produzindo > 0) '$produzindo produzindo',
+        if (orcamentos > 0) '$orcamentos ${orcamentos == 1 ? 'orçamento' : 'orçamentos'}',
+      ].join(' · ')),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => context.findAncestorStateOfType<CascaState>()?.irPara(3),
+    ),
+  );
 }
 
 /// Lucro do mês = o que entrou − o que saiu, com os dois valores embaixo.

@@ -22,8 +22,11 @@ String nomeEstado(String? e) => switch (e) {
 
 /// Estado da impressora (estado, arquivo, %, restante, bico/mesa).
 class CartaoAoVivo extends StatefulWidget {
-  const CartaoAoVivo({super.key, required this.impressora});
+  const CartaoAoVivo({super.key, required this.impressora, this.soAtiva = false});
   final Json impressora;
+
+  /// Só aparece imprimindo, pausada ou com erro (Início).
+  final bool soAtiva;
 
   @override
   State<CartaoAoVivo> createState() => _CartaoAoVivoState();
@@ -51,7 +54,9 @@ class _CartaoAoVivoState extends State<CartaoAoVivo> {
   Widget build(BuildContext context) {
     // Eventos do WebSocket têm prioridade; o GET inicial cobre até o primeiro evento chegar.
     final aoVivo = context.watch<CanalAoVivo>().estados['${widget.impressora['id']}'];
-    return PainelAoVivo(nome: '${widget.impressora['nome']}', estado: aoVivo?.dados ?? _estado);
+    final estado = aoVivo?.dados ?? _estado;
+    if (widget.soAtiva && !const {'printing', 'paused', 'error'}.contains(estado?['estado'])) return const SizedBox.shrink();
+    return PainelAoVivo(nome: '${widget.impressora['nome']}', estado: estado);
   }
 }
 

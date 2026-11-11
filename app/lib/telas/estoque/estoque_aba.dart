@@ -52,11 +52,12 @@ class _EstoqueAbaState extends State<EstoqueAba> {
       body: Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          // Sem o ✓ do selecionado: com ele "Filamentos" quebrava em duas linhas no celular.
           child: SegmentedButton<int>(
-            segments: const [
-              ButtonSegment(value: 0, label: Text('Filamentos')),
-              ButtonSegment(value: 1, label: Text('Insumos')),
-              ButtonSegment(value: 2, label: Text('Peças')),
+            showSelectedIcon: false,
+            segments: [
+              for (final (i, r) in const ['Filamentos', 'Insumos', 'Peças'].indexed)
+                ButtonSegment(value: i, label: Text(r, maxLines: 1, softWrap: false, overflow: TextOverflow.fade)),
             ],
             selected: {_segmento},
             onSelectionChanged: (s) => setState(() => _segmento = s.first),
