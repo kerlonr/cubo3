@@ -17,7 +17,15 @@ const nomesStatusPedido = {
   'entregue': 'Entregue',
   'cancelado': 'Cancelado',
 };
-const fluxoPedido = ['orcamento', 'aprovado', 'produzindo', 'pronto', 'entregue'];
+/// Etapas pedidas pelo Kerlon; "pago" fica à parte. Pedidos antigos em Aprovado/Pronto seguem dali.
+const fluxoPedido = ['orcamento', 'produzindo', 'entregue'];
+const _etapaEquivalente = {'aprovado': 'orcamento', 'pronto': 'produzindo'};
+
+/// Próximas etapas a partir do status atual (vazio para entregue/cancelado).
+List<String> proximasEtapas(String status) {
+  final i = fluxoPedido.indexOf(_etapaEquivalente[status] ?? status);
+  return i < 0 ? const [] : fluxoPedido.sublist(i + 1);
+}
 
 /// Nome do item: o do modelo (mesmo excluído, marcado) ou a descrição.
 String nomeItem(Map it) {
@@ -94,8 +102,7 @@ class _PedidoTelaState extends State<PedidoTela> {
 
   Widget _corpo(Map p) {
     final status = '${p['status']}';
-    final i = fluxoPedido.indexOf(status);
-    final proximos = i < 0 ? const <String>[] : fluxoPedido.sublist(i + 1);
+    final proximos = proximasEtapas(status);
     Widget linha(String r, Object? v, {Color? cor, bool forte = false}) => v == null
         ? const SizedBox.shrink()
         : Padding(
