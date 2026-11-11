@@ -28,7 +28,7 @@ class Casca extends StatefulWidget {
   State<Casca> createState() => CascaState();
 }
 
-class CascaState extends State<Casca> {
+class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
   int aba = 0;
   int aConfirmar = 0;
   final impressoes = GlobalKey<ImpressoraAbaState>();
@@ -37,11 +37,13 @@ class CascaState extends State<Casca> {
   @override
   void initState() {
     super.initState();
+    _troca = AnimationController(vsync: this, duration: const Duration(milliseconds: 280), value: 1);
     _eventos = context.read<CanalAoVivo>().eventos.listen(_aoEvento);
   }
 
   @override
   void dispose() {
+    _troca.dispose();
     _eventos?.cancel();
     super.dispose();
   }
@@ -72,7 +74,13 @@ class CascaState extends State<Casca> {
     (Icons.receipt_long_outlined, Icons.receipt_long, 'Vendas'),
   ];
 
-  void irPara(int i) => setState(() => aba = i);
+  late final AnimationController _troca;
+
+  void irPara(int i) {
+    if (i == aba) return;
+    setState(() => aba = i);
+    if (MediaQuery.maybeDisableAnimationsOf(context) != true) _troca.forward(from: 0);
+  }
 
   List<Widget> get _abas => [
         const InicioAba(),
@@ -91,7 +99,16 @@ class CascaState extends State<Casca> {
   Widget build(BuildContext context) {
     final corpo = Column(children: [
       const FaixaAtualizacao(),
-      Expanded(child: IndexedStack(index: aba, children: _abas)),
+      Expanded(
+        child: FadeTransition(
+          opacity: CurvedAnimation(parent: _troca, curve: Curves.easeOut),
+          child: SlideTransition(
+            position: Tween(begin: const Offset(0, 0.02), end: Offset.zero)
+                .animate(CurvedAnimation(parent: _troca, curve: Curves.easeOutCubic)),
+            child: IndexedStack(index: aba, children: _abas),
+          ),
+        ),
+      ),
     ]);
     if (ClasseLargura.de(context) != ClasseLargura.compacto) {
       return Scaffold(

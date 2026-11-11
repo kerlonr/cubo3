@@ -16,7 +16,7 @@ Ambiente _amb() => Ambiente({
 String _texto(WidgetTester tester, String chave) => tester.widget<Text>(find.byKey(Key(chave))).data!;
 
 void main() {
-  testWidgets('caso da planilha sem rede: só gramas e tempo dão custo 6,32 e preço de R\$ 15 (50% para cima)', (tester) async {
+  testWidgets('caso da planilha sem rede: só gramas e tempo dão custo 6,32 e preço de R\$ 12,90 (50% até o próximo ,90)', (tester) async {
     final amb = _amb();
     await amb.preparar();
     await tamanhoTela(tester, 360, 1400);
@@ -31,9 +31,9 @@ void main() {
     await tester.enterText(find.byKey(const Key('gramas0')), '33');
     await tester.enterText(find.byKey(const Key('tempo0')), '3h');
     await tester.pumpAndSettle();
-    expect(_texto(tester, 'preco'), 'R\$ 15,00');
-    expect(_texto(tester, 'lucro'), 'lucro R\$ 8,68 · custo R\$ 6,32');
-    for (final p in ['R\$ 10,00', 'exato R\$ 7,90', 'exato R\$ 9,03', 'exato R\$ 12,64']) {
+    expect(_texto(tester, 'preco'), 'R\$ 12,90');
+    expect(_texto(tester, 'lucro'), 'lucro R\$ 6,58 · custo R\$ 6,32');
+    for (final p in ['R\$ 7,90', 'R\$ 8,90', 'exato R\$ 9,03', 'exato R\$ 12,64']) {
       expect(find.text(p), findsWidgets, reason: p);
     }
   });
@@ -52,7 +52,7 @@ void main() {
     await tester.tap(find.byKey(const Key('margem30')));
     await tester.pumpAndSettle();
     expect(find.text('Preço com 30% de lucro'), findsOneWidget);
-    expect(_texto(tester, 'preco'), 'R\$ 10,00');
+    expect(_texto(tester, 'preco'), 'R\$ 8,90');
 
     await tester.pumpWidget(amb.tela(const OrcarTela(inicial: {
       'itens': [
@@ -94,7 +94,7 @@ void main() {
     })));
     await tester.pumpAndSettle();
     expect(find.text('Vaso'), findsOneWidget);
-    expect(_texto(tester, 'preco'), 'R\$ 15,00');
+    expect(_texto(tester, 'preco'), 'R\$ 12,90');
   });
 
   test('histórico guarda no topo, atualiza pelo id e apaga', () async {
@@ -113,5 +113,36 @@ void main() {
       {'nome': 'Suporte', 'qtd': 2}
     ]), ['Peça 1', 'Suporte (2 un.)']);
     expect(itemDeArquivo('vaso.gcode.3mf', 23.5, 4230), {'nome': 'vaso', 'gramas': '23,5', 'tempo': '1h11', 'qtd': 1});
+  });
+
+  test('texto do WhatsApp: peças, material, tempo, total, preço de cada e observação', () {
+    final d = DadosEnvio(
+      pecas: const [PecaEnvio('Vaso', 2, 1.5)],
+      total: 25.8,
+      material: 'PLA Branco',
+      cliente: 'Ana',
+      obs: 'pronto em 3 dias',
+      data: DateTime(2026, 11, 11),
+    );
+    expect(textoOrcamento(d), '*Orçamento Cubo³* · 11/11/2026\nPara: Ana\n\n• Vaso — 2 un. (PLA Branco)\n\n'
+        'Tempo de impressão: ~3h00\n*Total: R\$ 25,80* (R\$ 12,90 cada)\nObs.: pronto em 3 dias');
+  });
+
+  testWidgets('Enviar abre a prévia; o nome do cliente aparece na imagem e vai para o histórico', (tester) async {
+    final amb = _amb();
+    await amb.preparar();
+    await tamanhoTela(tester, 360, 1400);
+    await tester.pumpWidget(amb.tela(const OrcarTela()));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('gramas0')), '33');
+    await tester.enterText(find.byKey(const Key('tempo0')), '3h');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enviar'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CartaoOrcamento), findsOneWidget);
+    expect(find.text('PLA Branco · ~3h00 cada'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('cliente')), 'Ana');
+    await tester.pumpAndSettle();
+    expect(find.text('Para Ana'), findsOneWidget);
   });
 }

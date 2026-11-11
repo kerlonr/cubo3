@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../api/modelos.dart';
+import '../../widgets/animacoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../casca.dart';
 import 'clientes_tela.dart';
@@ -70,7 +71,11 @@ class _VendasAbaState extends State<VendasAba> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 900),
                   child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
-                    for (final p in pedidos) LinhaPedido(p, aoTocar: () => _abrir(PedidoTela(id: p['id'] as String))),
+                    for (final (i, p) in pedidos.indexed)
+                      Entrada(
+                          key: ValueKey(p['id']),
+                          ordem: i,
+                          child: LinhaPedido(p, aoTocar: () => _abrir(PedidoTela(id: p['id'] as String)))),
                   ]),
                 ),
               );

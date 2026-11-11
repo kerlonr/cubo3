@@ -7,25 +7,26 @@ import 'package:cubo3/dominio/orcamento.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('arredonda ao múltiplo de 5 mais próximo, nunca abaixo de R\$ 5', () {
-    expect([7.9, 9.03, 12.4, 12.5, 41, 43, 0.5].map(arredondar5), [10, 10, 10, 15, 40, 45, 5]);
+  test('arredonda para o ,90 mais próximo; para cima não passa de um ,90 que já é exato', () {
+    expect([7.9, 9.03, 12.4, 12.39, 41, 0.5].map(arredondar90), [7.9, 8.9, 12.9, 11.9, 40.9, 0.9]);
+    expect([12.64, 12.9, 12.91, 0.2].map(arredondar90Cima), [12.9, 12.9, 13.9, 0.9]);
   });
 
-  test('preço em destaque garante 50% de lucro subindo até o múltiplo de 5', () {
+  test('preço em destaque garante 50% de lucro subindo até o próximo ,90', () {
     final p = precoDestaque(6.32); // 12,64 exato
     expect(p.exato, 12.64);
-    expect(p.preco, 15);
-    expect(p.lucro, 8.68);
+    expect(p.preco, 12.9);
+    expect(p.lucro, 6.58);
     expect(p.lucroPct, greaterThanOrEqualTo(50));
-    expect(precoDestaque(10).preco, 20, reason: 'exato 20 não sobe');
+    expect(precoDestaque(9.95).preco, 19.9, reason: 'exato 19,90 não sobe');
   });
 
   test('preços pelas margens do cadastro usam o mais próximo', () {
-    expect(precosPorMargem(6.32, [20, 30, 50]).map((p) => p.preco), [10, 10, 15]);
+    expect(precosPorMargem(6.32, [20, 30, 50]).map((p) => p.preco), [7.9, 8.9, 12.9]);
   });
 
   test('opções de preço: margens do cadastro + 50% (para cima), em ordem', () {
-    expect([for (final p in opcoesDePreco(6.32, [20, 30, 50])) (p.margem, p.preco)], [(20, 10), (30, 10), (50, 15)]);
+    expect([for (final p in opcoesDePreco(6.32, [20, 30, 50])) (p.margem, p.preco)], [(20, 7.9), (30, 8.9), (50, 12.9)]);
     expect([for (final p in opcoesDePreco(6.32, [20, 40])) p.margem], [20, 40, 50], reason: '50% sempre aparece');
   });
 

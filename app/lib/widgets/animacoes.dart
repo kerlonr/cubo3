@@ -14,8 +14,8 @@ class Entrada extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final atraso = (ordem.clamp(0, 8)) * 60;
-    final total = 320 + atraso;
+    final atraso = (ordem.clamp(0, 8)) * 70;
+    final total = 450 + atraso;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: duracaoAnimacao(context, total),
@@ -23,7 +23,7 @@ class Entrada extends StatelessWidget {
       child: child,
       builder: (_, v, filho) => Opacity(
         opacity: v,
-        child: Transform.translate(offset: Offset(0, (1 - v) * 14), child: filho),
+        child: Transform.translate(offset: Offset(0, (1 - v) * 24), child: filho),
       ),
     );
   }
@@ -40,8 +40,9 @@ class ValorAnimado extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-        tween: Tween(end: valor),
-        duration: duracaoAnimacao(context, 450),
+        // begin só vale na primeira vez: ao abrir conta do zero; depois desliza do valor anterior.
+        tween: Tween(begin: 0, end: valor),
+        duration: duracaoAnimacao(context, 600),
         curve: Curves.easeOutCubic,
         builder: (_, v, _) => Text(moeda(v), key: chaveTexto, softWrap: false, style: estilo),
       );

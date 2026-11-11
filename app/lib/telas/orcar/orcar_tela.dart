@@ -76,6 +76,8 @@ class _OrcarTelaState extends State<OrcarTela> {
   final _precoKg = TextEditingController();
   final _maoObra = TextEditingController(text: '10');
   final _extra = TextEditingController();
+  final _cliente = TextEditingController();
+  final _obs = TextEditingController();
   final _imagem = GlobalKey();
   String? _filamento;
   String? _impressora;
@@ -98,6 +100,8 @@ class _OrcarTelaState extends State<OrcarTela> {
       if (ini['mao_obra'] != null) _maoObra.text = '${ini['mao_obra']}';
       _extra.text = '${ini['extra'] ?? ''}';
       _margem = num0(ini['margem'] ?? margemAlvo).toDouble();
+      _cliente.text = '${ini['cliente'] ?? ''}';
+      _obs.text = '${ini['obs'] ?? ''}';
     }
     SharedPreferences.getInstance().then((p) {
       if (!mounted) return;
@@ -116,6 +120,8 @@ class _OrcarTelaState extends State<OrcarTela> {
     _precoKg.dispose();
     _maoObra.dispose();
     _extra.dispose();
+    _cliente.dispose();
+    _obs.dispose();
     super.dispose();
   }
 
@@ -244,53 +250,100 @@ class _OrcarTelaState extends State<OrcarTela> {
         'mao_obra': _maoObra.text,
         'extra': _extra.text,
         'margem': p.margem,
+        'cliente': _cliente.text.trim(),
+        'obs': _obs.text.trim(),
         'preco': p.preco,
         'custo': p.custo,
       };
 
-  String _texto(PrecoSugerido p) {
-    final itens = [for (final i in _itens) if (!i.vazio) i.json];
-    return ['Orçamento Cubo³', for (final l in linhasItens(itens)) '• $l', '', 'Total: ${moeda(p.preco)}']
-        .join('\n');
-  }
-
-  Future<void> _enviarTexto(PrecoSugerido p) async {
-    await salvarOrcamento(_registro(p));
-    await SharePlus.instance.share(ShareParams(text: _texto(p)));
-  }
-
-  Future<void> _enviarImagem(PrecoSugerido p) async {
-    final itens = [for (final i in _itens) if (!i.vazio) i.json];
-    await showDialog<void>(
-      context: context,
-      builder: (c) => AlertDialog(
-        contentPadding: const EdgeInsets.all(12),
-        content: SingleChildScrollView(
-          child: RepaintBoundary(key: _imagem, child: CartaoOrcamento(itens: itens, preco: p.preco)),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Fechar')),
-          FilledButton.icon(
-            icon: const Icon(Icons.share),
-            label: const Text('Compartilhar'),
-            onPressed: () async {
-              final caixa = _imagem.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-              if (caixa == null) return;
-              final img = await caixa.toImage(pixelRatio: 3);
-              final png = await img.toByteData(format: ui.ImageByteFormat.png);
-              if (png == null) return;
-              await salvarOrcamento(_registro(p));
-              await SharePlus.instance.share(ShareParams(files: [
-                XFile.fromData(png.buffer.asUint8List(), mimeType: 'image/png', name: 'orcamento-cubo3.png')
-              ], fileNameOverrides: [
-                'orcamento-cubo3.png'
-              ]));
-            },
-          ),
-        ],
-      ),
+  DadosEnvio _dados(PrecoSugerido p) {
+    final fil = lista((_cad ?? const {})['filamentos']).where((f) => f['id'] == _filamento).firstOrNull;
+    return DadosEnvio(
+      pecas: [
+        for (final (i, it) in _itens.where((x) => !x.vazio).indexed)
+          PecaEnvio(it.nome.text.trim().isEmpty ? 'Peça ${i + 1}' : it.nome.text.trim(), it.qtd, lerHoras(it.tempo.text) ?? 0)
+      ],
+      total: p.preco,
+      material: fil == null ? null : '${fil['material'] ?? ''} ${fil['cor_nome'] ?? ''}'.trim(),
+      cliente: _cliente.text.trim(),
+      obs: _obs.text.trim(),
+      data: DateTime.now(),
     );
   }
+
+  Future<void> _compartilharTexto(PrecoSugerido p) async {
+    await salvarOrcamento(_registro(p));
+    await SharePlus.instance.share(ShareParams(text: textoOrcamento(_dados(p))));
+  }
+
+  Future<void> _compartilharImagem(PrecoSugerido p) async {
+    final caixa = _imagem.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (caixa == null) return;
+    final img = await caixa.toImage(pixelRatio: 3);
+    final png = await img.toByteData(format: ui.ImageByteFormat.png);
+    if (png == null) return;
+    await salvarOrcamento(_registro(p));
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile.fromData(png.buffer.asUint8List(), mimeType: 'image/png', name: 'orcamento-cubo3.png')],
+      fileNameOverrides: ['orcamento-cubo3.png'],
+    ));
+  }
+
+  /// Prévia do que o cliente recebe, com "Para" e "Observação" opcionais, e os dois jeitos de enviar.
+  Future<void> _enviar(PrecoSugerido p) => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (c) => StatefulBuilder(
+          builder: (c, atualizar) => Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(c).bottom),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: RepaintBoundary(key: _imagem, child: CartaoOrcamento(_dados(p))),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  key: const Key('cliente'),
+                  controller: _cliente,
+                  onChanged: (_) => atualizar(() {}),
+                  decoration: const InputDecoration(labelText: 'Para (opcional)', hintText: 'Nome do cliente'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  key: const Key('obs'),
+                  controller: _obs,
+                  onChanged: (_) => atualizar(() {}),
+                  decoration: const InputDecoration(labelText: 'Observação (opcional)', hintText: 'Ex.: pronto em 3 dias'),
+                ),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _compartilharTexto(p),
+                      style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+                      icon: const Icon(Icons.notes),
+                      label: const Text('Texto'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _compartilharImagem(p),
+                      icon: const Icon(Icons.image_outlined),
+                      label: const Text('Imagem'),
+                    ),
+                  ),
+                ]),
+              ]),
+            ),
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -522,7 +575,13 @@ class _OrcarTelaState extends State<OrcarTela> {
       color: t.colorScheme.surfaceContainerHigh,
       child: SafeArea(
         top: false,
-        child: Padding(
+        child: AnimatedSize(
+          duration: duracaoAnimacao(context, 250),
+          curve: Curves.easeOutCubic,
+          child: AnimatedSwitcher(
+          duration: duracaoAnimacao(context, 250),
+          child: Padding(
+          key: ValueKey(temCusto),
           padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
           child: !temCusto
               ? Row(children: [
@@ -544,47 +603,146 @@ class _OrcarTelaState extends State<OrcarTela> {
                       Text('lucro ${moeda(p.lucro)} · custo ${moeda(p.custo)}', style: fraco, key: const Key('lucro')),
                     ]),
                   ),
-                  IconButton.filledTonal(
-                    tooltip: 'Enviar imagem',
-                    onPressed: () => _enviarImagem(p),
-                    icon: const Icon(Icons.image_outlined),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(onPressed: () => _enviarTexto(p), icon: const Icon(Icons.send), label: const Text('Enviar')),
+                  FilledButton.icon(onPressed: () => _enviar(p), icon: const Icon(Icons.send), label: const Text('Enviar')),
                 ]),
+        ),
+        ),
         ),
       ),
     );
   }
 }
 
-/// O que o cliente recebe: só as peças e o total (sem custo nem lucro).
+class PecaEnvio {
+  const PecaEnvio(this.nome, this.qtd, this.horas);
+  final String nome;
+  final int qtd;
+  final double horas;
+}
+
+/// O que vai para o cliente: peças, material, tempo e total (nunca custo nem lucro).
+class DadosEnvio {
+  const DadosEnvio(
+      {required this.pecas, required this.total, this.material, this.cliente = '', this.obs = '', required this.data});
+  final List<PecaEnvio> pecas;
+  final double total;
+  final String? material;
+  final String cliente, obs;
+  final DateTime data;
+
+  double get horas => pecas.fold(0.0, (s, p) => s + p.horas * p.qtd);
+
+  /// Preço de cada unidade quando é uma peça só em quantidade.
+  double? get cada => pecas.length == 1 && pecas.single.qtd > 1 ? arred2(total / pecas.single.qtd) : null;
+
+  bool get temMaterial => material != null && material!.isNotEmpty;
+}
+
+/// Texto para o WhatsApp (os * deixam em negrito).
+String textoOrcamento(DadosEnvio d) => [
+      '*Orçamento Cubo³* · ${DateFormat('dd/MM/yyyy').format(d.data)}',
+      if (d.cliente.isNotEmpty) 'Para: ${d.cliente}',
+      '',
+      for (final p in d.pecas) '• ${p.nome}${p.qtd > 1 ? ' — ${p.qtd} un.' : ''}${d.temMaterial ? ' (${d.material})' : ''}',
+      '',
+      if (d.horas > 0) 'Tempo de impressão: ~${duracao(d.horas * 3600)}',
+      '*Total: ${moeda(d.total)}*${d.cada == null ? '' : ' (${moeda(d.cada!)} cada)'}',
+      if (d.obs.isNotEmpty) 'Obs.: ${d.obs}',
+    ].join('\n');
+
+/// Imagem do orçamento: sempre no visual escuro da marca, para ficar igual em qualquer celular.
 class CartaoOrcamento extends StatelessWidget {
-  const CartaoOrcamento({super.key, required this.itens, required this.preco});
-  final List<Json> itens;
-  final double preco;
+  const CartaoOrcamento(this.d, {super.key});
+  final DadosEnvio d;
 
   @override
   Widget build(BuildContext context) {
-    const fundo = Color(0xFF15151F), fraco = Color(0xFF9D9DB8);
+    const fraco = Color(0xFF9D9DB8), linha = Color(0xFF2A2A3D);
+    String detalhe(PecaEnvio p) =>
+        [if (d.temMaterial) d.material!, if (p.horas > 0) '~${duracao(p.horas * 3600)} cada'].join(' · ');
     return Container(
-      width: 320,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: fundo, borderRadius: BorderRadius.circular(20)),
+      width: 360,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF22205A), Color(0xFF0E0E16)]),
+      ),
       child: DefaultTextStyle(
-        style: const TextStyle(color: Colors.white, fontFamily: 'Inter'),
+        style: const TextStyle(color: Colors.white, fontFamily: 'Inter', fontSize: 14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          const LogoCubo3(tamanho: 28, comNome: true),
+          Row(children: [
+            const LogoCubo3(tamanho: 28, comNome: true),
+            const Spacer(),
+            Text(DateFormat('dd/MM/yyyy').format(d.data), style: const TextStyle(color: fraco, fontSize: 12)),
+          ]),
+          const SizedBox(height: 20),
+          const Text('ORÇAMENTO',
+              style: TextStyle(color: indigoEscuro, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 2)),
+          if (d.cliente.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Para ${d.cliente}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          ],
+          const SizedBox(height: 14),
+          for (final p in d.pecas)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration:
+                      BoxDecoration(color: indigoEscuro.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(8)),
+                  child: Text('${p.qtd}x',
+                      style: const TextStyle(color: indigoEscuro, fontWeight: FontWeight.w700, fontFeatures: tabular)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(p.nome, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    if (detalhe(p).isNotEmpty) Text(detalhe(p), style: const TextStyle(color: fraco, fontSize: 12)),
+                  ]),
+                ),
+              ]),
+            ),
+          const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(color: linha, height: 1)),
+          if (d.horas > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(children: [
+                const Icon(Icons.schedule, size: 16, color: fraco),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text('Tempo de impressão ~${duracao(d.horas * 3600)}',
+                      style: const TextStyle(color: fraco, fontSize: 13)),
+                ),
+              ]),
+            ),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: indigoEscuro.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(16)),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              const Text('Total', style: TextStyle(color: fraco, fontSize: 13)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text(moeda(d.total),
+                    style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, fontFeatures: tabular, letterSpacing: -1)),
+                if (d.cada != null)
+                  Text('${moeda(d.cada!)} cada', style: const TextStyle(color: fraco, fontSize: 12, fontFeatures: tabular)),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+          if (d.obs.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(d.obs, style: const TextStyle(color: fraco, fontSize: 13)),
+          ],
           const SizedBox(height: 16),
-          Text('Orçamento · ${DateFormat('dd/MM/yyyy').format(DateTime.now())}',
-              style: const TextStyle(color: fraco, fontSize: 12)),
-          const SizedBox(height: 8),
-          for (final l in linhasItens(itens))
-            Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Text(l, style: const TextStyle(fontSize: 15))),
-          const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(color: Color(0xFF2A2A3D))),
-          const Text('Total', style: TextStyle(color: fraco, fontSize: 12)),
-          Text(moeda(preco),
-              style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: indigoEscuro, fontFeatures: tabular)),
+          const Center(child: Text('Impressão 3D sob encomenda', style: TextStyle(color: fraco, fontSize: 11))),
         ]),
       ),
     );

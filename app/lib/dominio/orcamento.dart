@@ -1,4 +1,4 @@
-/// Regras do orçamento rápido: arredondamento de 5 em 5, soma do kit e leitura de arquivo fatiado.
+/// Regras do orçamento rápido: preço terminado em ,90, soma do kit e leitura de arquivo fatiado.
 library;
 
 import 'dart:convert';
@@ -13,11 +13,11 @@ import 'custos.dart';
 /// Lucro que o Kerlon quer sempre: 50% do preço.
 const margemAlvo = 50.0;
 
-/// Múltiplo de 5 mais próximo, nunca abaixo de R$ 5.
-double arredondar5(num v) => math.max(5, (v / 5).round() * 5).toDouble();
+/// Preço terminado em ,90 mais próximo (7,90 · 8,90 · 12,90). Pedido do Kerlon: ,90 em vez de múltiplo de 5.
+double arredondar90(num v) => arred2(math.max(0, (v - 0.9).round()) + 0.9);
 
-/// Múltiplo de 5 logo acima (não perde margem). O 1e-9 evita subir um valor que já é múltiplo.
-double arredondar5Cima(num v) => math.max(5, (v / 5 - 1e-9).ceil() * 5).toDouble();
+/// Próximo preço terminado em ,90 (não perde margem). O 1e-9 evita subir um valor que já termina em ,90.
+double arredondar90Cima(num v) => arred2(math.max(0, (v - 0.9 - 1e-9).ceil()) + 0.9);
 
 class PrecoSugerido {
   const PrecoSugerido(this.margem, this.custo, this.exato, this.preco);
@@ -26,16 +26,16 @@ class PrecoSugerido {
   double get lucroPct => preco <= 0 ? 0 : lucro / preco * 100;
 }
 
-/// O preço grande da tela: margem de 50%, arredondado para cima.
+/// O preço grande da tela: margem de 50%, subindo até o próximo ,90.
 PrecoSugerido precoDestaque(double custo) {
   final exato = precoComMargem(custo, margemAlvo);
-  return PrecoSugerido(margemAlvo, custo, exato, arredondar5Cima(exato));
+  return PrecoSugerido(margemAlvo, custo, exato, arredondar90Cima(exato));
 }
 
-/// As margens do cadastro da empresa, cada uma no múltiplo de 5 mais próximo.
+/// As margens do cadastro da empresa, cada uma no ,90 mais próximo.
 List<PrecoSugerido> precosPorMargem(double custo, List<double> margens) => [
       for (final m in margens)
-        PrecoSugerido(m, custo, precoComMargem(custo, m), arredondar5(precoComMargem(custo, m))),
+        PrecoSugerido(m, custo, precoComMargem(custo, m), arredondar90(precoComMargem(custo, m))),
     ];
 
 /// Opções para tocar no orçamento: as margens do cadastro mais a de 50% (a recomendada, arredondada para cima).
