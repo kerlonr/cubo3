@@ -2,7 +2,6 @@ import 'package:cubo3/tema.dart';
 import 'package:cubo3/telas/inicio/inicio_aba.dart';
 import 'package:cubo3/telas/mais/calculadora_tela.dart';
 import 'package:cubo3/telas/mais/empresa_tela.dart';
-import 'package:cubo3/widgets/cartoes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,19 +27,29 @@ Map<String, Object?> painel({required double resultado}) => {
     };
 
 void main() {
-  testWidgets('resultado negativo do painel aparece em vermelho; estoque baixo pede reposição', (tester) async {
-    final amb = Ambiente({'GET /api/painel': (_) => painel(resultado: -42.5)});
+  testWidgets('lucro do mês negativo em vermelho; investimento diz quanto falta para se pagar', (tester) async {
+    final amb = Ambiente({'GET /api/painel': (_) => {...painel(resultado: -42.5), 'investido': 1700, 'recebido': 200}});
     await amb.preparar();
-    await tamanhoTela(tester, 500, 2400);
+    await tamanhoTela(tester, 400, 2000);
     await tester.pumpWidget(amb.tela(const InicioAba()));
     await tester.pumpAndSettle();
-    final cartao = tester.widget<CartaoValor>(find.widgetWithText(CartaoValor, 'Resultado'));
-    expect(cartao.cor, vermelho);
-    expect(cartao.valor, '-R\$ 42,50');
-    expect(find.text('Repor'), findsOneWidget);
+    final lucro = tester.widget<Text>(find.byKey(const Key('lucro_mes')));
+    expect(lucro.data, '-R\$ 42,50');
+    expect(lucro.style!.color, vermelho);
+    expect(find.text('Faltam R\$ 1.500,00 para se pagar'), findsOneWidget);
     expect(find.text('A confirmar (2)'), findsOneWidget);
+    expect(find.text('Orçar peça'), findsOneWidget);
     final q = amb.ultimo('GET /api/painel')!.url.queryParameters;
     expect(q['inicio'], endsWith('-01'));
+  });
+
+  testWidgets('investimento já pago mostra o que sobrou', (tester) async {
+    final amb = Ambiente({'GET /api/painel': (_) => {...painel(resultado: 10), 'investido': 100, 'recebido': 130.5}});
+    await amb.preparar();
+    await tamanhoTela(tester, 400, 2000);
+    await tester.pumpWidget(amb.tela(const InicioAba()));
+    await tester.pumpAndSettle();
+    expect(find.text('Já se pagou e sobrou R\$ 30,50'), findsOneWidget);
   });
 
   testWidgets('calculadora sem rede usa o cache: 6,32 e 7,90 / 9,03 / 12,64; canal inviável', (tester) async {

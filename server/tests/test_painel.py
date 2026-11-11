@@ -60,3 +60,15 @@ def test_estoque_baixo(cliente, dono):
 def test_despesa_outra_empresa(cliente, dono, outro):
     cliente.put(f"/api/despesas/{uuid.uuid4()}", headers=dono, json={"data": "2026-11-02", "categoria": "outros", "valor": 50})
     assert painel(cliente, outro, inicio="2026-11-01", fim="2026-11-30")["gastos"] == 0
+
+
+def test_investido_e_recebido_somam_desde_o_inicio_ate_o_fim(cliente, dono):
+    from test_catalogo import criar_modelo
+    m = criar_modelo(cliente, dono)
+    cliente.put(f"/api/despesas/{uuid.uuid4()}", headers=dono, json={"data": "2025-01-10", "categoria": "equipamento", "valor": 1600})
+    cliente.put(f"/api/despesas/{uuid.uuid4()}", headers=dono, json={"data": "2026-10-05", "categoria": "outros", "valor": 40})
+    venda(cliente, dono, [item(m["id"], qtd=1, preco=100)], custo_envio=0, entregue_em="2026-10-10T15:00:00Z")
+    p = painel(cliente, dono, inicio="2026-10-01", fim="2026-10-31")
+    assert (p["investido"], p["recebido"]) == (1640, 100)
+    # o que vem depois do fim do período não entra
+    assert painel(cliente, dono, inicio="2025-01-01", fim="2025-01-31")["investido"] == 1600

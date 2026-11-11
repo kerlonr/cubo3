@@ -6,7 +6,6 @@ import 'package:cubo3/api/fila.dart';
 import 'package:cubo3/telas/impressoes/confirmar_tela.dart';
 import 'package:cubo3/telas/mais/configuracoes_tela.dart';
 import 'package:cubo3/telas/vendas/venda_rapida_tela.dart';
-import 'package:cubo3/widgets/cartoes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -17,7 +16,7 @@ import 'apoio.dart';
 
 
 void main() {
-  testWidgets('venda rápida pelo "+" atualiza a receita do Início', (tester) async {
+  testWidgets('venda rápida pela aba Vendas atualiza a receita do Início', (tester) async {
     var vendido = false;
     final amb = Ambiente({
       'GET /api/painel': (_) => {'receita': vendido ? 30 : 0, 'gastos': 0, 'resultado': vendido ? 30 : 0, 'lucro_vendas': 0},
@@ -36,11 +35,11 @@ void main() {
     await tamanhoTela(tester, 500, 1400);
     await tester.pumpWidget(amb.app());
     await tester.pumpAndSettle();
-    expect(tester.widget<CartaoValor>(find.widgetWithText(CartaoValor, 'Receita')).valor, contains('0,00'));
+    expect(find.text('Entrou R\$ 0,00'), findsOneWidget);
 
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.tap(find.text('Vendas'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Venda rápida'));
+    await tester.tap(find.byTooltip('Venda rápida'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('modelo0')));
     await tester.pumpAndSettle();
@@ -50,7 +49,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(vendido, isTrue);
     // De volta ao Início: a venda deveria aparecer sem precisar puxar para atualizar.
-    expect(tester.widget<CartaoValor>(find.widgetWithText(CartaoValor, 'Receita')).valor, contains('30,00'));
+    await tester.tap(find.text('Início'));
+    await tester.pumpAndSettle();
+    expect(find.text('Entrou R\$ 30,00'), findsOneWidget);
   });
 
   test('uma operação com erro 500 fixo não pode prender as próximas na fila', () async {

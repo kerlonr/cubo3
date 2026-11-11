@@ -2,20 +2,16 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../api/cache.dart';
 import '../../api/modelos.dart';
 import '../../tema.dart';
 import '../../util/formatos.dart';
-import '../../widgets/adaptativo.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../../widgets/logo.dart';
 import '../casca.dart';
-import '../impressoes/cartao_ao_vivo.dart';
-import '../impressoes/impressora_tela.dart';
-import 'primeiros_passos.dart';
+import '../mais/calculadora_tela.dart';
 
-/// Painel: o que gastamos, vendemos, lucramos e o que falta no estoque.
+/// Início: lucro do mês, quanto já foi investido e quanto voltou, atalho para orçar e o gráfico.
 class InicioAba extends StatefulWidget {
   const InicioAba({super.key});
 
@@ -39,19 +35,7 @@ class _InicioAbaState extends State<InicioAba> {
       ),
       body: EstadoTela<Map>(
         key: ValueKey(_mes),
-        carregar: () async {
-          final painel = await buscar(context, '/api/painel', query: {'inicio': diaIso(_mes), 'fim': diaIso(fim)});
-          if (!context.mounted) return painel;
-          // Impressoras são extra: sem elas o painel ainda abre.
-          List impressoras = const [];
-          List<bool>? passos;
-          try {
-            impressoras = (await buscar(context, '/api/impressoras')).dados as List;
-            if (context.mounted) passos = await passosFeitos(context, temImpressora: impressoras.isNotEmpty);
-          } catch (_) {}
-          return RespostaCache(
-              {...painel.dados as Map, 'impressoras': impressoras, 'passos': passos}, painel.deCache, painel.quando);
-        },
+        carregar: () => buscar(context, '/api/painel', query: {'inicio': diaIso(_mes), 'fim': diaIso(fim)}),
         construir: (context, p) => _corpo(p, nomeMes[0].toUpperCase() + nomeMes.substring(1)),
       ),
     );
@@ -59,32 +43,17 @@ class _InicioAbaState extends State<InicioAba> {
 
   Widget _corpo(Map p, String nomeMes) {
     final t = Theme.of(context);
-    final largo = ClasseLargura.de(context) == ClasseLargura.expandido;
-    final impressoras = [for (final i in lista(p['impressoras'])) if ((i['moonraker_url'] ?? '') != '') i];
-    final resultado = num0(p['resultado']), lucro = num0(p['lucro_vendas']);
     final semMovimento = lista(p['por_mes']).every((m) => num0(m['receita']) == 0 && num0(m['gastos']) == 0);
-    final cartoes = [
-      CartaoValor('Receita', moeda(num0(p['receita'])), icone: Icons.trending_up),
-      CartaoValor('Gastos', moeda(num0(p['gastos'])), icone: Icons.trending_down),
-      CartaoValor('Resultado', moeda(resultado), cor: corResultado(resultado), icone: Icons.account_balance_wallet_outlined),
-      CartaoValor('Lucro das vendas', moeda(lucro), cor: corResultado(lucro), icone: Icons.sell_outlined),
-    ];
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1100),
-        child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
-          if (p['passos'] != null) ...[
-            CartaoPrimeirosPassos(feitos: p['passos'] as List<bool>),
-            const SizedBox(height: 8),
-          ],
-          AcoesRapidas(colunas: largo ? 4 : 2),
-          Row(children: [
-            IconButton(onPressed: () => _mudarMes(-1), icon: const Icon(Icons.chevron_left)),
-            Expanded(child: Text(nomeMes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600))),
-            IconButton(onPressed: () => _mudarMes(1), icon: const Icon(Icons.chevron_right)),
-          ]),
-          GradeCartoes(colunas: largo ? 4 : 2, children: cartoes),
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 96), children: [
+          FilledButton.icon(
+            onPressed: () => abrirTela(context, const CalculadoraTela()),
+            icon: const Icon(Icons.calculate_outlined),
+            label: const Text('Orçar peça'),
+          ),
           if (num0(p['a_confirmar']) > 0) ...[
             const SizedBox(height: 8),
             Card(
@@ -97,50 +66,105 @@ class _InicioAbaState extends State<InicioAba> {
               ),
             ),
           ],
-          for (final i in impressoras)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: InkWell(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ImpressoraTela(impressora: i))),
-                child: CartaoAoVivo(impressora: i),
-              ),
-            ),
+          const SizedBox(height: 8),
+          Row(children: [
+            IconButton(tooltip: 'Mês anterior', onPressed: () => _mudarMes(-1), icon: const Icon(Icons.chevron_left)),
+            Expanded(child: Text(nomeMes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600))),
+            IconButton(tooltip: 'Próximo mês', onPressed: () => _mudarMes(1), icon: const Icon(Icons.chevron_right)),
+          ]),
+          CartaoLucro(entrou: num0(p['receita']), saiu: num0(p['gastos'])),
+          const SizedBox(height: 8),
+          CartaoInvestimento(investido: num0(p['investido']), recebido: num0(p['recebido'])),
           const Secao('Receita × gastos (12 meses)'),
           if (semMovimento)
             Text('Sem vendas nem gastos ainda', style: TextStyle(color: t.colorScheme.onSurfaceVariant))
-          else
+          else ...[
             SizedBox(height: 200, child: GraficoMeses(lista(p['por_mes']))),
-          if (lista(p['estoque_baixo']).isNotEmpty) ...[
-            const Secao('Estoque baixo'),
-            for (final e in lista(p['estoque_baixo']))
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('${e['nome']}'),
-                subtitle: Text(e['tipo'] == 'filamento' ? gramas(num0(e['saldo'])) : numero(num0(e['saldo']))),
-                trailing: const ChipRepor(),
-                onTap: () => context.findAncestorStateOfType<CascaState>()?.irPara(3),
-              ),
-          ],
-          if (lista(p['mais_vendidos']).isNotEmpty) ...[
-            const Secao('Mais vendidos'),
-            for (final m in lista(p['mais_vendidos']))
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('${m['nome']}'),
-                trailing: Text(numero(num0(m['qtd'])), style: const TextStyle(fontFeatures: tabular, fontWeight: FontWeight.w600)),
-              ),
-          ],
-          const Secao('Produção no mês'),
-          Row(children: [
-            Expanded(child: CartaoValor('Horas de impressão', '${numero(num0(p['horas_impressao']))} h')),
-            const SizedBox(width: 8),
-            Expanded(child: CartaoValor('Filamento', '${numero(num0(p['kg_filamento']))} kg')),
-          ]),
-          if (!semMovimento) ...[
             const SizedBox(height: 8),
             Text('Toque e segure um mês no gráfico para ver os valores.',
                 style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
           ],
+        ]),
+      ),
+    );
+  }
+}
+
+/// Lucro do mês = o que entrou − o que saiu, com os dois valores embaixo.
+class CartaoLucro extends StatelessWidget {
+  const CartaoLucro({super.key, required this.entrou, required this.saiu});
+  final double entrou, saiu;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final lucro = arred2(entrou - saiu);
+    final fraco = TextStyle(fontSize: 13, color: t.colorScheme.onSurfaceVariant, fontFeatures: tabular);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Lucro do mês', style: fraco),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(moeda(lucro),
+                key: const Key('lucro_mes'),
+                softWrap: false,
+                style: TextStyle(
+                    fontSize: 34, fontWeight: FontWeight.w700, color: corResultado(lucro), fontFeatures: tabular, letterSpacing: -1)),
+          ),
+          const SizedBox(height: 8),
+          Wrap(spacing: 16, runSpacing: 4, children: [
+            Text('Entrou ${moeda(entrou)}', style: fraco),
+            Text('Saiu ${moeda(saiu)}', style: fraco),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Tudo que já saiu (filamento, equipamento, despesas) contra tudo que já entrou com vendas.
+class CartaoInvestimento extends StatelessWidget {
+  const CartaoInvestimento({super.key, required this.investido, required this.recebido});
+  final double investido, recebido;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final falta = arred2(investido - recebido);
+    final fraco = TextStyle(fontSize: 13, color: t.colorScheme.onSurfaceVariant, fontFeatures: tabular);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Investimento', style: fraco),
+          const SizedBox(height: 4),
+          Text(
+            investido == 0
+                ? 'Nada investido ainda'
+                : falta > 0
+                    ? 'Faltam ${moeda(falta)} para se pagar'
+                    : 'Já se pagou e sobrou ${moeda(-falta)}',
+            key: const Key('investimento'),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: falta > 0 || investido == 0 ? null : verde),
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: investido == 0 ? 0 : (recebido / investido).clamp(0, 1).toDouble(),
+              minHeight: 8,
+              backgroundColor: t.colorScheme.surfaceContainerHighest,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(spacing: 16, runSpacing: 4, children: [
+            Text('Investido ${moeda(investido)}', style: fraco),
+            Text('Voltou ${moeda(recebido)}', style: fraco),
+          ]),
         ]),
       ),
     );

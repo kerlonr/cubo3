@@ -122,6 +122,7 @@ class _AppCubo3State extends State<AppCubo3> with WidgetsBindingObserver {
         debugShowCheckedModeBanner: false,
         theme: temaCubo3(Brightness.light),
         darkTheme: temaCubo3(Brightness.dark),
+        themeMode: ThemeMode.dark, // pedido do Kerlon: sempre escuro
         locale: const Locale('pt', 'BR'),
         supportedLocales: const [Locale('pt', 'BR')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,

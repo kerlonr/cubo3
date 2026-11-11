@@ -11,8 +11,7 @@ import '../atualizacao.dart';
 import '../widgets/adaptativo.dart';
 
 import 'catalogo/catalogo_aba.dart';
-import 'estoque/carretel_form.dart';
-import 'estoque/estoque_aba.dart';
+import 'catalogo/modelo_form.dart';
 import 'impressoes/confirmar_tela.dart';
 import 'impressora/impressora_aba.dart';
 import 'inicio/inicio_aba.dart';
@@ -21,7 +20,7 @@ import 'mais/mais_tela.dart';
 import 'vendas/venda_rapida_tela.dart';
 import 'vendas/vendas_aba.dart';
 
-/// Navegação principal: 5 abas + "+" global. Compacto (< 600 dp): barra inferior; médio e expandido: trilho lateral.
+/// Navegação principal: 4 abas + "+" global. Compacto (< 600 dp): barra inferior; médio e expandido: trilho lateral.
 class Casca extends StatefulWidget {
   const Casca({super.key});
 
@@ -70,7 +69,6 @@ class CascaState extends State<Casca> {
     (Icons.space_dashboard_outlined, Icons.space_dashboard, 'Início'),
     (Icons.print_outlined, Icons.print, 'Impressora'),
     (Icons.category_outlined, Icons.category, 'Catálogo'),
-    (Icons.inventory_2_outlined, Icons.inventory_2, 'Estoque'),
     (Icons.receipt_long_outlined, Icons.receipt_long, 'Vendas'),
   ];
 
@@ -80,7 +78,6 @@ class CascaState extends State<Casca> {
         const InicioAba(),
         ImpressoraAba(key: impressoes, ativa: aba == 1, aoContar: (n) => setState(() => aConfirmar = n)),
         const CatalogoAba(),
-        const EstoqueAba(),
         const VendasAba(),
       ];
 
@@ -164,7 +161,7 @@ Future<void> abrirTela(BuildContext context, Widget tela) async {
 void abrirMais(BuildContext context) =>
     Navigator.push(context, MaterialPageRoute(builder: (_) => const MaisTela()));
 
-/// Botão "+": Venda rápida, Lançar impressão, Novo carretel, Orçar peça.
+/// Botão "+": Orçar peça, Novo pedido, Novo modelo.
 Future<void> abrirAcoesRapidas(BuildContext context) => showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -177,21 +174,17 @@ Future<void> abrirAcoesRapidas(BuildContext context) => showModalBottomSheet(
         return SafeArea(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             ListTile(
-                leading: const Icon(Icons.point_of_sale),
-                title: const Text('Venda rápida'),
-                onTap: () => abrir(const VendaRapidaTela())),
-            ListTile(
-                leading: const Icon(Icons.print),
-                title: const Text('Lançar impressão'),
-                onTap: () => abrir(const ConfirmarTela())),
-            ListTile(
-                leading: const Icon(Icons.album_outlined),
-                title: const Text('Novo carretel'),
-                onTap: () => abrir(const CarretelForm())),
-            ListTile(
                 leading: const Icon(Icons.calculate_outlined),
                 title: const Text('Orçar peça'),
                 onTap: () => abrir(const CalculadoraTela())),
+            ListTile(
+                leading: const Icon(Icons.note_add_outlined),
+                title: const Text('Novo pedido'),
+                onTap: () => abrir(const VendaRapidaTela(orcamento: true))),
+            ListTile(
+                leading: const Icon(Icons.category_outlined),
+                title: const Text('Novo modelo'),
+                onTap: () => abrir(const ModeloForm())),
           ]),
         );
       },
