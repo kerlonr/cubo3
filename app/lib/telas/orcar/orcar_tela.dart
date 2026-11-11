@@ -14,12 +14,13 @@ import '../../dominio/custos.dart';
 import '../../dominio/orcamento.dart';
 import '../../tema.dart';
 import '../../util/formatos.dart';
+import '../../widgets/animacoes.dart';
 import '../../widgets/campos.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../../widgets/logo.dart';
 import '../../widgets/seletores.dart';
-import '../catalogo/modelo_form.dart' show caminhosCusto, QuebraCusto;
+import '../catalogo/modelo_form.dart' show caminhosCusto, ModeloForm, QuebraCusto;
 import '../impressora/arquivos.dart' show resumoArquivo;
 import 'historico.dart';
 
@@ -79,6 +80,7 @@ class _OrcarTelaState extends State<OrcarTela> {
   String? _filamento;
   String? _impressora;
   bool _escolheuFilamento = false;
+  double _margem = margemAlvo; // recomendada; o Kerlon pode tocar em outra para baratear
 
   void _mudou([_]) => setState(() {});
 
@@ -95,6 +97,7 @@ class _OrcarTelaState extends State<OrcarTela> {
       _precoKg.text = '${ini['preco_kg'] ?? ''}';
       if (ini['mao_obra'] != null) _maoObra.text = '${ini['mao_obra']}';
       _extra.text = '${ini['extra'] ?? ''}';
+      _margem = num0(ini['margem'] ?? margemAlvo).toDouble();
     }
     SharedPreferences.getInstance().then((p) {
       if (!mounted) return;
@@ -191,6 +194,47 @@ class _OrcarTelaState extends State<OrcarTela> {
     return somarCustos(partes, extra: partes.isEmpty ? 0 : lerNumero(_extra.text) ?? 0);
   }
 
+  Map? _cad; // cadastros da última montagem, para salvar a peça no catálogo com o mesmo custo
+
+  /// Uma peça vira modelo com a mesma receita (filamento ou preço avulso, gramas, tempo, mão de obra)
+  /// e o preço de 50% de uma unidade.
+  void _paraCatalogo(ItemOrcado it) {
+    final cad = _cad ?? const {};
+    final receita = {
+      'filamentos': [
+        {
+          'filamento_id': _filamento,
+          if (_filamento == null) 'preco_kg': lerNumero(_precoKg.text) ?? 0,
+          'gramas': lerNumero(it.gramas.text) ?? 0,
+        }
+      ],
+      'horas': lerHoras(it.tempo.text) ?? 0,
+      'mao_obra_min': lerNumero(_maoObra.text) ?? 0,
+      'insumos': const [],
+      'custo_envio': 0,
+    };
+    final custo = custoDaReceita(receita,
+        filamentos: lista(cad['filamentos']),
+        insumos: const [],
+        impressoras: lista(cad['impressoras']),
+        config: mapa(cad['config']),
+        impressoraId: _impressora);
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ModeloForm(dados: {
+                  'nome': it.nome.text.trim(),
+                  'preco_venda': _escolhido(custo.total).preco,
+                  'receita': receita,
+                  'impressora_id': _impressora,
+                })));
+  }
+
+  PrecoSugerido _escolhido(double custo) {
+    final ops = opcoesDePreco(custo, ParamEmpresa.fromJson(mapa((_cad ?? const {})['config'])).margens);
+    return ops.firstWhere((p) => p.margem == _margem, orElse: () => precoDestaque(custo));
+  }
+
   Json _registro(PrecoSugerido p) => {
         'id': _id,
         'quando': DateTime.now().toUtc().toIso8601String(),
@@ -199,6 +243,7 @@ class _OrcarTelaState extends State<OrcarTela> {
         'preco_kg': _precoKg.text,
         'mao_obra': _maoObra.text,
         'extra': _extra.text,
+        'margem': p.margem,
         'preco': p.preco,
         'custo': p.custo,
       };
@@ -263,6 +308,7 @@ class _OrcarTelaState extends State<OrcarTela> {
   }
 
   Widget _corpo(Map cad) {
+    _cad = cad;
     final t = Theme.of(context);
     final filamentos = lista(cad['filamentos']);
     final impressoras = [for (final i in lista(cad['impressoras'])) if (i['excluido'] != true) i];
@@ -272,7 +318,8 @@ class _OrcarTelaState extends State<OrcarTela> {
     final emp = ParamEmpresa.fromJson(mapa(cad['config']));
     final custo = _custo(cad);
     final temCusto = custo.total > 0;
-    final destaque = precoDestaque(custo.total);
+    final opcoes = opcoesDePreco(custo.total, emp.margens);
+    final destaque = _escolhido(custo.total);
 
     return Column(children: [
       Expanded(
@@ -295,7 +342,17 @@ class _OrcarTelaState extends State<OrcarTela> {
                 child: Text('G-code ou 3MF já fatiado: os gramas e o tempo vêm sozinhos.',
                     style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
               ),
-              for (var i = 0; i < _itens.length; i++) ...[const SizedBox(height: 8), _item(i)],
+              AnimatedSize(
+                duration: duracaoAnimacao(context, 220),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: Column(children: [
+                  for (var i = 0; i < _itens.length; i++) ...[
+                    const SizedBox(height: 8),
+                    Entrada(key: ObjectKey(_itens[i]), child: _item(i)),
+                  ],
+                ]),
+              ),
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
@@ -348,28 +405,13 @@ class _OrcarTelaState extends State<OrcarTela> {
                   ),
               ]),
               if (temCusto) ...[
-                const Secao('Pelas margens'),
+                const Secao('Margem de lucro'),
                 Row(children: [
-                  for (final p in precosPorMargem(custo.total, emp.margens))
+                  for (final p in opcoes)
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.only(right: 8),
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text('${numero(p.margem)}%',
-                                  style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(moeda(p.preco),
-                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, fontFeatures: tabular)),
-                              ),
-                              Text('exato ${moeda(p.exato)}',
-                                  style: TextStyle(fontSize: 11, color: t.colorScheme.onSurfaceVariant, fontFeatures: tabular)),
-                            ]),
-                          ),
-                        ),
+                        child: Entrada(ordem: opcoes.indexOf(p), child: _opcaoMargem(p, p.margem == destaque.margem)),
                       ),
                     ),
                 ]),
@@ -381,6 +423,38 @@ class _OrcarTelaState extends State<OrcarTela> {
       ),
       _barraPreco(temCusto, destaque),
     ]);
+  }
+
+  /// Cartão de margem: tocar escolhe o preço do orçamento; o de 50% vem marcado como recomendado.
+  Widget _opcaoMargem(PrecoSugerido p, bool escolhida) {
+    final t = Theme.of(context);
+    final fraco = TextStyle(fontSize: 11, color: t.colorScheme.onSurfaceVariant, fontFeatures: tabular);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        color: escolhida ? t.colorScheme.primaryContainer : t.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: escolhida ? t.colorScheme.primary : t.colorScheme.outlineVariant, width: escolhida ? 2 : 1),
+      ),
+      child: InkWell(
+        key: Key('margem${p.margem.toInt()}'),
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => setState(() => _margem = p.margem),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${numero(p.margem)}%', style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(moeda(p.preco), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, fontFeatures: tabular)),
+            ),
+            Text('exato ${moeda(p.exato)}', style: fraco),
+            if (p.margem == margemAlvo)
+              Text('recomendado', style: TextStyle(fontSize: 11, color: t.colorScheme.primary, fontWeight: FontWeight.w600)),
+          ]),
+        ),
+      ),
+    );
   }
 
   Widget _item(int i) {
@@ -407,12 +481,14 @@ class _OrcarTelaState extends State<OrcarTela> {
             Text('${it.qtd}', key: Key('qtd$i'), style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),
             IconButton(
                 tooltip: 'Mais uma', onPressed: () => setState(() => it.qtd++), icon: const Icon(Icons.add_circle_outline)),
-            if (_itens.length > 1)
-              IconButton(
-                tooltip: 'Tirar peça',
-                onPressed: () => setState(() => _itens.removeAt(i).dispose()),
-                icon: const Icon(Icons.close),
-              ),
+            PopupMenuButton<String>(
+              tooltip: 'Mais opções da peça',
+              onSelected: (o) => o == 'tirar' ? setState(() => _itens.removeAt(i).dispose()) : _paraCatalogo(it),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'catalogo', enabled: !it.vazio, child: const Text('Salvar no catálogo')),
+                if (_itens.length > 1) const PopupMenuItem(value: 'tirar', child: Text('Tirar peça')),
+              ],
+            ),
           ]),
           const SizedBox(height: 4),
           Padding(
@@ -455,17 +531,15 @@ class _OrcarTelaState extends State<OrcarTela> {
               : Row(children: [
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                      Text('Preço com ${numero(margemAlvo)}% de lucro', style: fraco),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
-                        child: FittedBox(
-                          key: ValueKey(p.preco),
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(moeda(p.preco),
-                              key: const Key('preco'),
-                              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, fontFeatures: tabular, letterSpacing: -1)),
-                        ),
+                      Text('Preço com ${numero(p.margem)}% de lucro${p.margem == margemAlvo ? ' (recomendado)' : ''}',
+                          style: fraco),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: ValorAnimado(p.preco,
+                            chaveTexto: const Key('preco'),
+                            estilo: const TextStyle(
+                                fontSize: 30, fontWeight: FontWeight.w800, fontFeatures: tabular, letterSpacing: -1)),
                       ),
                       Text('lucro ${moeda(p.lucro)} · custo ${moeda(p.custo)}', style: fraco, key: const Key('lucro')),
                     ]),

@@ -94,3 +94,19 @@ def test_link_de_download_assinado(cliente, dono, outro):
     acesso = dono["Authorization"].removeprefix("Bearer ")
     assert cliente.get(f"/api/download/{acesso}").status_code == 401
     assert cliente.get("/api/download/lixo").status_code == 401
+
+
+def test_filamento_avulso_entra_no_custo_do_modelo(cliente, dono):
+    # Antes o preço avulso era descartado: material R$ 0 e lucro inflado (caso "Porta Pilha").
+    m = criar_modelo(cliente, dono, preco_venda=30, receita={
+        "filamentos": [{"filamento_id": None, "preco_kg": 100, "gramas": 33}], "horas": 3, "mao_obra_min": 10})
+    assert m["custo"]["material"] == 3.63
+    assert m["custo"]["total"] == 6.32
+    assert m["lucro_unitario"] == 23.68
+
+
+def test_filamento_cadastrado_vale_mais_que_o_preco_avulso(cliente, dono):
+    f = criar_filamento(cliente, dono)  # R$ 100/kg
+    m = criar_modelo(cliente, dono, receita={
+        "filamentos": [{"filamento_id": f["id"], "preco_kg": 999, "gramas": 33}], "horas": 3, "mao_obra_min": 10})
+    assert m["custo"]["total"] == 6.32

@@ -38,6 +38,32 @@ void main() {
     }
   });
 
+  testWidgets('recomenda 50%, deixa tocar em 30% e o histórico guarda a margem escolhida', (tester) async {
+    final amb = _amb();
+    await amb.preparar();
+    await tamanhoTela(tester, 360, 1400);
+    await tester.pumpWidget(amb.tela(const OrcarTela()));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('gramas0')), '33');
+    await tester.enterText(find.byKey(const Key('tempo0')), '3');
+    await tester.pumpAndSettle();
+    expect(find.text('Preço com 50% de lucro (recomendado)'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('margem30')));
+    await tester.tap(find.byKey(const Key('margem30')));
+    await tester.pumpAndSettle();
+    expect(find.text('Preço com 30% de lucro'), findsOneWidget);
+    expect(_texto(tester, 'preco'), 'R\$ 10,00');
+
+    await tester.pumpWidget(amb.tela(const OrcarTela(inicial: {
+      'itens': [
+        {'gramas': '33', 'tempo': '3', 'qtd': 1}
+      ],
+      'margem': 30,
+    })));
+    await tester.pumpAndSettle();
+    expect(find.text('Preço com 30% de lucro'), findsOneWidget, reason: 'reabre com a margem salva');
+  });
+
   testWidgets('kit: duas unidades dobram o custo; tempo inválido avisa', (tester) async {
     final amb = _amb();
     await amb.preparar();

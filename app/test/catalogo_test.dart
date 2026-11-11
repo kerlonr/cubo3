@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cubo3/api/api.dart';
 import 'package:cubo3/telas/catalogo/arquivos.dart';
 import 'package:cubo3/telas/catalogo/catalogo_aba.dart';
@@ -60,14 +62,87 @@ void main() {
     await tester.pumpWidget(amb.tela(const ModeloForm()));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('nome')), 'Vaso');
-    await tester.tap(find.text('Receita e custo'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Adicionar filamento'));
-    await tester.pumpAndSettle();
+    // Receita à vista (não mais escondida) e a primeira linha já vem com o filamento cadastrado.
     await tester.enterText(find.byKey(const Key('gramas0')), '33');
     await tester.enterText(find.byKey(const Key('horas')), '3');
     await tester.enterText(find.byKey(const Key('mao_obra')), '10');
     await tester.pumpAndSettle();
     expect(find.text('Custo R\$ 6,32'), findsOneWidget);
+  });
+
+  Ambiente ambienteModelo() => Ambiente({
+        'GET /api/filamentos': (_) => [
+              {'id': 'f1', 'marca': 'Voolt', 'material': 'PLA', 'cor_nome': 'Branco', 'cor_hex': '#FFFFFF', 'preco_kg': 100}
+            ],
+        'GET /api/empresa/config': (_) =>
+            {'eficiencia': 1.1, 'mao_obra_hora': 10, 'kwh': 0.656, 'reserva': 1.3, 'margens': [20, 30, 50]},
+      })
+        ..rotasPrefixo['PUT /api/modelos/'] = (r) => {'id': 'm1'};
+
+  testWidgets('filamento avulso vai para o servidor com o preço (antes o material virava R\$ 0)', (tester) async {
+    final amb = ambienteModelo();
+    await amb.preparar();
+    await tamanhoTela(tester, 500, 2000);
+    await tester.pumpWidget(amb.tela(const ModeloForm(dados: {
+      'nome': 'Porta Pilha',
+      'receita': {
+        'filamentos': [
+          {'filamento_id': null, 'preco_kg': 100, 'gramas': 33}
+        ],
+        'horas': 3,
+        'mao_obra_min': 10
+      }
+    })));
+    await tester.pumpAndSettle();
+    expect(find.text('Custo R\$ 6,32'), findsOneWidget);
+    expect(find.byKey(const Key('preco_kg0')), findsOneWidget);
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    final put = amb.recebidos.lastWhere((r) => r.method == 'PUT');
+    final fil = ((jsonDecode(put.body) as Map)['receita'] as Map)['filamentos'] as List;
+    expect(fil.single, {'filamento_id': null, 'preco_kg': 100.0, 'gramas': 33.0});
+  });
+
+  testWidgets('tempo "3h11" vira 3,18 h; receita sem filamento pede confirmação', (tester) async {
+    final amb = ambienteModelo();
+    await amb.preparar();
+    await tamanhoTela(tester, 500, 2000);
+    await tester.pumpWidget(amb.tela(const ModeloForm()));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('nome')), 'Chaveiro');
+    await tester.enterText(find.byKey(const Key('horas')), '3h11');
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Receita incompleta'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+    expect(amb.recebidos.where((r) => r.method == 'PUT'), isEmpty);
+    await tester.enterText(find.byKey(const Key('gramas0')), '12');
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    final receita = (jsonDecode(amb.recebidos.lastWhere((r) => r.method == 'PUT').body) as Map)['receita'] as Map;
+    expect((receita['horas'] as num).toStringAsFixed(2), '3.18');
+  });
+
+  testWidgets('modelo sem filamento aparece com "falta receita" no lugar do lucro', (tester) async {
+    final amb = Ambiente({
+      'GET /api/modelos': (_) => [
+            {
+              'id': 'm1',
+              'nome': 'Chaveiro',
+              'preco_venda': 10,
+              'lucro_unitario': 10,
+              'vendidos': 6,
+              'capa_url': null,
+              'tags': [],
+              'receita': {'filamentos': [], 'horas': 0},
+            }
+          ],
+    });
+    await amb.preparar();
+    await tester.pumpWidget(amb.tela(const CatalogoAba()));
+    await tester.pumpAndSettle();
+    expect(find.text('falta receita'), findsOneWidget);
+    expect(find.text('lucro R\$ 10,00'), findsNothing);
   });
 }

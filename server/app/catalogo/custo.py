@@ -20,7 +20,9 @@ def receita_do_modelo(db: Session, empresa_id, receita: dict, multiplicar_insumo
     filamentos = []
     for f in receita.get("filamentos", []):
         fil = _da_empresa(db, Filamento, f.get("filamento_id"), empresa_id)
-        filamentos.append(ItemFilamento(D(str(f.get("gramas", 0))), fil.preco_kg if fil else D(0)))
+        # Cadastrado vale mais; sem cadastro usa o preço avulso da receita (antes virava R$ 0 e inflava o lucro).
+        preco = fil.preco_kg if fil else D(str(f.get("preco_kg") or 0))
+        filamentos.append(ItemFilamento(D(str(f.get("gramas", 0))), preco))
     insumos, embalagem = [], []
     for i in receita.get("insumos", []):
         ins = _da_empresa(db, Insumo, i.get("insumo_id"), empresa_id)

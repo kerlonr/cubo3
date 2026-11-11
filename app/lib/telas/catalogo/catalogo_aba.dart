@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../api/modelos.dart';
 import '../../tema.dart';
 import '../../util/formatos.dart';
+import '../../widgets/animacoes.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import 'modelo_form.dart';
@@ -143,7 +144,7 @@ class _CatalogoAbaState extends State<CatalogoAba> {
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
             childAspectRatio: 0.72,
-            children: [for (final m in visiveis) _cartao(m)],
+            children: [for (final (i, m) in visiveis.indexed) Entrada(key: ValueKey(m['id']), ordem: i, child: _cartao(m))],
           ),
         ),
       ]);
@@ -167,7 +168,9 @@ class _CatalogoAbaState extends State<CatalogoAba> {
               Text(preco == null ? 'Sem preço' : moeda(preco), style: const TextStyle(fontFeatures: tabular)),
               // Wrap: em cartão estreito o "vendidos" desce inteiro em vez de partir o valor do lucro.
               Wrap(spacing: 8, children: [
-                if (lucro != null)
+                if (receitaIncompleta(mapa(m['receita'])))
+                  const Selo('falta receita', cor: amarelo)
+                else if (lucro != null)
                   Text('lucro ${moeda(lucro)}',
                       style: TextStyle(fontSize: 12, color: corResultado(lucro), fontFeatures: tabular)),
                 Text('${numero(num0(m['vendidos']))} vend.', style: const TextStyle(fontSize: 12)),
@@ -179,3 +182,7 @@ class _CatalogoAbaState extends State<CatalogoAba> {
     );
   }
 }
+
+/// Sem filamento com gramas ou sem tempo: o custo sai menor que o real e o lucro, inflado.
+bool receitaIncompleta(Map receita) =>
+    !lista(receita['filamentos']).any((f) => num0(f['gramas']) > 0) || num0(receita['horas']) == 0;

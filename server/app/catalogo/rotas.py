@@ -20,7 +20,8 @@ from app.estoque.servico import saldo
 
 
 class ItemReceitaFilamento(BaseModel):
-    filamento_id: uuid.UUID
+    filamento_id: uuid.UUID | None = None
+    preco_kg: Decimal | None = Field(None, ge=0)  # filamento avulso (sem cadastro), como no orçamento
     gramas: Decimal = Field(ge=0)
 
 

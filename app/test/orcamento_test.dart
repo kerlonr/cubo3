@@ -24,6 +24,11 @@ void main() {
     expect(precosPorMargem(6.32, [20, 30, 50]).map((p) => p.preco), [10, 10, 15]);
   });
 
+  test('opções de preço: margens do cadastro + 50% (para cima), em ordem', () {
+    expect([for (final p in opcoesDePreco(6.32, [20, 30, 50])) (p.margem, p.preco)], [(20, 10), (30, 10), (50, 15)]);
+    expect([for (final p in opcoesDePreco(6.32, [20, 40])) p.margem], [20, 40, 50], reason: '50% sempre aparece');
+  });
+
   test('soma o custo do kit por quantidade e põe envio na embalagem', () {
     const a = Custo(1, 2, 3, 0, 0, 6);
     const b = Custo(0.5, 0, 1, 0, 0.5, 2);

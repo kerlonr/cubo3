@@ -90,7 +90,10 @@ class _HistoricoOrcamentosTelaState extends State<HistoricoOrcamentosTela> {
                       },
                       child: ListTile(
                         title: Text(resumoItens(lista(o['itens'])), maxLines: 2, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(lerData(o['quando']) == null ? '' : dataHora(lerData(o['quando'])!)),
+                        subtitle: Text([
+                          if (lerData(o['quando']) != null) dataHora(lerData(o['quando'])!),
+                          if (o['margem'] != null) '${numero(num0(o['margem']))}% de lucro',
+                        ].join(' · ')),
                         trailing: Text(moeda(num0(o['preco'])),
                             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, fontFeatures: tabular)),
                         onTap: () => Navigator.pushReplacement(

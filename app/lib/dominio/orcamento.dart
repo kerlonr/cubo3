@@ -38,6 +38,12 @@ List<PrecoSugerido> precosPorMargem(double custo, List<double> margens) => [
         PrecoSugerido(m, custo, precoComMargem(custo, m), arredondar5(precoComMargem(custo, m))),
     ];
 
+/// Opções para tocar no orçamento: as margens do cadastro mais a de 50% (a recomendada, arredondada para cima).
+List<PrecoSugerido> opcoesDePreco(double custo, List<double> margens) {
+  final ms = {...margens, margemAlvo}.toList()..sort();
+  return [for (final m in ms) m == margemAlvo ? precoDestaque(custo) : precosPorMargem(custo, [m]).single];
+}
+
 /// Custo do kit: cada peça vezes a quantidade, mais embalagem/envio uma vez só.
 Custo somarCustos(List<(Custo, int)> itens, {double extra = 0}) {
   double s(double Function(Custo) f) => itens.fold(0.0, (t, i) => t + f(i.$1) * i.$2);

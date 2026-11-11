@@ -6,6 +6,7 @@ import '../../api/cache.dart';
 import '../../api/modelos.dart';
 import '../../tema.dart';
 import '../../util/formatos.dart';
+import '../../widgets/animacoes.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../../widgets/logo.dart';
@@ -108,15 +109,15 @@ class _InicioAbaState extends State<InicioAba> {
             Expanded(child: Text(nomeMes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600))),
             IconButton(tooltip: 'Próximo mês', onPressed: () => _mudarMes(1), icon: const Icon(Icons.chevron_right)),
           ]),
-          CartaoLucro(entrou: num0(p['receita']), saiu: num0(p['gastos'])),
+          Entrada(ordem: 1, child: CartaoLucro(entrou: num0(p['receita']), saiu: num0(p['gastos']))),
           const SizedBox(height: 8),
-          CartaoInvestimento(investido: num0(p['investido']), recebido: num0(p['recebido'])),
+          Entrada(ordem: 2, child: CartaoInvestimento(investido: num0(p['investido']), recebido: num0(p['recebido']))),
           ..._filamentoAcabando(lista(p['estoque_baixo'])),
           const Secao('Receita × gastos (12 meses)'),
           if (semMovimento)
             Text('Sem vendas nem gastos ainda', style: TextStyle(color: t.colorScheme.onSurfaceVariant))
           else ...[
-            SizedBox(height: 200, child: GraficoMeses(lista(p['por_mes']))),
+            Entrada(ordem: 4, child: SizedBox(height: 200, child: GraficoMeses(lista(p['por_mes'])))),
             const SizedBox(height: 8),
             Text('Toque e segure um mês no gráfico para ver os valores.',
                 style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
@@ -166,10 +167,9 @@ class CartaoLucro extends StatelessWidget {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(moeda(lucro),
-                key: const Key('lucro_mes'),
-                softWrap: false,
-                style: TextStyle(
+            child: ValorAnimado(lucro,
+                chaveTexto: const Key('lucro_mes'),
+                estilo: TextStyle(
                     fontSize: 34, fontWeight: FontWeight.w700, color: corResultado(lucro), fontFeatures: tabular, letterSpacing: -1)),
           ),
           const SizedBox(height: 8),
@@ -211,10 +211,12 @@ class CartaoInvestimento extends StatelessWidget {
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: investido == 0 ? 0 : (recebido / investido).clamp(0, 1).toDouble(),
-              minHeight: 8,
-              backgroundColor: t.colorScheme.surfaceContainerHighest,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: investido == 0 ? 0 : (recebido / investido).clamp(0, 1).toDouble()),
+              duration: duracaoAnimacao(context, 700),
+              curve: Curves.easeOutCubic,
+              builder: (_, v, _) =>
+                  LinearProgressIndicator(value: v, minHeight: 8, backgroundColor: t.colorScheme.surfaceContainerHighest),
             ),
           ),
           const SizedBox(height: 8),

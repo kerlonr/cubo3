@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../api/modelos.dart';
 import '../../dominio/custos.dart';
+import '../../dominio/orcamento.dart' show lerHoras;
 import '../../tema.dart';
 import '../../util/formatos.dart';
 import '../../widgets/cartoes.dart';
@@ -11,9 +12,12 @@ import '../../widgets/seletores.dart';
 
 /// Linha da receita: item escolhido + quantidade.
 class LinhaReceita {
-  LinhaReceita(this.id, num? qtd) : qtd = ctrlNumero(qtd);
+  LinhaReceita(this.id, num? qtd, {num? precoKg}) : qtd = ctrlNumero(qtd), precoKg = ctrlDinheiro(precoKg);
   String? id;
   final TextEditingController qtd;
+
+  /// Só para filamento avulso (sem cadastro): sem ele o material contava R$ 0.
+  final TextEditingController precoKg;
 }
 
 /// Cadastros que o custo ao vivo precisa (cacheados para funcionar sem internet).
@@ -44,11 +48,14 @@ class _ModeloFormState extends State<ModeloForm> {
   late final _links = TextEditingController(
       text: [for (final l in lista(d['links'])) (l['titulo'] ?? '') == '' ? l['url'] : '${l['titulo']} | ${l['url']}']
           .join('\n'));
-  late final _horas = ctrlNumero(numOu(receita['horas']));
+  // Tempo como "3h11" (o 3,11 digitado antes virava 3 h e 6 min).
+  late final _horas = TextEditingController(text: num0(receita['horas']) > 0 ? duracao(num0(receita['horas']) * 3600) : '');
   late final _maoObra = ctrlNumero(numOu(receita['mao_obra_min']));
   late final _envio = ctrlDinheiro(numOu(receita['custo_envio']));
   late final _filamentos = [
-    for (final f in lista(receita['filamentos'])) LinhaReceita(f['filamento_id'] as String?, numOu(f['gramas']))
+    for (final f in lista(receita['filamentos']))
+      LinhaReceita(f['filamento_id'] as String?, numOu(f['gramas']), precoKg: numOu(f['preco_kg'])),
+    if (lista(receita['filamentos']).isEmpty) LinhaReceita(null, null),
   ];
   late final _insumos = [for (final i in lista(receita['insumos'])) LinhaReceita(i['insumo_id'] as String?, numOu(i['qtd']))];
   late String? _impressora = d['impressora_id'] as String?;
@@ -56,9 +63,12 @@ class _ModeloFormState extends State<ModeloForm> {
   Json get _receita => {
         'filamentos': [
           for (final f in _filamentos)
-            if (f.id != null) {'filamento_id': f.id, 'gramas': lerNumero(f.qtd.text) ?? 0}
+            if (f.id != null)
+              {'filamento_id': f.id, 'gramas': lerNumero(f.qtd.text) ?? 0}
+            else if ((lerNumero(f.precoKg.text) ?? 0) > 0)
+              {'filamento_id': null, 'preco_kg': lerNumero(f.precoKg.text), 'gramas': lerNumero(f.qtd.text) ?? 0}
         ],
-        'horas': lerNumero(_horas.text) ?? 0,
+        'horas': lerHoras(_horas.text) ?? 0,
         'mao_obra_min': lerNumero(_maoObra.text) ?? 0,
         'insumos': [
           for (final i in _insumos)
@@ -69,6 +79,19 @@ class _ModeloFormState extends State<ModeloForm> {
 
   Future<void> _salvar() async {
     if (!_form.currentState!.validate()) return;
+    final r = _receita;
+    final semFilamento = !lista(r['filamentos']).any((f) => num0(f['gramas']) > 0);
+    final semTempo = num0(r['horas']) == 0;
+    if ((semFilamento || semTempo) &&
+        !await confirmar(
+            context,
+            'Receita incompleta',
+            '${semFilamento ? 'Sem filamento' : 'Sem tempo de impressão'}, o custo fica menor que o real '
+                'e o lucro aparece maior. Salvar assim mesmo?',
+            sim: 'Salvar assim')) {
+      return;
+    }
+    if (!mounted) return;
     final links = [
       for (final linha in _links.text.split('\n'))
         if (linha.trim().isNotEmpty)
@@ -102,6 +125,12 @@ class _ModeloFormState extends State<ModeloForm> {
           final filamentos = lista(cad['filamentos']);
           final insumos = lista(cad['insumos']);
           final impressoras = lista(cad['impressoras']);
+          // Linha de filamento nova (sem nada digitado) já vem com o primeiro filamento cadastrado.
+          for (final f in _filamentos) {
+            if (f.id == null && f.precoKg.text.isEmpty && f.qtd.text.isEmpty && filamentos.isNotEmpty) {
+              f.id = filamentos.first['id'] as String;
+            }
+          }
           final custo = custoDaReceita(_receita,
               filamentos: filamentos,
               insumos: insumos,
@@ -126,41 +155,57 @@ class _ModeloFormState extends State<ModeloForm> {
                   onPressed: () => setState(() => _preco.text = DinheiroFormatter.formatar(sugerido)),
                 ),
             ]),
-            MaisDetalhes(titulo: 'Receita e custo', children: [
-              for (var i = 0; i < _filamentos.length; i++)
-                Row(children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: filamentos.any((f) => f['id'] == _filamentos[i].id) ? _filamentos[i].id : null,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Filamento'),
-                      items: [
-                        for (final f in filamentos)
-                          DropdownMenuItem(value: f['id'] as String, child: Text(nomeFilamento(f), overflow: TextOverflow.ellipsis)),
-                      ],
-                      onChanged: (v) => setState(() => _filamentos[i].id = v),
-                    ),
+            const Secao('Receita'),
+            for (var i = 0; i < _filamentos.length; i++) ...[
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: DropdownButtonFormField<String?>(
+                    key: ValueKey('fil$i${_filamentos[i].id}'),
+                    initialValue: filamentos.any((f) => f['id'] == _filamentos[i].id) ? _filamentos[i].id : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Filamento'),
+                    items: [
+                      for (final f in filamentos)
+                        DropdownMenuItem<String?>(
+                            value: f['id'] as String, child: Text(nomeFilamento(f), overflow: TextOverflow.ellipsis)),
+                      const DropdownMenuItem<String?>(value: null, child: Text('Preço avulso')),
+                    ],
+                    onChanged: (v) => setState(() => _filamentos[i].id = v),
                   ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                      width: 100,
-                      child: CampoNumero(_filamentos[i].qtd, 'Gramas', key: Key('gramas$i'), sufixo: 'g', aoMudar: _mudou)),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                    width: 100,
+                    child: CampoNumero(_filamentos[i].qtd, 'Gramas', key: Key('gramas$i'), sufixo: 'g', aoMudar: _mudou)),
+                if (_filamentos.length > 1)
                   IconButton(onPressed: () => setState(() => _filamentos.removeAt(i)), icon: const Icon(Icons.close)),
-                ]),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => setState(() =>
-                      _filamentos.add(LinhaReceita(filamentos.length == 1 ? filamentos.single['id'] as String : null, null))),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Adicionar filamento'),
+              ]),
+              if (_filamentos[i].id == null)
+                CampoDinheiro(_filamentos[i].precoKg, 'Preço do filamento por kg', key: Key('preco_kg$i'), aoMudar: _mudou),
+            ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => setState(() =>
+                    _filamentos.add(LinhaReceita(filamentos.isNotEmpty ? filamentos.first['id'] as String : null, null))),
+                icon: const Icon(Icons.add),
+                label: const Text('Adicionar filamento'),
+              ),
+            ),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: TextFormField(
+                  key: const Key('horas'),
+                  controller: _horas,
+                  onChanged: _mudou,
+                  decoration: const InputDecoration(labelText: 'Tempo de impressão', hintText: '3h11'),
+                  validator: (v) => (v ?? '').trim().isEmpty || lerHoras(v!) != null ? null : 'Use 3h11 ou 2,5',
                 ),
               ),
-              Row(children: [
-                Expanded(child: CampoNumero(_horas, 'Tempo de impressão', key: const Key('horas'), sufixo: 'h', aoMudar: _mudou)),
-                const SizedBox(width: 12),
-                Expanded(child: CampoNumero(_maoObra, 'Mão de obra', key: const Key('mao_obra'), sufixo: 'min', aoMudar: _mudou)),
-              ]),
+              const SizedBox(width: 12),
+              Expanded(child: CampoNumero(_maoObra, 'Mão de obra', key: const Key('mao_obra'), sufixo: 'min', aoMudar: _mudou)),
+            ]),
+            MaisDetalhes(titulo: 'Insumos, envio e detalhe do custo', children: [
               for (var i = 0; i < _insumos.length; i++)
                 Row(children: [
                   Expanded(
