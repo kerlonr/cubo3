@@ -6,7 +6,9 @@ import '../../widgets/campos.dart';
 import '../../widgets/cartoes.dart';
 import 'envio.dart';
 
-final _passos = {0.1: '0,1', 1.0: '1', 10.0: '10', 100.0: '100'};
+// Passos escolhidos pelo Kerlon (estilo Mainsail): XY em mm grandes, Z fino.
+final _passosXY = {1.0: '1', 5.0: '5', 10.0: '10', 25.0: '25', 50.0: '50'};
+final _passosZ = {0.1: '0,1', 1.0: '1', 10.0: '10', 25.0: '25'};
 
 /// O servidor recusa (409) o mesmo: imprimindo, nada de mexer nos eixos; pausada, home e motores perdem a peça.
 bool imprimindo(Map estado) => estado['estado'] == 'printing';
@@ -35,7 +37,7 @@ class MoverImpressora extends StatefulWidget {
 }
 
 class _MoverImpressoraState extends State<MoverImpressora> with EnvioComando {
-  double _passo = 10;
+  double _passoXY = 10, _passoZ = 1;
 
   @override
   String get impressoraId => widget.impressoraId;
@@ -62,48 +64,53 @@ class _MoverImpressoraState extends State<MoverImpressora> with EnvioComando {
       );
     }
 
-    Widget seta(String eixo, int sinal, IconData icone) => IconButton.filledTonal(
-          tooltip: '$eixo${sinal > 0 ? '+' : '−'}',
-          iconSize: 28,
-          onPressed: mexe(() => comando('mover', 'Movendo $eixo', extra: {'eixo': eixo, 'distancia': sinal * _passo})),
-          icon: Icon(icone),
+    const lado = 52.0;
+    Widget botao(String dica, IconData icone, VoidCallback? acao, {bool destaque = false}) => SizedBox(
+          width: lado,
+          height: lado,
+          child: destaque
+              ? IconButton.filled(tooltip: dica, onPressed: acao, icon: Icon(icone))
+              : IconButton.filledTonal(tooltip: dica, onPressed: acao, icon: Icon(icone, size: 28)),
+        );
+    Widget seta(String eixo, int sinal, IconData icone) => botao('$eixo${sinal > 0 ? '+' : '−'}', icone,
+        mexe(() => comando('mover', 'Movendo $eixo',
+            extra: {'eixo': eixo, 'distancia': sinal * (eixo == 'Z' ? _passoZ : _passoXY)})));
+    const vazio = SizedBox(width: lado, height: lado);
+    const g = SizedBox(width: 6, height: 6);
+
+    // Cruz XY com Home XY no meio e coluna Z com Home Z no meio, lado a lado (como no Mainsail).
+    final xy = Column(mainAxisSize: MainAxisSize.min, children: [
+      Row(mainAxisSize: MainAxisSize.min, children: [vazio, g, seta('Y', 1, Icons.keyboard_arrow_up), g, vazio]),
+      g,
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        seta('X', -1, Icons.keyboard_arrow_left),
+        g,
+        botao('Home XY', Icons.home_outlined, zera(() => comando('home', 'Home XY', extra: {'eixos': 'XY'}))),
+        g,
+        seta('X', 1, Icons.keyboard_arrow_right),
+      ]),
+      g,
+      Row(mainAxisSize: MainAxisSize.min, children: [vazio, g, seta('Y', -1, Icons.keyboard_arrow_down), g, vazio]),
+    ]);
+    final z = Column(mainAxisSize: MainAxisSize.min, children: [
+      seta('Z', 1, Icons.keyboard_arrow_up),
+      g,
+      botao('Home Z', Icons.home_outlined, zera(() => comando('home', 'Home Z', extra: {'eixos': 'Z'}))),
+      g,
+      seta('Z', -1, Icons.keyboard_arrow_down),
+    ]);
+    Widget rotulo(String r) => Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 6),
+          child: Text(r, style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
         );
 
-    final homeEPasso = [
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        FilledButton.icon(
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Secao('Mover',
+          acao: FilledButton.tonalIcon(
             onPressed: zera(() => comando('home', 'Home de todos os eixos', extra: {'eixos': 'XYZ'})),
             icon: const Icon(Icons.home_outlined),
-            label: const Text('Home tudo')),
-        OutlinedButton(
-            onPressed: zera(() => comando('home', 'Home XY', extra: {'eixos': 'XY'})), child: const Text('Home XY')),
-        OutlinedButton(onPressed: zera(() => comando('home', 'Home Z', extra: {'eixos': 'Z'})), child: const Text('Home Z')),
-      ]),
-      const SizedBox(height: 12),
-      CampoComAjuda(
-        rotulo: 'Passo (mm)',
-        child: SeletorChips<double>(opcoes: _passos, valor: _passo, aoMudar: (p) => setState(() => _passo = p)),
-      ),
-    ];
-    final setas = Wrap(alignment: WrapAlignment.center, spacing: 32, runSpacing: 16, children: [
-      Column(mainAxisSize: MainAxisSize.min, children: [
-        seta('Y', 1, Icons.keyboard_arrow_up),
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          seta('X', -1, Icons.keyboard_arrow_left),
-          const SizedBox(width: 56, child: Center(child: Text('XY', style: TextStyle(fontWeight: FontWeight.w600)))),
-          seta('X', 1, Icons.keyboard_arrow_right),
-        ]),
-        seta('Y', -1, Icons.keyboard_arrow_down),
-      ]),
-      Column(mainAxisSize: MainAxisSize.min, children: [
-        seta('Z', 1, Icons.keyboard_arrow_up),
-        const SizedBox(height: 40, child: Center(child: Text('Z', style: TextStyle(fontWeight: FontWeight.w600)))),
-        seta('Z', -1, Icons.keyboard_arrow_down),
-      ]),
-    ]);
-
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Secao('Mover'),
+            label: const Text('Home tudo'),
+          )),
       Card(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -118,20 +125,25 @@ class _MoverImpressoraState extends State<MoverImpressora> with EnvioComando {
               style: TextStyle(fontSize: 13, color: amarelo)),
         ),
       const SizedBox(height: 12),
-      // Com espaço, Home e passo ao lado das setas: tudo cabe na tela junto da câmera.
-      LayoutBuilder(
-        builder: (context, c) => c.maxWidth >= 480
-            ? Row(children: [
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: homeEPasso)),
-                const SizedBox(width: 16),
-                setas,
-              ])
-            : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                ...homeEPasso,
-                const SizedBox(height: 8),
-                setas,
-              ]),
-      ),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+          flex: 3,
+          child: Column(children: [
+            FittedBox(fit: BoxFit.scaleDown, child: xy),
+            rotulo('Passo XY (mm)'),
+            SeletorChips<double>(opcoes: _passosXY, valor: _passoXY, aoMudar: (p) => setState(() => _passoXY = p)),
+          ]),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 2,
+          child: Column(children: [
+            z,
+            rotulo('Passo Z (mm)'),
+            SeletorChips<double>(opcoes: _passosZ, valor: _passoZ, aoMudar: (p) => setState(() => _passoZ = p)),
+          ]),
+        ),
+      ]),
     ]);
   }
 }

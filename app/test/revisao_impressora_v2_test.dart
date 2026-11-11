@@ -51,8 +51,8 @@ void main() {
     testWidgets('Home XY e Home Z mandam os eixos certos', (tester) async {
       final amb = _ambiente();
       await abrirSecao(tester, amb, 'Painel');
-      await _tocar(tester, find.text('Home XY'));
-      await _tocar(tester, find.text('Home Z'));
+      await _tocar(tester, find.byTooltip('Home XY'));
+      await _tocar(tester, find.byTooltip('Home Z'));
       expect(comandos(amb), [
         {'acao': 'home', 'eixos': 'XY'},
         {'acao': 'home', 'eixos': 'Z'},
@@ -69,7 +69,7 @@ void main() {
         {'acao': 'mover', 'eixo': 'Y', 'distancia': 10},
         {'acao': 'mover', 'eixo': 'Y', 'distancia': -10},
         {'acao': 'mover', 'eixo': 'X', 'distancia': -10},
-        {'acao': 'mover', 'eixo': 'Z', 'distancia': 10},
+        {'acao': 'mover', 'eixo': 'Z', 'distancia': 1}, // Z começa no passo de 1 mm
       ]);
     });
 

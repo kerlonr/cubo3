@@ -13,12 +13,12 @@ const tabular = [FontFeature.tabularFigures()];
 
 ThemeData temaCubo3(Brightness brilho) {
   final escuro = brilho == Brightness.dark;
-  // Neutros cinza-zinco (escala do Tailwind).
-  final fundo = escuro ? const Color(0xFF09090B) : const Color(0xFFFAFAFA);
-  final superficie = escuro ? const Color(0xFF18181B) : Colors.white;
-  final borda = escuro ? const Color(0xFF27272A) : const Color(0xFFE4E4E7);
-  final texto = escuro ? const Color(0xFFFAFAFA) : const Color(0xFF18181B);
-  final textoFraco = escuro ? const Color(0xFFA1A1AA) : const Color(0xFF71717A);
+  // Escuro: neutros puxados para o índigo (o app usa sempre o escuro). Claro: cinza-zinco.
+  final fundo = escuro ? const Color(0xFF0B0B12) : const Color(0xFFFAFAFA);
+  final superficie = escuro ? const Color(0xFF15151F) : Colors.white;
+  final borda = escuro ? const Color(0xFF242436) : const Color(0xFFE4E4E7);
+  final texto = escuro ? const Color(0xFFF2F2F8) : const Color(0xFF18181B);
+  final textoFraco = escuro ? const Color(0xFF9D9DB8) : const Color(0xFF71717A);
   final primaria = escuro ? indigoEscuro : indigo;
 
   final esquema = ColorScheme(
@@ -39,9 +39,9 @@ ThemeData temaCubo3(Brightness brilho) {
     surfaceContainerLowest: superficie,
     surfaceContainerLow: superficie,
     surfaceContainer: superficie,
-    surfaceContainerHigh: escuro ? const Color(0xFF27272A) : const Color(0xFFF4F4F5),
-    surfaceContainerHighest: escuro ? const Color(0xFF3F3F46) : const Color(0xFFE4E4E7),
-    outline: escuro ? const Color(0xFF52525B) : const Color(0xFFA1A1AA),
+    surfaceContainerHigh: escuro ? const Color(0xFF1E1E2C) : const Color(0xFFF4F4F5),
+    surfaceContainerHighest: escuro ? const Color(0xFF2A2A3D) : const Color(0xFFE4E4E7),
+    outline: escuro ? const Color(0xFF55557A) : const Color(0xFFA1A1AA),
     outlineVariant: borda,
   );
 
@@ -61,7 +61,8 @@ ThemeData temaCubo3(Brightness brilho) {
       color: superficie,
       elevation: 0,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: borda)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18), side: escuro ? BorderSide.none : BorderSide(color: borda)),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -74,5 +75,11 @@ ThemeData temaCubo3(Brightness brilho) {
     navigationRailTheme: NavigationRailThemeData(backgroundColor: superficie, indicatorColor: esquema.primaryContainer),
     floatingActionButtonTheme: FloatingActionButtonThemeData(backgroundColor: primaria, foregroundColor: Colors.white),
     expansionTileTheme: const ExpansionTileThemeData(shape: Border(), collapsedShape: Border()),
+    filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(minimumSize: const Size(0, 48), textStyle: const TextStyle(fontWeight: FontWeight.w600))),
+    chipTheme: ChipThemeData(side: BorderSide(color: borda)),
+    pageTransitionsTheme: const PageTransitionsTheme(builders: {
+      TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+    }),
   );
 }

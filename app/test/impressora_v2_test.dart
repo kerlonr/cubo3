@@ -65,6 +65,10 @@ List<Map> comandos(Ambiente amb) => [
         if (r.url.path == '/api/impressoras/i1/comando') jsonDecode(r.body) as Map
     ];
 
+/// Home XY e Home Z são ícones no meio da cruz e da coluna Z (estilo Mainsail).
+bool iconeHabilitado(WidgetTester tester, String dica) =>
+    tester.widget<IconButton>(find.ancestor(of: find.byTooltip(dica), matching: find.byType(IconButton)).first).onPressed != null;
+
 bool habilitado(WidgetTester tester, String texto) => tester
     .widget<ButtonStyleButton>(find.ancestor(of: find.text(texto), matching: find.bySubtype<ButtonStyleButton>()))
     .enabled;
@@ -149,8 +153,9 @@ void main() {
       (tester) async {
     final amb = ambiente(estado: 'paused');
     await abrirSecaoAnimada(tester, amb, 'Painel');
-    for (final b in ['Home tudo', 'Home XY', 'Home Z']) {
-      expect(habilitado(tester, b), isFalse, reason: b);
+    expect(habilitado(tester, 'Home tudo'), isFalse);
+    for (final b in ['Home XY', 'Home Z']) {
+      expect(iconeHabilitado(tester, b), isFalse, reason: b);
     }
     expect(find.textContaining('perdem a posição da peça'), findsOneWidget);
     await tester.tap(find.byTooltip('X+'));
@@ -169,7 +174,7 @@ void main() {
     await abrirSecaoAnimada(tester, amb, 'Painel');
     expect(find.text('Pause a impressão para mover os eixos'), findsOneWidget);
     for (final b in ['Home XY', 'Home Z']) {
-      expect(habilitado(tester, b), isFalse, reason: b);
+      expect(iconeHabilitado(tester, b), isFalse, reason: b);
     }
     expect(habilitado(tester, 'Aplicar'), isTrue, reason: 'temperaturas seguem');
     await tester.tap(find.text('Controle'));
@@ -204,9 +209,13 @@ void main() {
     for (var i = 1; i < ordem.length; i++) {
       expect(y(ordem[i - 1]), lessThan(y(ordem[i])), reason: '${ordem[i - 1]} antes de ${ordem[i]}');
     }
-    for (final t in ['0,1', '1', '10', '100']) {
+    for (final t in ['0,1', '1', '5', '10', '25', '50']) {
       expect(find.text(t), findsWidgets, reason: 'passo $t');
     }
+    expect(find.text('100'), findsNothing);
+    // XY e Z lado a lado: a coluna Z fica à direita da cruz, na mesma altura.
+    expect(tester.getCenter(find.byTooltip('Z+')).dx, greaterThan(tester.getCenter(find.byTooltip('X+')).dx));
+    expect(tester.getTopLeft(find.byTooltip('Z+')).dy, lessThan(tester.getTopLeft(find.byTooltip('Y−')).dy));
     await irPara(tester, 'Controle');
     expect(find.text('Home tudo'), findsNothing);
     expect(find.byTooltip('X+'), findsNothing);

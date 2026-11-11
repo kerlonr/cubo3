@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../api/modelos.dart';
 import '../../widgets/estado_tela.dart';
+import '../casca.dart';
 import 'clientes_tela.dart';
 import 'pedido_tela.dart';
 import 'venda_rapida_tela.dart';
@@ -22,12 +23,8 @@ class VendasAba extends StatefulWidget {
 
 class _VendasAbaState extends State<VendasAba> {
   String _filtro = 'Entregues';
-  int _versao = 0;
-
-  Future<void> _abrir(Widget tela) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => tela));
-    setState(() => _versao++);
-  }
+  // Na volta, todas as telas recarregam (o Início mostra a venda nova).
+  Future<void> _abrir(Widget tela) => abrirTela(context, tela);
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +49,6 @@ class _VendasAbaState extends State<VendasAba> {
         ),
         Expanded(
           child: EstadoTela<List>(
-            key: ValueKey(_versao),
             carregar: () => buscar(context, '/api/pedidos'),
             construir: (context, l) {
               final status = _filtros[_filtro]!;

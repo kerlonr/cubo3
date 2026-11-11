@@ -192,4 +192,12 @@ void main() {
     expect(find.text('Venda registrada'), findsNothing);
     expect(find.text('Registrar venda'), findsOneWidget, reason: 'a tela continua aberta para corrigir');
   });
+
+  test('pedido tem 3 etapas; antigos em Aprovado/Pronto continuam andando', () {
+    expect(proximasEtapas('orcamento'), ['produzindo', 'entregue']);
+    expect(proximasEtapas('aprovado'), ['produzindo', 'entregue']);
+    expect(proximasEtapas('pronto'), ['entregue']);
+    expect(proximasEtapas('entregue'), isEmpty);
+    expect(proximasEtapas('cancelado'), isEmpty);
+  });
 }

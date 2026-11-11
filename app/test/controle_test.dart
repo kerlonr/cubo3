@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert' show jsonDecode, utf8;
 
 import 'package:cubo3/telas/catalogo/modelo_tela.dart';
-import 'package:cubo3/telas/inicio/inicio_aba.dart';
 import 'package:cubo3/telas/impressoes/impressora_tela.dart';
 import 'package:cubo3/widgets/camera_mjpeg.dart';
 import 'package:flutter/material.dart';
@@ -181,17 +180,6 @@ void main() {
       {'acao': 'temperatura', 'alvo': 'bico', 'valor': 0},
       {'acao': 'temperatura', 'alvo': 'mesa', 'valor': 0},
     ]);
-  });
-
-  testWidgets('tocar no cartão ao vivo do Início abre a tela da impressora', (tester) async {
-    final amb = ambiente()..rotas['GET /api/impressoras'] = (_) => [impressora];
-    await amb.preparar();
-    await tamanhoTela(tester, 500, 2400);
-    await tester.pumpWidget(amb.tela(const InicioAba()));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Ender'));
-    await tester.pumpAndSettle();
-    expect(find.text('Parada de emergência'), findsOneWidget);
   });
 
   testWidgets('sem conexão: comandos desabilitados com aviso e nada vai para a fila', (tester) async {

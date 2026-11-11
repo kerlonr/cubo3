@@ -56,6 +56,11 @@ def calcular(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dic
         Pedido.empresa_id == empresa_id, Pedido.status == "entregue", Pedido.excluido.is_(False),
         Pedido.entregue_em >= a, Pedido.entregue_em < b)) or 0
 
+    # Desde sempre até o fim do período: quanto já foi investido e quanto voltou.
+    tudo = _entradas_saidas(db, empresa_id, date(2000, 1, 1), fim, tz)
+    investido = sum((g for _, _, g in tudo), D(0))
+    recebido = sum((r for _, r, _ in tudo), D(0))
+
     ano_inicio = _menos_meses(fim, 11)
     por_mes = {_mes(_menos_meses(fim, n)): [D(0), D(0)] for n in range(11, -1, -1)}
     for dia, r, g in _entradas_saidas(db, empresa_id, ano_inicio, fim, tz):
@@ -81,6 +86,7 @@ def calcular(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dic
         "inicio": inicio.isoformat(), "fim": fim.isoformat(),
         "receita": float(r2(receita)), "gastos": float(r2(gastos)), "resultado": float(r2(receita - gastos)),
         "lucro_vendas": float(r2(D(lucro))),
+        "investido": float(r2(investido)), "recebido": float(r2(recebido)),
         "por_mes": [{"mes": m, "receita": float(r2(r)), "gastos": float(r2(g))} for m, (r, g) in por_mes.items()],
         "mais_vendidos": [{"modelo_id": str(i), "nome": n, "qtd": float(q)} for i, n, q in top],
         "a_confirmar": a_confirmar,

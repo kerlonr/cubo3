@@ -17,7 +17,7 @@ void main() {
     expect(find.text('E-mail ou senha incorretos'), findsOneWidget);
   });
 
-  testWidgets('login ok com uma empresa abre a casca com as 5 abas', (tester) async {
+  testWidgets('login ok com uma empresa abre a casca com as 4 abas', (tester) async {
     final amb = Ambiente({'POST /api/auth/login': (_) => {'acesso': 'A', 'refresh': 'R', 'trocar_senha': false}});
     await amb.preparar(logado: false);
     await tamanhoTela(tester, 400);
@@ -29,9 +29,10 @@ void main() {
     expect(amb.sessao.estado, EstadoSessao.pronta);
     final barra = find.byType(NavigationBar);
     expect(barra, findsOneWidget);
-    for (final aba in ['Início', 'Impressora', 'Catálogo', 'Estoque', 'Vendas']) {
+    for (final aba in ['Início', 'Impressora', 'Catálogo', 'Vendas']) {
       expect(find.descendant(of: barra, matching: find.text(aba)), findsOneWidget);
     }
+    expect(find.descendant(of: barra, matching: find.text('Estoque')), findsNothing);
   });
 
   testWidgets('médio (600–839) e expandido usam trilho lateral; compacto (< 600) usa barra inferior', (tester) async {
@@ -59,7 +60,7 @@ void main() {
     ]);
   });
 
-  testWidgets('"+" mostra as 4 ações rápidas', (tester) async {
+  testWidgets('"+" mostra Orçar peça, Novo pedido e Novo modelo', (tester) async {
     final amb = Ambiente({});
     await amb.preparar();
     await tamanhoTela(tester, 400);
@@ -67,7 +68,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
-    for (final acao in ['Venda rápida', 'Lançar impressão', 'Novo carretel', 'Orçar peça']) {
+    for (final acao in ['Orçar peça', 'Novo pedido', 'Novo modelo']) {
       expect(find.descendant(of: find.byType(BottomSheet), matching: find.text(acao)), findsOneWidget);
     }
   });

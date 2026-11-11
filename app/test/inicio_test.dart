@@ -1,8 +1,6 @@
 import 'package:cubo3/tema.dart';
 import 'package:cubo3/telas/inicio/inicio_aba.dart';
-import 'package:cubo3/telas/mais/calculadora_tela.dart';
 import 'package:cubo3/telas/mais/empresa_tela.dart';
-import 'package:cubo3/widgets/cartoes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,52 +26,29 @@ Map<String, Object?> painel({required double resultado}) => {
     };
 
 void main() {
-  testWidgets('resultado negativo do painel aparece em vermelho; estoque baixo pede reposição', (tester) async {
-    final amb = Ambiente({'GET /api/painel': (_) => painel(resultado: -42.5)});
+  testWidgets('lucro do mês negativo em vermelho; investimento diz quanto falta para se pagar', (tester) async {
+    final amb = Ambiente({'GET /api/painel': (_) => {...painel(resultado: -42.5), 'investido': 1700, 'recebido': 200}});
     await amb.preparar();
-    await tamanhoTela(tester, 500, 2400);
+    await tamanhoTela(tester, 400, 2000);
     await tester.pumpWidget(amb.tela(const InicioAba()));
     await tester.pumpAndSettle();
-    final cartao = tester.widget<CartaoValor>(find.widgetWithText(CartaoValor, 'Resultado'));
-    expect(cartao.cor, vermelho);
-    expect(cartao.valor, '-R\$ 42,50');
-    expect(find.text('Repor'), findsOneWidget);
+    final lucro = tester.widget<Text>(find.byKey(const Key('lucro_mes')));
+    expect(lucro.data, '-R\$ 42,50');
+    expect(lucro.style!.color, vermelho);
+    expect(find.text('Faltam R\$ 1.500,00 para se pagar'), findsOneWidget);
     expect(find.text('A confirmar (2)'), findsOneWidget);
+    expect(find.text('Orçar peça'), findsOneWidget);
     final q = amb.ultimo('GET /api/painel')!.url.queryParameters;
     expect(q['inicio'], endsWith('-01'));
   });
 
-  testWidgets('calculadora sem rede usa o cache: 6,32 e 7,90 / 9,03 / 12,64; canal inviável', (tester) async {
-    final amb = Ambiente({
-      'GET /api/filamentos': (_) => [
-            {'id': 'f1', 'marca': 'Voolt', 'material': 'PLA', 'cor_nome': 'Branco', 'cor_hex': '#FFFFFF', 'preco_kg': 100}
-          ],
-      'GET /api/empresa/config': (_) =>
-          {'eficiencia': 1.1, 'mao_obra_hora': 10, 'kwh': 0.656, 'reserva': 1.3, 'margens': [20, 30, 50]},
-      'GET /api/canais': (_) => [
-            {'id': 'c1', 'nome': 'Direto', 'taxa_pct': 0, 'taxa_fixa': 0},
-            {'id': 'c2', 'nome': 'Caro', 'taxa_pct': 80, 'taxa_fixa': 0},
-          ],
-    });
+  testWidgets('investimento já pago mostra o que sobrou', (tester) async {
+    final amb = Ambiente({'GET /api/painel': (_) => {...painel(resultado: 10), 'investido': 100, 'recebido': 130.5}});
     await amb.preparar();
-    await tamanhoTela(tester, 500, 2400);
-    await tester.pumpWidget(amb.tela(const CalculadoraTela()));
+    await tamanhoTela(tester, 400, 2000);
+    await tester.pumpWidget(amb.tela(const InicioAba()));
     await tester.pumpAndSettle();
-
-    amb.online = false;
-    await tester.pumpWidget(amb.tela(const SizedBox()));
-    await tester.pumpWidget(amb.tela(const CalculadoraTela()));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Sem conexão'), findsOneWidget);
-    await tester.enterText(find.byKey(const Key('gramas0')), '33');
-    await tester.enterText(find.byKey(const Key('horas')), '3');
-    await tester.enterText(find.byKey(const Key('mao_obra')), '10');
-    await tester.pumpAndSettle();
-    expect(find.text('R\$ 6,32'), findsWidgets);
-    for (final p in ['R\$ 7,90', 'R\$ 9,03', 'R\$ 12,64']) {
-      expect(find.text(p), findsWidgets);
-    }
-    expect(find.text('inviável'), findsOneWidget);
+    expect(find.text('Já se pagou e sobrou R\$ 30,50'), findsOneWidget);
   });
 
   testWidgets('membro não vê "Adicionar usuário"; dono vê', (tester) async {

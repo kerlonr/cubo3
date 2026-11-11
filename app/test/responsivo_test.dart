@@ -12,6 +12,8 @@ import 'package:cubo3/telas/impressoes/confirmar_tela.dart';
 import 'package:cubo3/telas/mais/configuracoes_tela.dart';
 import 'package:cubo3/telas/mais/empresa_tela.dart';
 import 'package:cubo3/telas/mais/impressoras_tela.dart';
+import 'package:cubo3/telas/estoque/estoque_aba.dart';
+import 'package:cubo3/telas/orcar/orcar_tela.dart';
 import 'package:cubo3/telas/vendas/venda_rapida_tela.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -210,10 +212,15 @@ const abas = {
   'impressora_console': 1,
   'impressora_historico': 1,
   'catalogo': 2,
-  'estoque': 3,
-  'vendas': 4,
+  'vendas': 3,
 };
 final telas = <String, Widget Function()>{
+  'estoque': () => const EstoqueAba(),
+  'orcar': () => const OrcarTela(inicial: {
+        'itens': [
+          {'nome': longo, 'gramas': '1234,5', 'tempo': '12h30', 'qtd': 12}
+        ]
+      }),
   'modelo': () => const ModeloTela(id: 'm1'),
   'venda_rapida': () => const VendaRapidaTela(itensIniciais: [
         {'descricao': longo, 'preco_unitario': grande, 'modelo_id': 'm1'}
