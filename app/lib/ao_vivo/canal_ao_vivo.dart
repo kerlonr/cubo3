@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../api/api.dart';
@@ -28,15 +29,13 @@ class EstadoImpressora {
   bool get imprimindo => estado == 'printing' || estado == 'paused';
 }
 
-/// "Imprimindo vaso.gcode — 45% — faltam 1h12" ou, ociosa, "Cubo³ monitorando".
-String textoProgresso(EstadoImpressora? e) {
-  if (e == null || !e.imprimindo) return 'Cubo³ monitorando';
-  return [
-    '${e.estado == 'paused' ? 'Pausada' : 'Imprimindo'} ${e.arquivo ?? ''}'.trim(),
-    '${((e.progresso ?? 0) * 100).round()}%',
-    if (e.restanteS != null) 'faltam ${duracao(e.restanteS!)}',
-  ].join(' — ');
-}
+/// "choinka_PLA_3h11m.gcode" → "choinka PLA 3h11m".
+String nomePeca(String? arquivo) => (arquivo ?? '')
+    .split('/')
+    .last
+    .replaceAll(RegExp(r'\.gcode$', caseSensitive: false), '')
+    .replaceAll('_', ' ')
+    .trim();
 
 /// "Bico 210° · Mesa 60°" (como o Mobileraker).
 String textoTemperaturas(EstadoImpressora? e) => [
@@ -44,17 +43,57 @@ String textoTemperaturas(EstadoImpressora? e) => [
       if (e?.dados['mesa'] != null) 'Mesa ${num0(e!.dados['mesa']).round()}°',
     ].join(' · ');
 
-/// Barra de progresso em texto para a notificação fixa (10 blocos).
-String barraTexto(double fracao) {
-  final cheios = (fracao.clamp(0, 1) * 10).floor(); // bloco só enche quando a fração é atingida
-  return '${'▰' * cheios}${'▱' * (10 - cheios)}';
+/// O que a notificação fixa mostra: título e linha curtas; [linhas] aparecem ao puxar para baixo.
+class ConteudoNotificacao {
+  const ConteudoNotificacao(
+      {required this.titulo, required this.corpo, this.linhas = const [], this.progresso, this.terminaEm, this.ativa = false});
+  final String titulo, corpo;
+  final List<String> linhas;
+  final double? progresso;
+
+  /// Hora prevista do fim (só imprimindo): vira a contagem regressiva ao vivo da notificação.
+  final DateTime? terminaEm;
+  final bool ativa;
+}
+
+ConteudoNotificacao conteudoNotificacao(EstadoImpressora? e, DateTime agora) {
+  final temps = textoTemperaturas(e);
+  if (e == null || !e.imprimindo) {
+    return ConteudoNotificacao(
+        titulo: 'Cubo³', corpo: ['Nenhuma impressão agora', if (temps.isNotEmpty) temps].join(' · '));
+  }
+  final d = e.dados;
+  final pausada = e.estado == 'paused';
+  final pct = '${((e.progresso ?? 0) * 100).round()}%';
+  final fim = pausada || e.restanteS == null ? null : agora.add(Duration(seconds: e.restanteS!.round()));
+  final hora = fim == null ? null : DateFormat('HH:mm').format(fim);
+  String alvo(String r, String atual, String meta) =>
+      d[atual] == null ? '' : '$r ${num0(d[atual]).round()}${num0(d[meta]) > 0 ? '/${num0(d[meta]).round()}' : ''} °C';
+  final linhas = [
+    [pct, if (d['camada'] != null) 'camada ${d['camada']}${d['camadas'] != null ? ' de ${d['camadas']}' : ''}'].join(' · '),
+    if (hora != null) 'Termina às $hora (faltam ${duracao(e.restanteS!)})',
+    if (pausada) 'Pausada: toque para abrir a impressora',
+    [alvo('Bico', 'bico', 'bico_alvo'), alvo('Mesa', 'mesa', 'mesa_alvo')].where((x) => x.isNotEmpty).join(' · '),
+    [
+      if (d['velocidade_pct'] != null) 'Velocidade ${num0(d['velocidade_pct']).round()}%',
+      if (d['ventoinha_pct'] != null) 'Ventoinha ${num0(d['ventoinha_pct']).round()}%',
+    ].join(' · '),
+  ].where((x) => x.isNotEmpty).toList();
+  return ConteudoNotificacao(
+    titulo: '${pausada ? 'Pausada' : 'Imprimindo'} · ${nomePeca(e.arquivo)}',
+    corpo: [pct, if (hora != null) 'termina às $hora' else if (temps.isNotEmpty) temps].join(' · '),
+    linhas: linhas,
+    progresso: e.progresso,
+    terminaEm: fim,
+    ativa: true,
+  );
 }
 
 /// Alerta de fim de impressão.
 ({String titulo, String corpo}) alertaFim(Map evento) {
-  final arquivo = '${evento['arquivo'] ?? ''}';
-  if (evento['situacao'] == 'completed') return (titulo: 'Impressão terminou: $arquivo', corpo: 'Toque para confirmar');
-  return (titulo: 'Impressão parou', corpo: '$arquivo — toque para registrar');
+  final nome = nomePeca('${evento['arquivo'] ?? ''}');
+  if (evento['situacao'] == 'completed') return (titulo: 'Terminou: $nome', corpo: 'Toque para confirmar os gramas');
+  return (titulo: 'Parou: $nome', corpo: 'A impressão não terminou. Toque para registrar');
 }
 
 /// WebSocket `/api/ao-vivo` da empresa: estado das impressoras e fim de impressão.

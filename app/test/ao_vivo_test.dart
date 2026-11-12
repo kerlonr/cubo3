@@ -10,24 +10,51 @@ import 'package:http/testing.dart';
 EstadoImpressora estado(Map<String, Object?> d) => EstadoImpressora(d);
 
 void main() {
-  test('texto da notificação fixa', () {
-    expect(
-      textoProgresso(estado({'estado': 'printing', 'arquivo': 'vaso.gcode', 'progresso': 0.45, 'restante_s': 4320})),
-      'Imprimindo vaso.gcode — 45% — faltam 1h12',
-    );
-    expect(textoProgresso(estado({'estado': 'standby'})), 'Cubo³ monitorando');
-    expect(textoProgresso(null), 'Cubo³ monitorando');
-    expect(textoTemperaturas(estado({'bico': 209.6, 'mesa': 60.2})), 'Bico 210° · Mesa 60°');
-    expect(barraTexto(0.45), '▰▰▰▰▱▱▱▱▱▱');
+  test('notificação imprimindo: título com a peça, % e hora do fim; puxando para baixo vêm camada e temperaturas', () {
+    final c = conteudoNotificacao(
+        estado({
+          'estado': 'printing',
+          'arquivo': 'pecas/choinka_PLA_3h11m.gcode',
+          'progresso': 0.45,
+          'restante_s': 4320,
+          'camada': 34,
+          'camadas': 120,
+          'bico': 209.6,
+          'bico_alvo': 210,
+          'mesa': 60.2,
+          'mesa_alvo': 60,
+          'velocidade_pct': 100,
+          'ventoinha_pct': 80,
+        }),
+        DateTime(2026, 11, 11, 13, 0));
+    expect(c.titulo, 'Imprimindo · choinka PLA 3h11m');
+    expect(c.corpo, '45% · termina às 14:12');
+    expect(c.linhas, [
+      '45% · camada 34 de 120',
+      'Termina às 14:12 (faltam 1h12)',
+      'Bico 210/210 °C · Mesa 60/60 °C',
+      'Velocidade 100% · Ventoinha 80%',
+    ]);
+    expect(c.terminaEm, DateTime(2026, 11, 11, 14, 12));
+    expect(c.progresso, 0.45);
   });
 
-  test('fim de impressão: concluída pede confirmação; cancelada avisa que parou', () {
+  test('notificação pausada não conta o tempo; parada mostra só as temperaturas', () {
+    final p = conteudoNotificacao(estado({'estado': 'paused', 'arquivo': 'vaso.gcode', 'progresso': 0.5}), DateTime(2026));
+    expect(p.titulo, 'Pausada · vaso');
+    expect(p.terminaEm, isNull);
+    expect(p.linhas, contains('Pausada: toque para abrir a impressora'));
+    final parada = conteudoNotificacao(estado({'estado': 'standby', 'bico': 24.4, 'mesa': 23}), DateTime(2026));
+    expect((parada.titulo, parada.corpo, parada.ativa), ('Cubo³', 'Nenhuma impressão agora · Bico 24° · Mesa 23°', false));
+    expect(conteudoNotificacao(null, DateTime(2026)).corpo, 'Nenhuma impressão agora');
+  });
+
+  test('fim de impressão: concluída pede os gramas; cancelada avisa que parou', () {
     final ok = alertaFim({'tipo': 'impressao_terminou', 'impressao_id': 'i1', 'arquivo': 'vaso.gcode', 'situacao': 'completed'});
-    expect(ok.titulo, 'Impressão terminou: vaso.gcode');
-    expect(ok.corpo, 'Toque para confirmar');
+    expect(ok.titulo, 'Terminou: vaso');
+    expect(ok.corpo, 'Toque para confirmar os gramas');
     final parou = alertaFim({'tipo': 'impressao_terminou', 'impressao_id': 'i1', 'arquivo': 'vaso.gcode', 'situacao': 'cancelled'});
-    expect(parou.titulo, 'Impressão parou');
-    expect(parou.corpo, contains('vaso.gcode'));
+    expect(parou.titulo, 'Parou: vaso');
   });
 
   test('CanalAoVivo atualiza estados e reconecta depois de uma queda', () async {

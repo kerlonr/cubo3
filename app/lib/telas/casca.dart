@@ -21,6 +21,9 @@ import 'vendas/venda_rapida_tela.dart';
 import 'vendas/vendas_aba.dart';
 
 /// Navegação principal: 4 abas + "+" global. Compacto (< 600 dp): barra inferior; médio e expandido: trilho lateral.
+/// Aba pedida de fora da árvore (toque na notificação). A casca vai para ela e limpa o pedido.
+final abaPedida = ValueNotifier<int?>(null);
+
 class Casca extends StatefulWidget {
   const Casca({super.key});
 
@@ -39,11 +42,14 @@ class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
     super.initState();
     _troca = AnimationController(vsync: this, duration: const Duration(milliseconds: 280), value: 1);
     _eventos = context.read<CanalAoVivo>().eventos.listen(_aoEvento);
+    abaPedida.addListener(_irParaPedida);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _irParaPedida()); // pedido feito antes da casca existir
   }
 
   @override
   void dispose() {
     _troca.dispose();
+    abaPedida.removeListener(_irParaPedida);
     _eventos?.cancel();
     super.dispose();
   }
@@ -75,6 +81,13 @@ class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
   ];
 
   late final AnimationController _troca;
+
+  void _irParaPedida() {
+    final i = abaPedida.value;
+    if (i == null || !mounted) return;
+    abaPedida.value = null;
+    irPara(i);
+  }
 
   void irPara(int i) {
     if (i == aba) return;

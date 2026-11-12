@@ -39,6 +39,13 @@ void abrirConfirmacao(String impressaoId) {
   nav.push(MaterialPageRoute(builder: (_) => ConfirmarTela(impressaoId: impressaoId)));
 }
 
+/// Toque em notificação: a de progresso ("impressora") abre a aba Impressora; o alerta de fim abre a confirmação.
+void abrirNotificacao(String payload) {
+  if (payload != 'impressora') return abrirConfirmacao(payload);
+  navegador.currentState?.popUntil((r) => r.isFirst);
+  abaPedida.value = 1;
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('pt_BR');
@@ -46,7 +53,7 @@ Future<void> main() async {
   final api = ApiCliente(http.Client(), baseInicial(prefs.getString(chaveServidor)), ArmazemSeguro());
   final sessao = Sessao(api, prefs);
   final fila = FilaOffline(api, prefs)..iniciarTentativas();
-  await prepararNotificacoes(abrirConfirmacao);
+  await prepararNotificacoes(abrirNotificacao);
   runApp(AppCubo3(api: api, sessao: sessao, fila: fila, cache: CacheLeitura(prefs), canal: CanalAoVivo(api)));
   await sessao.restaurar();
 }

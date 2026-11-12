@@ -41,6 +41,10 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Acompanhar impressoras 3D" />
         </service>
+        <!-- Ícone minimalista da notificação do monitor (flutter_foreground_task lê por este nome). -->
+        <meta-data
+            android:name="cubo3.NOTIFICACAO_ICONE"
+            android:resource="@drawable/ic_stat_cubo3" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

@@ -85,7 +85,9 @@ def mesclar_estado(estado: dict, status: dict) -> dict:
             "eixos_home": th.get("homed_axes", ""),
             "velocidade_pct": _pct(gm.get("speed_factor")), "fluxo_pct": _pct(gm.get("extrude_factor")),
             "z_offset": (gm.get("homing_origin") or [None] * 3)[2], "ventoinha_pct": _pct(fan.get("speed")),
-            "mensagem": ds.get("message")}
+            "mensagem": ds.get("message"),
+            # Só vem quando o fatiador manda SET_PRINT_STATS_INFO (Orca/Bambu Studio mandam).
+            "camada": (ps.get("info") or {}).get("current_layer"), "camadas": (ps.get("info") or {}).get("total_layer")}
 
 
 def publico(estado: dict | None) -> dict | None:

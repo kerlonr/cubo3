@@ -1,3 +1,5 @@
+import 'package:cubo3/telas/casca.dart';
+import 'package:cubo3/main.dart';
 import 'package:cubo3/api/sessao.dart';
 import 'package:cubo3/widgets/adaptativo.dart';
 import 'package:flutter/material.dart';
@@ -91,5 +93,17 @@ void main() {
     expect(amb.ultimo('POST /api/impressoras/i1/camera/link'), isNotNull);
     expect(find.text('Sem câmera'), findsOneWidget);
     expect(find.text('Parada de emergência'), findsOneWidget);
+  });
+
+  testWidgets('tocar na notificação de progresso abre a aba Impressora', (tester) async {
+    final amb = Ambiente({});
+    await amb.preparar();
+    await tamanhoTela(tester, 400);
+    await tester.pumpWidget(amb.app());
+    await tester.pumpAndSettle();
+    abrirNotificacao('impressora');
+    await tester.pumpAndSettle();
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 1);
+    expect(abaPedida.value, isNull);
   });
 }

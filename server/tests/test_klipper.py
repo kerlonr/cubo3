@@ -240,3 +240,9 @@ def test_console_ao_vivo(cliente, dono, fabrica, empresa_a_id):
     finally:
         monitores._monitores.pop(uuid.UUID(imp["id"]), None)
     assert len(linhas) == 100 and linhas[0]["texto"] == "// linha 5"
+
+
+def test_mesclar_estado_traz_camada_atual_e_total():
+    e = moonraker.mesclar_estado({}, {"print_stats": {"state": "printing", "info": {"current_layer": 34, "total_layer": 120}}})
+    assert (e["camada"], e["camadas"]) == (34, 120)
+    assert moonraker.mesclar_estado({}, {"print_stats": {"state": "printing"}})["camada"] is None
