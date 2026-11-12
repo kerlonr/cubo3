@@ -35,6 +35,8 @@ void main() {
     await tamanhoTela(tester, 500, 1400);
     await tester.pumpWidget(amb.app());
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Mostrar valores'));
+    await tester.pumpAndSettle();
     expect(find.text('Entrou R\$ 0,00'), findsOneWidget);
 
     await tester.tap(find.text('Vendas'));

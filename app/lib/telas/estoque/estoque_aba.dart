@@ -203,6 +203,7 @@ class _PecasLista extends StatelessWidget {
         return ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
           for (final p in itens)
             Card(
+              margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 title: Text(_nomeModelo(nomes[p['modelo_id']])),
                 trailing: Text(numero(num0(p['saldo'])),
@@ -296,6 +297,7 @@ class _CarreteisTelaState extends State<CarreteisTela> {
             return ListView(padding: const EdgeInsets.all(16), children: [
               for (final c in carreteis)
                 Card(
+                  margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     title: Text(gramas(num0(c['saldo_g'])),
                         style: const TextStyle(fontFeatures: tabular, fontWeight: FontWeight.w600, fontSize: 18)),

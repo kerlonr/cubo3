@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/modelos.dart';
+import '../../dominio/mensagens.dart';
 import '../../tema.dart';
 import '../../util/formatos.dart';
 import '../../widgets/cartoes.dart';
+import '../../widgets/animacoes.dart';
 import '../../widgets/campos.dart';
 import '../../widgets/estado_tela.dart';
 import 'pedido_tela.dart';
 
 /// wa.me precisa do número com DDI; telefone brasileiro sem DDI ganha o 55.
-Uri linkWhatsapp(String telefone) {
+/// [texto] já abre a conversa com a mensagem escrita (o Kerlon só confere e envia).
+Uri linkWhatsapp(String telefone, {String? texto}) {
   final d = telefone.replaceAll(RegExp(r'\D'), '');
-  return Uri.parse('https://wa.me/${d.length <= 11 ? '55$d' : d}');
+  return Uri.https('wa.me', '/${d.length <= 11 ? '55$d' : d}', texto == null ? null : {'text': texto});
 }
 
 class ClientesTela extends StatefulWidget {
@@ -29,6 +32,24 @@ class _ClientesTelaState extends State<ClientesTela> {
   Future<void> _abrir(Widget tela) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => tela));
     setState(() => _versao++);
+  }
+
+  Widget _linha(Json c) {
+    final nome = '${c['nome']}', telefone = '${c['telefone'] ?? ''}';
+    return ListTile(
+      leading: AvatarCliente(nome),
+      title: Text(nome, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(telefone.isNotEmpty ? formatarTelefone(telefone) : '${c['email'] ?? 'Sem contato'}'),
+      trailing: telefone.isEmpty
+          ? const Icon(Icons.chevron_right)
+          : IconButton(
+              tooltip: 'WhatsApp',
+              icon: const Icon(Icons.chat, color: Color(0xFF25D366)),
+              onPressed: () => launchUrl(linkWhatsapp(telefone, texto: mensagemCliente(nome)),
+                  mode: LaunchMode.externalApplication),
+            ),
+      onTap: () => _abrir(ClienteTela(id: c['id'] as String)),
+    );
   }
 
   @override
@@ -63,16 +84,47 @@ class _ClientesTelaState extends State<ClientesTela> {
                 for (final c in lista(l))
                   if ('${c['nome']} ${c['telefone'] ?? ''} ${c['email'] ?? ''}'.toLowerCase().contains(_busca)) c
               ]..sort((a, b) => '${a['nome']}'.toLowerCase().compareTo('${b['nome']}'.toLowerCase()));
-              return ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
-                for (final c in clientes)
-                  Card(
-                    child: ListTile(
-                      title: Text('${c['nome']}'),
-                      subtitle: Text([c['telefone'], c['email']].where((x) => x != null && '$x'.isNotEmpty).join(' · ')),
-                      onTap: () => _abrir(ClienteTela(id: c['id'] as String)),
-                    ),
+              if (clientes.isEmpty) {
+                return ListView(children: [
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text('Ninguém encontrado para "$_busca"', textAlign: TextAlign.center),
                   ),
-              ]);
+                ]);
+              }
+              // Agrupa pela primeira letra (sem acento), como a agenda do celular.
+              final grupos = <String, List<Json>>{};
+              for (final c in clientes) {
+                grupos.putIfAbsent(letraInicial('${c['nome']}'), () => []).add(c);
+              }
+              final t = Theme.of(context);
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
+                    for (final (i, g) in grupos.entries.indexed) ...[
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(6, i == 0 ? 4 : 18, 6, 6),
+                        child: Text(g.key,
+                            style: TextStyle(color: t.colorScheme.primary, fontWeight: FontWeight.w700, fontSize: 13)),
+                      ),
+                      Entrada(
+                        ordem: i,
+                        child: Card(
+                          clipBehavior: Clip.antiAlias,
+                          child: Column(children: [
+                            for (final (j, c) in g.value.indexed) ...[
+                              if (j > 0) const Divider(indent: 72, height: 1),
+                              _linha(c),
+                            ],
+                          ]),
+                        ),
+                      ),
+                    ],
+                  ]),
+                ),
+              );
             },
           ),
         ),
@@ -152,21 +204,25 @@ class _ClienteTelaState extends State<ClienteTela> {
           final telefone = '${c['telefone'] ?? ''}';
           return ListView(padding: const EdgeInsets.all(16), children: [
             Row(children: [
-              Expanded(child: Text('${c['nome']}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600))),
+              AvatarCliente('${c['nome']}', raio: 28),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('${c['nome']}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+                  if (telefone.isNotEmpty) Text(formatarTelefone(telefone)),
+                  if (c['email'] != null) Text('${c['email']}'),
+                ]),
+              ),
               IconButton(
                   tooltip: 'Editar', icon: const Icon(Icons.edit_outlined), onPressed: () => _abrir(ClienteForm(dados: c))),
             ]),
-            if (c['email'] != null) Text('${c['email']}'),
             if (telefone.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.only(top: 12),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: FilledButton.tonalIcon(
-                    onPressed: () => launchUrl(linkWhatsapp(telefone), mode: LaunchMode.externalApplication),
-                    icon: const Icon(Icons.chat_outlined),
-                    label: Text('WhatsApp $telefone'),
-                  ),
+                  child: BotaoWhatsapp(
+                      rotulo: 'Chamar no WhatsApp', telefone: telefone, texto: mensagemCliente('${c['nome']}')),
                 ),
               ),
             if (c['obs'] != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('${c['obs']}')),
@@ -205,4 +261,50 @@ class LinhaPedido extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "Ágata" → "A"; nome vazio ou que não começa com letra → "#".
+String letraInicial(String nome) {
+  final t = nome.trim();
+  if (t.isEmpty) return '#';
+  const sem = {'Á': 'A', 'À': 'A', 'Â': 'A', 'Ã': 'A', 'É': 'E', 'Ê': 'E', 'Í': 'I', 'Ó': 'O', 'Ô': 'O', 'Õ': 'O', 'Ú': 'U', 'Ç': 'C'};
+  final l = t[0].toUpperCase();
+  final base = sem[l] ?? l;
+  return RegExp(r'[A-Z]').hasMatch(base) ? base : '#';
+}
+
+/// Iniciais em um círculo colorido (a cor sai do nome, então cada cliente fica sempre com a mesma).
+class AvatarCliente extends StatelessWidget {
+  const AvatarCliente(this.nome, {super.key, this.raio = 20});
+  final String nome;
+  final double raio;
+
+  static const _cores = [Color(0xFF5E5CE6), Color(0xFF3F8CFF), Color(0xFF8E5CE6), Color(0xFF2BB3A3), Color(0xFFE0703D), Color(0xFFD9488F)];
+
+  @override
+  Widget build(BuildContext context) {
+    final partes = nome.trim().split(RegExp(r'\s+')).where((x) => x.isNotEmpty).toList();
+    final iniciais = partes.isEmpty
+        ? '?'
+        : (partes.first[0] + (partes.length > 1 ? partes.last[0] : '')).toUpperCase();
+    return CircleAvatar(
+      radius: raio,
+      backgroundColor: _cores[nome.codeUnits.fold(0, (s, c) => s + c) % _cores.length],
+      child: Text(iniciais, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: raio * 0.7)),
+    );
+  }
+}
+
+/// Abre o WhatsApp do cliente já com a mensagem escrita.
+class BotaoWhatsapp extends StatelessWidget {
+  const BotaoWhatsapp({super.key, required this.rotulo, required this.telefone, required this.texto});
+  final String rotulo, telefone, texto;
+
+  @override
+  Widget build(BuildContext context) => FilledButton.icon(
+        style: FilledButton.styleFrom(backgroundColor: const Color(0xFF25D366), foregroundColor: Colors.white),
+        onPressed: () => launchUrl(linkWhatsapp(telefone, texto: texto), mode: LaunchMode.externalApplication),
+        icon: const Icon(Icons.chat_outlined),
+        label: Text(rotulo),
+      );
 }

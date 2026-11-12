@@ -30,7 +30,7 @@ def saida_pedido(db: Session, p: Pedido, avisos: list[str] | None = None) -> dic
         m = db.get(Modelo, it.modelo_id) if it.modelo_id else None
         itens.append({**serializar(it), "modelo": {"id": str(m.id), "nome": m.nome, "excluido": m.excluido} if m else None})
     cl = db.get(Cliente, p.cliente_id) if p.cliente_id else None
-    return {**serializar(p), "itens": itens, "cliente": {"id": str(cl.id), "nome": cl.nome} if cl else None,
+    return {**serializar(p), "itens": itens, "cliente": {"id": str(cl.id), "nome": cl.nome, "telefone": cl.telefone} if cl else None,
             "avisos": avisos or []}
 
 

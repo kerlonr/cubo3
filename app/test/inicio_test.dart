@@ -1,3 +1,4 @@
+import 'package:cubo3/telas/vendas/clientes_tela.dart';
 import 'package:cubo3/tema.dart';
 import 'package:cubo3/telas/inicio/inicio_aba.dart';
 import 'package:cubo3/telas/mais/empresa_tela.dart';
@@ -31,6 +32,8 @@ void main() {
     await amb.preparar();
     await tamanhoTela(tester, 400, 2000);
     await tester.pumpWidget(amb.tela(const InicioAba()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Mostrar valores'));
     await tester.pumpAndSettle();
     final lucro = tester.widget<Text>(find.byKey(const Key('lucro_mes')));
     expect(lucro.data, '-R\$ 42,50');
@@ -73,11 +76,30 @@ void main() {
     expect(find.text('Ender'), findsNothing);
   });
 
+  testWidgets('valores começam escondidos; o olho mostra e a escolha fica lembrada', (tester) async {
+    final amb = Ambiente({'GET /api/painel': (_) => {...painel(resultado: 10), 'investido': 100, 'recebido': 50}});
+    await amb.preparar();
+    await tamanhoTela(tester, 400, 2000);
+    await tester.pumpWidget(amb.tela(const InicioAba()));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.byKey(const Key('lucro_mes'))).data, 'R\$ ••••');
+    expect(find.text('Faltam R\$ •••• para se pagar'), findsOneWidget);
+    await tester.tap(find.byTooltip('Mostrar valores'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.byKey(const Key('lucro_mes'))).data, 'R\$ 10,00');
+    await tester.pumpWidget(amb.tela(const SizedBox()));
+    await tester.pumpWidget(amb.tela(const InicioAba()));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Esconder valores'), findsOneWidget, reason: 'lembra a escolha');
+  });
+
   testWidgets('investimento já pago mostra o que sobrou', (tester) async {
     final amb = Ambiente({'GET /api/painel': (_) => {...painel(resultado: 10), 'investido': 100, 'recebido': 130.5}});
     await amb.preparar();
     await tamanhoTela(tester, 400, 2000);
     await tester.pumpWidget(amb.tela(const InicioAba()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Mostrar valores'));
     await tester.pumpAndSettle();
     expect(find.text('Já se pagou e sobrou R\$ 30,50'), findsOneWidget);
   });
@@ -95,5 +117,42 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Adicionar usuário'), esperado, reason: papel);
     }
+  });
+
+  testWidgets('tocar em "Pedidos em aberto" abre Vendas já filtrando os em aberto', (tester) async {
+    final amb = Ambiente({
+      'GET /api/pedidos': (_) => [
+            {'id': 'p1', 'status': 'produzindo', 'itens': []},
+            {'id': 'p2', 'status': 'entregue', 'itens': []},
+          ],
+    });
+    await amb.preparar();
+    await tamanhoTela(tester, 400, 1600);
+    await tester.pumpWidget(amb.app());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pedidos em aberto'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 3);
+    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Em aberto')).selected, isTrue);
+  });
+
+  testWidgets('clientes agrupados pela letra, com telefone formatado e WhatsApp', (tester) async {
+    final amb = Ambiente({
+      'GET /api/clientes': (_) => [
+            {'id': 'c1', 'nome': 'Ágata Lima', 'telefone': '54999998888'},
+            {'id': 'c2', 'nome': 'Bruno', 'email': 'b@x.com'},
+            {'id': 'c3', 'nome': 'Ana'},
+          ],
+    });
+    await amb.preparar();
+    await tamanhoTela(tester, 360, 1400);
+    await tester.pumpWidget(amb.tela(const ClientesTela()));
+    await tester.pumpAndSettle();
+    expect(find.text('A'), findsNWidgets(2), reason: 'cabeçalho da letra + avatar da Ana');
+    expect(find.text('B'), findsWidgets);
+    expect(find.text('(54) 99999-8888'), findsOneWidget);
+    expect(find.text('ÁL'), findsOneWidget, reason: 'iniciais no avatar');
+    expect(find.byTooltip('WhatsApp'), findsOneWidget, reason: 'só quem tem telefone');
+    expect(find.text('Sem contato'), findsOneWidget);
   });
 }

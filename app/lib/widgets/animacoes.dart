@@ -31,8 +31,11 @@ class Entrada extends StatelessWidget {
 
 /// Valor em R$ que desliza até o número novo quando muda.
 class ValorAnimado extends StatelessWidget {
-  const ValorAnimado(this.valor, {super.key, this.estilo, this.chaveTexto});
+  const ValorAnimado(this.valor, {super.key, this.estilo, this.chaveTexto, this.oculto = false});
   final double valor;
+
+  /// Olho fechado: mostra "R$ ••••".
+  final bool oculto;
   final TextStyle? estilo;
 
   /// Chave do Text (os testes leem o valor final por ela).
@@ -44,6 +47,6 @@ class ValorAnimado extends StatelessWidget {
         tween: Tween(begin: 0, end: valor),
         duration: duracaoAnimacao(context, 600),
         curve: Curves.easeOutCubic,
-        builder: (_, v, _) => Text(moeda(v), key: chaveTexto, softWrap: false, style: estilo),
+        builder: (_, v, _) => Text(oculto ? 'R\$ ••••' : moeda(v), key: chaveTexto, softWrap: false, style: estilo),
       );
 }

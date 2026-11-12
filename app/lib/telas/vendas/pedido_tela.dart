@@ -7,6 +7,8 @@ import '../../tema.dart';
 import '../../util/formatos.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
+import '../../dominio/mensagens.dart';
+import 'clientes_tela.dart' show BotaoWhatsapp;
 import 'venda_rapida_tela.dart';
 
 const nomesStatusPedido = {
@@ -127,6 +129,26 @@ class _PedidoTelaState extends State<PedidoTela> {
           ]),
           if (lerData(p['entregue_em'] ?? p['data']) != null)
             Text(dataHora(lerData(p['entregue_em'] ?? p['data'])!)),
+          if ('${mapa(p['cliente'])['telefone'] ?? ''}'.isNotEmpty && status != 'cancelado')
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: BotaoWhatsapp(
+                  rotulo: 'Avisar no WhatsApp',
+                  telefone: '${mapa(p['cliente'])['telefone']}',
+                  texto: mensagemPedido(
+                    nome: '${mapa(p['cliente'])['nome']}',
+                    status: status,
+                    itens: [
+                      for (final it in lista(p['itens']))
+                        '${nomeItem(it)}${num0(it['quantidade']) > 1 ? ' (${numero(num0(it['quantidade']))} un.)' : ''}'
+                    ],
+                    total: totalPedido(p),
+                  ),
+                ),
+              ),
+            ),
           const Secao('Itens'),
           for (final it in lista(p['itens']))
             ListTile(

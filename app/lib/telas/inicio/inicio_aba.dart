@@ -13,6 +13,7 @@ import '../../widgets/logo.dart';
 import '../casca.dart';
 import '../estoque/estoque_aba.dart';
 import '../impressoes/cartao_ao_vivo.dart';
+import '../vendas/vendas_aba.dart';
 
 /// Início: impressão em andamento, o que pede atenção (a confirmar, pedidos, filamento acabando), lucro do mês,
 /// investimento e gráfico. Orçar fica no "+".
@@ -26,6 +27,12 @@ class InicioAba extends StatefulWidget {
 class _InicioAbaState extends State<InicioAba> {
   DateTime _mes = DateTime(DateTime.now().year, DateTime.now().month);
 
+  @override
+  void initState() {
+    super.initState();
+    carregarValoresOcultos();
+  }
+
   void _mudarMes(int delta) => setState(() => _mes = DateTime(_mes.year, _mes.month + delta));
 
   @override
@@ -35,7 +42,10 @@ class _InicioAbaState extends State<InicioAba> {
     return Scaffold(
       appBar: AppBar(
         title: const LogoCubo3(tamanho: 26, comNome: true),
-        actions: [IconButton(tooltip: 'Mais', icon: const Icon(Icons.menu), onPressed: () => abrirMais(context))],
+        actions: [
+          const BotaoOlho(),
+          IconButton(tooltip: 'Mais', icon: const Icon(Icons.menu), onPressed: () => abrirMais(context)),
+        ],
       ),
       body: EstadoTela<Map>(
         key: ValueKey(_mes),
@@ -50,7 +60,10 @@ class _InicioAbaState extends State<InicioAba> {
           return RespostaCache({...mapa(painel.dados), 'impressoras': impressoras, 'pedidos': pedidos}, painel.deCache,
               painel.quando);
         },
-        construir: (context, p) => _corpo(p, nomeMes[0].toUpperCase() + nomeMes.substring(1)),
+        construir: (context, p) => ValueListenableBuilder<bool>(
+          valueListenable: valoresOcultos,
+          builder: (_, oculto, _) => _corpo(p, nomeMes[0].toUpperCase() + nomeMes.substring(1), oculto),
+        ),
       ),
     );
   }
@@ -77,7 +90,7 @@ class _InicioAbaState extends State<InicioAba> {
     ];
   }
 
-  Widget _corpo(Map p, String nomeMes) {
+  Widget _corpo(Map p, String nomeMes, bool oculto) {
     final t = Theme.of(context);
     final semMovimento = lista(p['por_mes']).every((m) => num0(m['receita']) == 0 && num0(m['gastos']) == 0);
     return Align(
@@ -109,15 +122,15 @@ class _InicioAbaState extends State<InicioAba> {
             Expanded(child: Text(nomeMes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600))),
             IconButton(tooltip: 'Próximo mês', onPressed: () => _mudarMes(1), icon: const Icon(Icons.chevron_right)),
           ]),
-          Entrada(ordem: 1, child: CartaoLucro(entrou: num0(p['receita']), saiu: num0(p['gastos']))),
+          Entrada(ordem: 1, child: CartaoLucro(entrou: num0(p['receita']), saiu: num0(p['gastos']), oculto: oculto)),
           const SizedBox(height: 8),
-          Entrada(ordem: 2, child: CartaoInvestimento(investido: num0(p['investido']), recebido: num0(p['recebido']))),
+          Entrada(ordem: 2, child: CartaoInvestimento(investido: num0(p['investido']), recebido: num0(p['recebido']), oculto: oculto)),
           ..._filamentoAcabando(lista(p['estoque_baixo'])),
           const Secao('Receita × gastos (12 meses)'),
           if (semMovimento)
             Text('Sem vendas nem gastos ainda', style: TextStyle(color: t.colorScheme.onSurfaceVariant))
           else ...[
-            Entrada(ordem: 4, child: SizedBox(height: 200, child: GraficoMeses(lista(p['por_mes'])))),
+            Entrada(ordem: 4, child: SizedBox(height: 200, child: GraficoMeses(lista(p['por_mes']), oculto: oculto))),
             const SizedBox(height: 8),
             Text('Toque e segure um mês no gráfico para ver os valores.',
                 style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
@@ -143,15 +156,19 @@ Widget? _pedidosAbertosDe(BuildContext context, List pedidos) {
         if (orcamentos > 0) '$orcamentos ${orcamentos == 1 ? 'orçamento' : 'orçamentos'}',
       ].join(' · ')),
       trailing: const Icon(Icons.chevron_right),
-      onTap: () => context.findAncestorStateOfType<CascaState>()?.irPara(3),
+      onTap: () {
+        filtroVendasPedido.value = 'Em aberto';
+        context.findAncestorStateOfType<CascaState>()?.irPara(3);
+      },
     ),
   );
 }
 
 /// Lucro do mês = o que entrou − o que saiu, com os dois valores embaixo.
 class CartaoLucro extends StatelessWidget {
-  const CartaoLucro({super.key, required this.entrou, required this.saiu});
+  const CartaoLucro({super.key, required this.entrou, required this.saiu, this.oculto = false});
   final double entrou, saiu;
+  final bool oculto;
 
   @override
   Widget build(BuildContext context) {
@@ -168,14 +185,15 @@ class CartaoLucro extends StatelessWidget {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: ValorAnimado(lucro,
+                oculto: oculto,
                 chaveTexto: const Key('lucro_mes'),
                 estilo: TextStyle(
                     fontSize: 34, fontWeight: FontWeight.w700, color: corResultado(lucro), fontFeatures: tabular, letterSpacing: -1)),
           ),
           const SizedBox(height: 8),
           Wrap(spacing: 16, runSpacing: 4, children: [
-            Text('Entrou ${moeda(entrou)}', style: fraco),
-            Text('Saiu ${moeda(saiu)}', style: fraco),
+            Text('Entrou ${oculto ? mascaraValor : moeda(entrou)}', style: fraco),
+            Text('Saiu ${oculto ? mascaraValor : moeda(saiu)}', style: fraco),
           ]),
         ]),
       ),
@@ -185,13 +203,15 @@ class CartaoLucro extends StatelessWidget {
 
 /// Tudo que já saiu (filamento, equipamento, despesas) contra tudo que já entrou com vendas.
 class CartaoInvestimento extends StatelessWidget {
-  const CartaoInvestimento({super.key, required this.investido, required this.recebido});
+  const CartaoInvestimento({super.key, required this.investido, required this.recebido, this.oculto = false});
   final double investido, recebido;
+  final bool oculto;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final falta = arred2(investido - recebido);
+    String m(double v) => oculto ? mascaraValor : moeda(v);
     final fraco = TextStyle(fontSize: 13, color: t.colorScheme.onSurfaceVariant, fontFeatures: tabular);
     return Card(
       child: Padding(
@@ -203,8 +223,8 @@ class CartaoInvestimento extends StatelessWidget {
             investido == 0
                 ? 'Nada investido ainda'
                 : falta > 0
-                    ? 'Faltam ${moeda(falta)} para se pagar'
-                    : 'Já se pagou e sobrou ${moeda(-falta)}',
+                    ? 'Faltam ${m(falta)} para se pagar'
+                    : 'Já se pagou e sobrou ${m(-falta)}',
             key: const Key('investimento'),
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: falta > 0 || investido == 0 ? null : verde),
           ),
@@ -221,8 +241,8 @@ class CartaoInvestimento extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Wrap(spacing: 16, runSpacing: 4, children: [
-            Text('Investido ${moeda(investido)}', style: fraco),
-            Text('Voltou ${moeda(recebido)}', style: fraco),
+            Text('Investido ${m(investido)}', style: fraco),
+            Text('Voltou ${m(recebido)}', style: fraco),
           ]),
         ]),
       ),
@@ -231,8 +251,9 @@ class CartaoInvestimento extends StatelessWidget {
 }
 
 class GraficoMeses extends StatelessWidget {
-  const GraficoMeses(this.meses, {super.key});
+  const GraficoMeses(this.meses, {super.key, this.oculto = false});
   final List<Json> meses;
+  final bool oculto;
 
   @override
   Widget build(BuildContext context) {
@@ -259,6 +280,7 @@ class GraficoMeses extends StatelessWidget {
         ),
       ),
       barTouchData: BarTouchData(
+        enabled: !oculto,
         touchTooltipData: BarTouchTooltipData(
           getTooltipItem: (g, _, rod, i) =>
               BarTooltipItem('${i == 0 ? 'Receita' : 'Gastos'}\n${moeda(rod.toY)}', const TextStyle(color: Colors.white, fontSize: 12)),

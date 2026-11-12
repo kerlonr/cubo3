@@ -131,3 +131,14 @@ def test_cliente_de_outra_empresa_404(cliente, dono, outro):
     cliente.put(f"/api/clientes/{cl}", headers=dono, json={"nome": "Ana"})
     assert venda(cliente, outro, [item(m["id"])], cliente_id=cl).status_code == 404
     assert cliente.get(f"/api/clientes/{cl}/historico", headers=outro).status_code == 404
+
+
+def test_pedido_traz_telefone_do_cliente_para_o_whatsapp(cliente, dono):
+    import uuid as _uuid
+    cid = str(_uuid.uuid4())
+    assert cliente.put(f"/api/clientes/{cid}", headers=dono, json={"nome": "Ana", "telefone": "54999998888"}).status_code == 200
+    pid = str(_uuid.uuid4())
+    r = cliente.put(f"/api/pedidos/{pid}", headers=dono, json={"cliente_id": cid, "status": "orcamento", "itens": [
+        {"id": str(_uuid.uuid4()), "descricao": "Vaso", "quantidade": 1, "preco_unitario": 30}]})
+    assert r.status_code == 200, r.text
+    assert r.json()["cliente"] == {"id": cid, "nome": "Ana", "telefone": "54999998888"}

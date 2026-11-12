@@ -48,6 +48,7 @@ class _ImpressorasTelaState extends State<ImpressorasTela> {
         construir: (context, l) => ListView(padding: const EdgeInsets.all(16), children: [
           for (final i in lista(l))
             Card(
+              margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 title: Text('${i['nome']}'),
                 subtitle: Text([custoHora(num0(i['custo_hora'])), if ((i['moonraker_url'] ?? '') != '') '${i['moonraker_url']}']
@@ -252,6 +253,7 @@ class _HistoricoImpressoraTelaState extends State<HistoricoImpressoraTela> {
         construir: (context, l) => ListView(padding: const EdgeInsets.all(16), children: [
           for (final j in lista(l))
             Card(
+              margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 title: Text('${j['arquivo']}', overflow: TextOverflow.ellipsis),
                 subtitle: Text([

@@ -9,11 +9,15 @@ import 'pedido_tela.dart';
 import 'venda_rapida_tela.dart';
 
 const _filtros = {
+  'Em aberto': {'orcamento', 'aprovado', 'produzindo', 'pronto'},
   'Orçamentos': {'orcamento'},
   'Em andamento': {'aprovado', 'produzindo', 'pronto'},
   'Entregues': {'entregue'},
   'Todos': <String>{},
 };
+
+/// Filtro pedido de fora (Início → "Pedidos em aberto"). A aba aplica e limpa.
+final filtroVendasPedido = ValueNotifier<String?>(null);
 
 class VendasAba extends StatefulWidget {
   const VendasAba({super.key});
@@ -24,6 +28,25 @@ class VendasAba extends StatefulWidget {
 
 class _VendasAbaState extends State<VendasAba> {
   String _filtro = 'Entregues';
+
+  @override
+  void initState() {
+    super.initState();
+    filtroVendasPedido.addListener(_aplicarFiltroPedido); // a aba já existe desde a abertura do app (IndexedStack)
+  }
+
+  @override
+  void dispose() {
+    filtroVendasPedido.removeListener(_aplicarFiltroPedido);
+    super.dispose();
+  }
+
+  void _aplicarFiltroPedido() {
+    final f = filtroVendasPedido.value;
+    if (f == null || !_filtros.containsKey(f)) return;
+    filtroVendasPedido.value = null;
+    if (mounted) setState(() => _filtro = f);
+  }
   // Na volta, todas as telas recarregam (o Início mostra a venda nova).
   Future<void> _abrir(Widget tela) => abrirTela(context, tela);
 

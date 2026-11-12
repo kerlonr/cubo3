@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api.dart';
 import '../tema.dart';
@@ -126,4 +127,37 @@ class ImagemApi extends StatelessWidget {
     return Image.network(api.url(caminho!).toString(),
         headers: api.cabecalhosAuth, fit: ajuste, errorBuilder: (_, _, _) => vazio);
   }
+}
+
+/// Olho do Início: esconde os valores em R$ para não ficarem sempre à mostra. Começa escondido e lembra a escolha.
+final valoresOcultos = ValueNotifier<bool>(true);
+const mascaraValor = 'R\$ ••••';
+const _prefOcultar = 'ocultar_valores';
+
+Future<void> carregarValoresOcultos() async {
+  try {
+    valoresOcultos.value = (await SharedPreferences.getInstance()).getBool(_prefOcultar) ?? true;
+  } catch (_) {}
+}
+
+Future<void> alternarValoresOcultos() async {
+  valoresOcultos.value = !valoresOcultos.value;
+  try {
+    await (await SharedPreferences.getInstance()).setBool(_prefOcultar, valoresOcultos.value);
+  } catch (_) {}
+}
+
+/// Botão do olho para a barra do topo.
+class BotaoOlho extends StatelessWidget {
+  const BotaoOlho({super.key});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: valoresOcultos,
+        builder: (_, oculto, _) => IconButton(
+          tooltip: oculto ? 'Mostrar valores' : 'Esconder valores',
+          icon: Icon(oculto ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+          onPressed: alternarValoresOcultos,
+        ),
+      );
 }
