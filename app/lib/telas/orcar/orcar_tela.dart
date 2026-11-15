@@ -406,19 +406,17 @@ class _OrcarTelaState extends State<OrcarTela> {
             constraints: const BoxConstraints(maxWidth: 640),
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
               Wrap(spacing: 8, runSpacing: 8, children: [
-                OutlinedButton.icon(
-                    onPressed: _doArquivo, icon: const Icon(Icons.upload_file), label: const Text('Do arquivo')),
+                Tooltip(
+                  message: 'G-code ou 3MF fatiado: gramas e tempo vêm sozinhos',
+                  child: OutlinedButton.icon(
+                      onPressed: _doArquivo, icon: const Icon(Icons.upload_file), label: const Text('Do arquivo')),
+                ),
                 for (final i in comKlipper.take(1))
                   OutlinedButton.icon(
                       onPressed: () => _daImpressora(i),
                       icon: const Icon(Icons.print_outlined),
                       label: const Text('Da impressora')),
               ]),
-              Padding(
-                padding: const EdgeInsets.only(top: 6, bottom: 4),
-                child: Text('G-code ou 3MF já fatiado: os gramas e o tempo vêm sozinhos.',
-                    style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
-              ),
               AnimatedSize(
                 duration: duracaoAnimacao(context, 220),
                 curve: Curves.easeOutCubic,
@@ -458,8 +456,7 @@ class _OrcarTelaState extends State<OrcarTela> {
                 CampoDinheiro(_precoKg, 'Preço do filamento por kg', aoMudar: _mudou),
               ],
               const Secao('Insumos'),
-              Text('O que vai junto: switch, argola, ímã... (quantidade do orçamento todo)',
-                  style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
+              Text('Quantidade do orçamento todo', style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
               const SizedBox(height: 8),
               EditorInsumos(linhas: _insumos, cadastro: lista(cad['insumos']), aoMudar: _mudou),
               MaisDetalhes(titulo: 'Ajustes', children: [
@@ -496,9 +493,7 @@ class _OrcarTelaState extends State<OrcarTela> {
                 CampoDinheiro(_meuPreco, 'Meu preço (opcional)',
                     key: const Key('meu_preco'),
                     aoMudar: _mudou,
-                    ajuda: _precoManual == null
-                        ? 'Quer cobrar outro valor? Digite aqui e veja o lucro.'
-                        : 'Lucro ${moeda(destaque.lucro)} (${numero(destaque.lucroPct)}%)'),
+                    ajuda: _precoManual == null ? null : 'Lucro ${moeda(destaque.lucro)} (${numero(destaque.lucroPct)}%)'),
                 MaisDetalhes(titulo: 'Detalhe do custo', children: [QuebraCusto(custo)]),
                 Align(
                   alignment: Alignment.centerLeft,

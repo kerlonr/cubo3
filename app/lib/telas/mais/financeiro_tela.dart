@@ -177,15 +177,20 @@ class _FinanceiroTelaState extends State<FinanceiroTela> {
         constraints: const BoxConstraints(maxWidth: 900),
         child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
           Row(children: [
-            Expanded(child: CartaoValor('Entrou', m(num0(e['entrou'])), icone: Icons.south_west)),
+            // Tocar no cartão filtra a lista; tocar de novo volta para Tudo.
+            Expanded(
+                child: CartaoValor('Entrou', m(num0(e['entrou'])),
+                    icone: Icons.south_west, aoTocar: () => setState(() => _filtro = _filtro == 'Entradas' ? 'Tudo' : 'Entradas'))),
             const SizedBox(width: 8),
-            Expanded(child: CartaoValor('Saiu', m(num0(e['saiu'])), icone: Icons.north_east)),
+            Expanded(
+                child: CartaoValor('Saiu', m(num0(e['saiu'])),
+                    icone: Icons.north_east, aoTocar: () => setState(() => _filtro = _filtro == 'Saídas' ? 'Tudo' : 'Saídas'))),
           ]),
           const SizedBox(height: 8),
           CartaoValor('Resultado do mês', m(resultado), cor: oculto ? null : corResultado(resultado)),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-            child: Text('Lucro das vendas ${m(num0(e['lucro_vendas']))} (já tirando o custo das peças)', style: fraco),
+            child: Text('Lucro das vendas ${m(num0(e['lucro_vendas']))}', style: fraco),
           ),
           if (num0(e['perdas_g']) > 0)
             Card(
@@ -193,14 +198,10 @@ class _FinanceiroTelaState extends State<FinanceiroTela> {
               child: ListTile(
                 leading: const Icon(Icons.info_outline),
                 title: Text('Perdas: ${gramas(num0(e['perdas_g']))} · ${m(num0(e['perdas_valor']))}'),
-                subtitle: const Text('Filamento de impressões que falharam. Já está no custo da compra do carretel, '
-                    'por isso não soma de novo no "Saiu".'),
+                subtitle: const Text('Já no custo do carretel: não soma no "Saiu"'),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
-            child: Text('Carretel e insumo cadastrados no Estoque já entram aqui: não lance de novo.', style: fraco),
-          ),
+          const SizedBox(height: 12),
           Wrap(spacing: 8, children: [
             for (final f in _filtros.keys)
               ChoiceChip(label: Text(f), selected: _filtro == f, onSelected: (_) => setState(() => _filtro = f)),
@@ -210,7 +211,7 @@ class _FinanceiroTelaState extends State<FinanceiroTela> {
             EstadoVazio(
               icone: Icons.receipt_outlined,
               titulo: 'Nada neste mês',
-              explicacao: 'Vendas entregues, compras do Estoque e gastos lançados aparecem aqui.',
+              explicacao: 'Vendas entregues, compras do Estoque e gastos.',
               acao: 'Lançar gasto',
               aoTocar: () => abrirTela(context, const DespesaForm()),
             ),
@@ -303,12 +304,12 @@ class _DespesaFormState extends State<DespesaForm> {
           CampoComAjuda(
             rotulo: 'Categoria',
             ajuda: _categoria == 'desperdicio'
-                ? 'Só o que não veio de carretel do Estoque: falha de impressão com carretel cadastrado já está no custo da compra.'
-                : 'Carretel ou insumo que vai para o estoque: cadastre no Estoque, que ele já entra aqui.',
+                ? 'Falha com carretel do Estoque já está no custo: não lance.'
+                : 'Carretel e insumo do Estoque já entram sozinhos: não lance.',
             child: SeletorChips<String>(
                 opcoes: categoriasDespesa, valor: _categoria, aoMudar: (v) => setState(() => _categoria = v)),
           ),
-          CampoTexto(_descricao, 'Descrição', ajuda: 'Opcional.', dica: 'Peça que quebrou, cola, conta de luz...'),
+          CampoTexto(_descricao, 'Descrição', dica: 'Peça que quebrou, cola, conta de luz...'),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.event),

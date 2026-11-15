@@ -67,8 +67,7 @@ class _HistoricoImpressoesState extends State<HistoricoImpressoes> {
             EstadoVazio(
               icone: Icons.task_alt,
               titulo: _todas ? 'Nenhuma impressão ainda' : 'Nada para confirmar',
-              explicacao: 'Quando uma impressão terminar no Klipper, ela aparece aqui para você confirmar os gramas. '
-                  'Imprimiu fora do Klipper? Lance à mão.',
+              explicacao: 'As do Klipper chegam sozinhas. Imprimiu fora dele? Lance à mão.',
               acao: 'Lançar impressão',
               aoTocar: () => widget.abrir(const ConfirmarTela()),
             ),

@@ -87,8 +87,7 @@ class _VendasAbaState extends State<VendasAba> {
                   EstadoVazio(
                     icone: Icons.receipt_long_outlined,
                     titulo: lista(l).isEmpty ? 'Nenhuma venda ainda' : 'Nenhum pedido em "$_filtro"',
-                    explicacao: 'Registre uma venda em poucos toques: escolha o modelo, a quantidade e pronto. '
-                        'Para orçamento, use o ícone de novo pedido no topo.',
+                    explicacao: lista(l).isEmpty ? 'Escolha o modelo, a quantidade e pronto.' : '',
                     acao: 'Registrar venda',
                     aoTocar: () => _abrir(const VendaRapidaTela()),
                   ),

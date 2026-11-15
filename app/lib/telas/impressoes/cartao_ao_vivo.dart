@@ -97,7 +97,14 @@ class PainelAoVivo extends StatelessWidget {
               Text('${((progresso ?? 0) * 100).round()}%', style: const TextStyle(fontFeatures: tabular)),
               const Spacer(),
               if (e['restante_s'] != null)
-                Text('faltam ${duracao(num0(e['restante_s']))}', style: const TextStyle(fontFeatures: tabular)),
+                Tooltip(
+                  message: 'Tempo restante',
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.timer_outlined, size: 16, color: t.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(duracao(num0(e['restante_s'])), style: const TextStyle(fontFeatures: tabular)),
+                  ]),
+                ),
             ]),
           ],
           if ('${e['mensagem'] ?? ''}'.isNotEmpty)

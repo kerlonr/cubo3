@@ -109,8 +109,7 @@ class ImpressoraAbaState extends State<ImpressoraAba> {
         topo: EstadoVazio(
           icone: Icons.print_outlined,
           titulo: lista(d['impressoras']).isEmpty ? 'Nenhuma impressora' : 'Nenhuma impressora com Klipper',
-          explicacao: 'Cadastre o endereço do Klipper (Moonraker) da impressora para ver aqui a câmera, o progresso, '
-              'os controles, os arquivos e o console.',
+          explicacao: 'Cadastre o endereço do Moonraker para ver câmera, progresso e controles.',
           acao: 'Configurar impressora',
           aoTocar: () => _abrir(const ImpressorasTela()),
         ),

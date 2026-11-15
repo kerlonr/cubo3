@@ -215,7 +215,7 @@ class _VendaRapidaTelaState extends State<VendaRapidaTela> {
             ),
           ),
           if (_itens.length > 1)
-            IconButton(onPressed: () => setState(() => _itens.removeAt(i)), icon: const Icon(Icons.close)),
+            IconButton(tooltip: 'Tirar item', onPressed: () => setState(() => _itens.removeAt(i)), icon: const Icon(Icons.close)),
         ]),
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Padding(

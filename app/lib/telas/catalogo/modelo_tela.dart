@@ -123,20 +123,25 @@ class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
     final res = resumoReceita(r);
     final preco = numOu(m['preco_venda']);
     final fraco = TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant);
-    Widget info(IconData icone, String texto) => Chip(
-          avatar: Icon(icone, size: 16),
-          label: Text(texto, style: const TextStyle(fontFeatures: tabular)),
-          visualDensity: VisualDensity.compact,
+    Widget info(IconData icone, String texto, [String? dica]) => Tooltip(
+          message: dica ?? '',
+          child: Chip(
+            avatar: Icon(icone, size: 16),
+            label: Text(texto, style: const TextStyle(fontFeatures: tabular)),
+            visualDensity: VisualDensity.compact,
+          ),
         );
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const Secao('Ficha'),
       Wrap(spacing: 8, runSpacing: 8, children: [
-        info(Icons.scale_outlined, gramas(res.gramas)),
-        info(Icons.schedule, res.horas > 0 ? duracao(res.horas * 3600) : 'sem tempo'),
-        info(Icons.layers_outlined, res.pecas == 1 ? '1 peça impressa' : '${res.pecas} peças impressas'),
+        info(Icons.scale_outlined, gramas(res.gramas), 'Filamento'),
+        info(Icons.schedule, res.horas > 0 ? duracao(res.horas * 3600) : 'sem tempo', 'Tempo de impressão'),
+        info(Icons.layers_outlined, res.pecas == 1 ? '1 peça' : '${res.pecas} peças', 'Peças impressas'),
+        if (res.porImpressao > 1) info(Icons.grid_view, '${res.porImpressao} por impressão'),
         if (res.insumos > 0) info(Icons.inventory_2_outlined, res.insumos == 1 ? '1 insumo' : '${res.insumos} insumos'),
-        if (num0(r['mao_obra_min']) > 0) info(Icons.handyman_outlined, '${numero(num0(r['mao_obra_min']))} min de mão de obra'),
-        if (preco != null && preco > 0) info(Icons.percent, 'margem ${numero((preco - custo) / preco * 100)}%'),
+        if (num0(r['mao_obra_min']) > 0)
+          info(Icons.handyman_outlined, '${numero(num0(r['mao_obra_min']))} min', 'Mão de obra'),
+        if (preco != null && preco > 0) info(Icons.trending_up, '${numero((preco - custo) / preco * 100)}%', 'Margem'),
       ]),
       const SizedBox(height: 4),
       for (final (n, p) in lista(r['filamentos']).indexed)
@@ -198,15 +203,15 @@ class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
               Positioned(
                 right: 8,
                 bottom: 8,
-                child: FilledButton.tonalIcon(
+                child: IconButton.filledTonal(
                   key: const Key('ajustar_foto'),
+                  tooltip: 'Ajustar foto',
                   onPressed: () async {
                     final ok = await Navigator.push<bool>(
                         context, MaterialPageRoute(builder: (_) => CapaTela(modelo: m)));
                     if (ok == true) _recarregar();
                   },
-                  icon: const Icon(Icons.crop, size: 18),
-                  label: const Text('Ajustar foto'),
+                  icon: const Icon(Icons.crop),
                 ),
               ),
           ]),
@@ -217,7 +222,7 @@ class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
               child: ListTile(
                 leading: const Icon(Icons.warning_amber_rounded, color: amarelo),
                 title: const Text('Faltam gramas ou tempo'),
-                subtitle: const Text('O custo sai menor que o real. Puxe do arquivo fatiado ou da impressora.'),
+                subtitle: const Text('O custo sai menor que o real'),
                 trailing: TextButton(onPressed: _editar, child: const Text('Completar')),
               ),
             ),

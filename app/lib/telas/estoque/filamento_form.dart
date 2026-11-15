@@ -121,10 +121,10 @@ class _FilamentoFormState extends State<FilamentoForm> {
           ]),
         ),
         CampoDinheiro(_precoKg, 'Preço por kg',
-            key: const Key('preco_kg'), obrigatorio: true, ajuda: 'Quanto você pagou por 1 kg de filamento.'),
+            key: const Key('preco_kg'), obrigatorio: true),
         MaisDetalhes(children: [
-          CampoTexto(_marca, 'Marca', dica: marcaPadrao, ajuda: 'Ajuda a achar o filamento nas listas.'),
-          CampoTexto(_corNome, 'Nome da cor', ajuda: 'Use quando a cor não está na paleta (ex.: Azul petróleo).'),
+          CampoTexto(_marca, 'Marca', dica: marcaPadrao),
+          CampoTexto(_corNome, 'Nome da cor', dica: 'Se não está na paleta (ex.: Azul petróleo)'),
           CampoTexto(_corHex, 'Código da cor', dica: '#FFFFFF', aoMudar: (_) => setState(() {})),
           CampoNumero(_diametro, 'Diâmetro', sufixo: 'mm'),
           CampoNumero(_densidade, 'Densidade', sufixo: 'g/cm³'),

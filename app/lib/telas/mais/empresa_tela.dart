@@ -284,7 +284,7 @@ class _CanalFormState extends State<CanalForm> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: Text(widget.dados == null ? 'Novo canal' : 'Editar canal'), actions: [
-          if (widget.dados != null) IconButton(onPressed: _excluir, icon: const Icon(Icons.delete_outline)),
+          if (widget.dados != null) IconButton(tooltip: 'Excluir', onPressed: _excluir, icon: const Icon(Icons.delete_outline)),
         ]),
         bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
         body: CorpoFormulario(chave: _form, children: [

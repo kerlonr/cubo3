@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:cubo3/ao_vivo/canal_ao_vivo.dart';
 import 'package:cubo3/api/api.dart';
+import 'package:cubo3/api/fila.dart' show dadosMudaram;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -94,6 +95,25 @@ void main() {
     conexoes.last.add(jsonEncode({'tipo': 'impressao_terminou', 'impressao_id': 'i1', 'situacao': 'completed'}));
     await Future<void>.delayed(Duration.zero);
     expect(eventos.single['impressao_id'], 'i1');
+    canal.parar();
+  });
+
+  test('escrita em outro aparelho recarrega as telas; várias seguidas viram uma recarga só', () async {
+    final api = ApiCliente(MockClient((r) async => http.Response('{}', 200)), Uri.parse('https://x'), ArmazemMemoria());
+    await api.usarTokens({'acesso': 'A0', 'refresh': 'R'});
+    api.empresaId = 'emp';
+    final c = StreamController<dynamic>();
+    final canal = CanalAoVivo(api, conectar: (_) => (stream: c.stream, enviar: (_) {}, fechar: () async {}));
+    canal.iniciar();
+    await Future<void>.delayed(Duration.zero);
+    final antes = dadosMudaram.value;
+    for (final caminho in ['/api/pedidos/p1', '/api/pedidos/p1/status', '/api/despesas/d1']) {
+      c.add(jsonEncode({'tipo': 'dados', 'caminho': caminho}));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(dadosMudaram.value, antes, reason: 'espera as escritas seguidas terminarem');
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    expect(dadosMudaram.value, antes + 1);
     canal.parar();
   });
 }

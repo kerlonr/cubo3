@@ -28,7 +28,6 @@ class MaisTela extends StatelessWidget {
         ListTile(
             leading: const Icon(Icons.account_balance_wallet_outlined),
             title: const Text('Financeiro'),
-            subtitle: const Text('Entradas, gastos e resultado do mês'),
             onTap: () => abrir(const FinanceiroTela())),
         ListTile(
             leading: const Icon(Icons.settings_outlined),

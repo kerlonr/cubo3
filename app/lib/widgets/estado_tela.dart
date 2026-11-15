@@ -45,11 +45,13 @@ class EstadoVazio extends StatelessWidget {
         Icon(icone, size: 48, color: t.colorScheme.primary),
         const SizedBox(height: 12),
         Text(titulo, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 6),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Text(explicacao, textAlign: TextAlign.center, style: TextStyle(color: t.colorScheme.onSurfaceVariant)),
-        ),
+        if (explicacao.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Text(explicacao, textAlign: TextAlign.center, style: TextStyle(color: t.colorScheme.onSurfaceVariant)),
+          ),
+        ],
         if (acao != null) ...[
           const SizedBox(height: 16),
           FilledButton.icon(onPressed: aoTocar, icon: const Icon(Icons.add), label: Text(acao!)),

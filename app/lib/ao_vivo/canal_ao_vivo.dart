@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../api/api.dart';
+import '../api/fila.dart' show dadosMudaram;
 import '../api/modelos.dart';
 import '../util/formatos.dart';
 
@@ -111,7 +112,10 @@ class CanalAoVivo extends ChangeNotifier {
 
   ConexaoAoVivo? _conexao;
   StreamSubscription<dynamic>? _assinatura;
-  Timer? _ping, _volta;
+  Timer? _ping, _volta, _recarga;
+
+  /// A conexão caiu e voltou: o que mudou nesse meio tempo não chegou, então recarrega uma vez.
+  bool _reconectou = false;
   bool _ativo = false;
   int _falhas = 0;
   String? _empresa;
@@ -132,6 +136,7 @@ class CanalAoVivo extends ChangeNotifier {
     if (_ativo && _empresa == api.empresaId) return;
     parar();
     _ativo = true;
+    _reconectou = true; // voltou do segundo plano ou trocou de empresa: a 1ª mensagem recarrega as telas
     _empresa = api.empresaId;
     _abrir();
   }
@@ -140,6 +145,7 @@ class CanalAoVivo extends ChangeNotifier {
     _ativo = false;
     _ping?.cancel();
     _volta?.cancel();
+    _recarga?.cancel();
     _assinatura?.cancel();
     _conexao?.fechar();
     _conexao = null;
@@ -181,7 +187,16 @@ class CanalAoVivo extends ChangeNotifier {
       estados['${ev['impressora_id']}'] = EstadoImpressora(ev);
       notifyListeners();
     }
+    if (ev['tipo'] == 'dados' || _reconectou) _avisarMudanca();
+    _reconectou = false;
     _eventos.add(ev);
+  }
+
+  /// Outro aparelho (ou este) gravou algo: as telas abertas recarregam. Várias escritas seguidas
+  /// (ex.: pedido + itens + pago) viram uma recarga só.
+  void _avisarMudanca() {
+    _recarga?.cancel();
+    _recarga = Timer(const Duration(milliseconds: 500), () => dadosMudaram.value++);
   }
 
   void _agendar() {
@@ -191,6 +206,7 @@ class CanalAoVivo extends ChangeNotifier {
     if (!_ativo) return;
     final espera = esperaInicial * (1 << _falhas.clamp(0, 5));
     _falhas++;
+    _reconectou = true;
     _volta?.cancel();
     _volta = Timer(espera > const Duration(seconds: 60) ? const Duration(seconds: 60) : espera, _abrir);
   }

@@ -93,14 +93,17 @@ List<PecaReceita> pecasDaReceita(Map receita) {
   return pecas;
 }
 
-/// Totais da receita para mostrar (catálogo e perfil): gramas, horas, peças e insumos.
-({double gramas, double horas, int pecas, int insumos}) resumoReceita(Map receita) {
+/// Totais da receita para mostrar (catálogo e perfil), por UNIDADE: com 6 por impressão,
+/// gramas e horas da mesa divididos por 6.
+({double gramas, double horas, int pecas, int insumos, int porImpressao}) resumoReceita(Map receita) {
   final fils = lista(receita['filamentos']);
+  final n = num0(receita['pecas_por_impressao'] ?? 1).clamp(1, 1000).toInt();
   return (
-    gramas: fils.fold(0.0, (s, f) => s + num0(f['gramas'])),
-    horas: num0(receita['horas']),
+    gramas: fils.fold(0.0, (s, f) => s + num0(f['gramas'])) / n,
+    horas: num0(receita['horas']) / n,
     pecas: fils.length,
     insumos: lista(receita['insumos']).length,
+    porImpressao: n,
   );
 }
 
@@ -129,6 +132,7 @@ class _ModeloFormState extends State<ModeloForm> {
   late final _pecas = pecasDaReceita(receita);
   late final _insumos = [for (final i in lista(receita['insumos'])) LinhaInsumo.deJson(i)];
   late String? _impressora = d['impressora_id'] as String?;
+  late int _porImpressao = num0(receita['pecas_por_impressao'] ?? 1).clamp(1, 1000).toInt();
 
   double get _horas => _pecas.fold(0.0, (s, p) => s + (p.horas ?? 0));
 
@@ -138,6 +142,7 @@ class _ModeloFormState extends State<ModeloForm> {
         'mao_obra_min': lerNumero(_maoObra.text) ?? 0,
         'insumos': [for (final i in _insumos) i.json],
         'custo_envio': lerNumero(_envio.text) ?? 0,
+        'pecas_por_impressao': _porImpressao,
       };
 
   Future<void> _salvar() async {
@@ -221,19 +226,20 @@ class _ModeloFormState extends State<ModeloForm> {
           return CorpoFormulario(chave: _form, children: [
             CampoTexto(_nome, 'Nome', key: const Key('nome'), obrigatorio: true, dica: 'Fidget switch chaveiro...'),
             const Secao('Peças impressas'),
-            Text('Uma para cada parte impressa (ex.: case e keycap), cada uma com sua cor.', style: fraco),
-            const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
-              OutlinedButton.icon(
-                  onPressed: () => _importar(() => itemDoAparelho(context)),
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text('Do arquivo')),
+              Tooltip(
+                message: 'G-code ou 3MF fatiado: gramas e tempo vêm sozinhos',
+                child: OutlinedButton.icon(
+                    onPressed: () => _importar(() => itemDoAparelho(context)),
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Do arquivo')),
+              ),
               if (fatiadosDoModelo(d).isNotEmpty)
                 OutlinedButton.icon(
                     key: const Key('dos_anexos'),
                     onPressed: () => _importar(() => itemDosArquivosDoModelo(context, fatiadosDoModelo(d))),
                     icon: const Icon(Icons.attach_file),
-                    label: const Text('Dos arquivos do modelo')),
+                    label: const Text('Dos anexos')),
               for (final k in klipper.take(1))
                 OutlinedButton.icon(
                     onPressed: () => _importar(() => itemDaImpressora(context, k)),
@@ -249,15 +255,32 @@ class _ModeloFormState extends State<ModeloForm> {
                 onPressed: () => setState(() => _pecas.add(PecaReceita(
                     filamentoId: _pecas.isEmpty ? null : _pecas.last.filamentoId))),
                 icon: const Icon(Icons.add),
-                label: const Text('Adicionar peça'),
+                label: const Text('Outra peça'),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('${gramas(gramasTotal)} · ${_horas > 0 ? duracao(_horas * 3600) : 'sem tempo'}',
+                child: Text(
+                    '${gramas(gramasTotal)} · ${_horas > 0 ? duracao(_horas * 3600) : 'sem tempo'}'
+                    '${_porImpressao > 1 ? ' por mesa' : ''}',
                     textAlign: TextAlign.right,
                     overflow: TextOverflow.ellipsis,
                     style: fraco.copyWith(fontFeatures: tabular)),
               ),
+            ]),
+            Row(children: [
+              const Icon(Icons.grid_view, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Peças por impressão')),
+              const Tooltip(
+                message: 'Imprimiu várias de uma vez (ex.: 6 chaveiros na mesa)? Gramas e tempo acima são da mesa '
+                    'inteira; o custo é dividido pelas peças.',
+                triggerMode: TooltipTriggerMode.tap,
+                child: Padding(padding: EdgeInsets.all(8), child: Icon(Icons.info_outline, size: 18)),
+              ),
+              Quantidade(
+                  key: const Key('por_impressao'),
+                  valor: _porImpressao,
+                  aoMudar: (v) => setState(() => _porImpressao = v)),
             ]),
             const Secao('Insumos'),
             Text('O que vai junto e entra no preço: switch, argola, ímã, embalagem.', style: fraco),
@@ -266,7 +289,7 @@ class _ModeloFormState extends State<ModeloForm> {
             CampoNumero(_maoObra, 'Mão de obra (montagem e acabamento)',
                 key: const Key('mao_obra'), sufixo: 'min', aoMudar: _mudou),
             const Secao('Preço'),
-            CampoDinheiro(_preco, 'Preço de venda', aoMudar: _mudou, ajuda: 'O seu preço. Toque numa sugestão para usar.'),
+            CampoDinheiro(_preco, 'Preço de venda', aoMudar: _mudou),
             Wrap(spacing: 16, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
               Text('Custo ${moeda(custo.total)}', style: const TextStyle(fontFeatures: tabular)),
               if (preco != null)
@@ -303,8 +326,8 @@ class _ModeloFormState extends State<ModeloForm> {
             MaisDetalhes(children: [
               CampoTexto(_descricao, 'Descrição', linhas: 3),
               CampoTexto(_categoria, 'Categoria', dica: 'Chaveiros, Fidget...'),
-              CampoTexto(_tags, 'Tags', ajuda: 'Separadas por vírgula; viram filtros no catálogo.'),
-              CampoTexto(_links, 'Links', ajuda: 'Um por linha; "título | endereço".', linhas: 3, teclado: TextInputType.multiline),
+              CampoTexto(_tags, 'Tags', dica: 'chaveiro, fidget (vírgula entre tags)'),
+              CampoTexto(_links, 'Links', dica: 'título | endereço (um por linha)', linhas: 3, teclado: TextInputType.multiline),
             ]),
           ]);
         },

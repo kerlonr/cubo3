@@ -49,6 +49,19 @@ void main() {
     expect(cadastroManda.insumos, 2.0);
   });
 
+  test('6 chaveiros por impressão: gramas e tempo da mesa, custo por unidade igual ao de 1', () {
+    Custo custo(Map r) => custoDaReceita(r, filamentos: const [], insumos: const [], impressoras: const [], config: _config);
+    final mesa = custo({
+      'filamentos': [
+        {'preco_kg': 100, 'gramas': 198}
+      ],
+      'horas': 18,
+      'mao_obra_min': 10,
+      'pecas_por_impressao': 6,
+    });
+    expect(mesa.total, 6.32);
+  });
+
   testWidgets('modelo com duas peças de cores diferentes e insumo: custo soma tudo e salva cada peça', (tester) async {
     final amb = _amb();
     await amb.preparar();
@@ -71,7 +84,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Custo R\$ 7,82'), findsOneWidget); // 6,32 da planilha + switch
     expect(find.text('Switch'), findsOneWidget);
-    await tester.tap(find.byTooltip('Mais').first); // 2 switches
+    await tester.tap(find.byTooltip('Mais').last); // 2 switches
     await tester.pumpAndSettle();
     expect(find.text('Custo R\$ 9,32'), findsOneWidget);
 

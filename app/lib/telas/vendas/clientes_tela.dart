@@ -74,8 +74,7 @@ class _ClientesTelaState extends State<ClientesTela> {
             estadoVazio: EstadoVazio(
               icone: Icons.people_outline,
               titulo: 'Nenhum cliente ainda',
-              explicacao: 'Guarde nome e contato de quem compra para ver o histórico de pedidos de cada um. '
-                  'Cliente é opcional na venda.',
+              explicacao: 'Nome e contato de quem compra, com os pedidos de cada um.',
               acao: 'Cadastrar cliente',
               aoTocar: () => _abrir(const ClienteForm()),
             ),
@@ -167,8 +166,8 @@ class _ClienteFormState extends State<ClienteForm> {
       bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
       body: CorpoFormulario(chave: _form, children: [
         CampoTexto(_nome, 'Nome', obrigatorio: true),
-        CampoTexto(_telefone, 'Telefone (WhatsApp)', teclado: TextInputType.phone, ajuda: 'Opcional.'),
-        CampoTexto(_email, 'E-mail', teclado: TextInputType.emailAddress, ajuda: 'Opcional.'),
+        CampoTexto(_telefone, 'Telefone (WhatsApp)', teclado: TextInputType.phone),
+        CampoTexto(_email, 'E-mail', teclado: TextInputType.emailAddress),
         MaisDetalhes(children: [CampoTexto(_obs, 'Observações', linhas: 3, dica: 'Endereço, preferências...')]),
       ]),
     );

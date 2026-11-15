@@ -113,8 +113,7 @@ class _EstoqueAbaState extends State<EstoqueAba> {
         EstadoVazio(
           icone: Icons.palette_outlined,
           titulo: 'Nenhum filamento ainda',
-          explicacao: 'Filamento é o tipo que você compra (marca, material e cor) com o preço por kg. '
-              'Depois registre cada carretel para o estoque descontar os gramas sozinho.',
+          explicacao: 'Marca, material, cor e preço por kg. Depois, os carretéis.',
           acao: 'Cadastrar filamento',
           aoTocar: () => _abrir(const FilamentoForm()),
         ));
@@ -173,7 +172,7 @@ class _EstoqueAbaState extends State<EstoqueAba> {
           EstadoVazio(
             icone: Icons.inventory_2_outlined,
             titulo: 'Nenhum insumo',
-            explicacao: 'Insumos são ímãs, parafusos, caixas e etiquetas que vão junto com a peça e entram no custo.',
+            explicacao: 'Ímãs, parafusos, caixas e etiquetas que vão com a peça.',
             acao: 'Cadastrar insumo',
             aoTocar: () => _abrir(const InsumoForm()),
           ));
@@ -195,8 +194,7 @@ class _PecasLista extends StatelessWidget {
             EstadoVazio(
               icone: Icons.view_in_ar_outlined,
               titulo: 'Nenhuma peça pronta',
-              explicacao: 'Ao confirmar uma impressão com a finalidade "Estoque", as peças entram aqui e saem quando '
-                  'você vende.',
+              explicacao: 'Impressão confirmada para "Estoque" entra aqui; a venda tira.',
             ),
           ]);
         }
@@ -211,7 +209,7 @@ class _PecasLista extends StatelessWidget {
                         fontFeatures: tabular,
                         fontWeight: FontWeight.w600,
                         color: num0(p['saldo']) < 0 ? vermelho : null)),
-                onLongPress: () => ajustar(context, 'peca', p['modelo_id'] as String),
+                onTap: () => ajustar(context, 'peca', p['modelo_id'] as String),
               ),
             ),
         ]);
@@ -285,8 +283,7 @@ class _CarreteisTelaState extends State<CarreteisTela> {
                 EstadoVazio(
                   icone: Icons.circle_outlined,
                   titulo: 'Nenhum carretel ativo',
-                  explicacao: 'Registre cada carretel que comprar: o app desconta os gramas de cada impressão e avisa '
-                      'quando estiver acabando.',
+                  explicacao: 'O estoque desconta os gramas de cada impressão e avisa quando acabar.',
                   acao: 'Registrar carretel',
                   aoTocar: () async => _recarregar(await Navigator.push<bool>(context,
                           MaterialPageRoute(builder: (_) => CarretelForm(filamentoId: f['id'] as String))) ==

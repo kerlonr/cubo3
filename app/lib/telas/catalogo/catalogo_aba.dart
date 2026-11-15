@@ -12,7 +12,7 @@ import 'modelo_form.dart';
 import 'modelo_tela.dart';
 
 const _ordens = {'mais_vendidos': 'Mais vendidos', 'lucro': 'Mais lucrativos', 'recentes': 'Recentes', 'nome': 'Nome'};
-const _periodos = {0: 'Sempre', 30: '30 dias', 90: '90 dias'};
+const _periodos = {0: 'Desde sempre', 30: 'Últimos 30 dias', 90: 'Últimos 90 dias'};
 
 class CatalogoAba extends StatefulWidget {
   const CatalogoAba({super.key});
@@ -50,6 +50,25 @@ class _CatalogoAbaState extends State<CatalogoAba> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Catálogo'), actions: [
+        // Ordem e período num ícone só; o ponto avisa quando não está no padrão.
+        PopupMenuButton<Object>(
+          tooltip: 'Ordenar',
+          icon: Badge(
+              isLabelVisible: _ordem != 'mais_vendidos' || _periodo != 0, smallSize: 8, child: const Icon(Icons.sort)),
+          onSelected: (v) => setState(() {
+            if (v is int) {
+              _periodo = v;
+            } else {
+              _ordem = v as String;
+            }
+          }),
+          itemBuilder: (_) => [
+            for (final e in _ordens.entries) CheckedPopupMenuItem(value: e.key, checked: _ordem == e.key, child: Text(e.value)),
+            const PopupMenuDivider(),
+            for (final e in _periodos.entries)
+              CheckedPopupMenuItem(value: e.key, checked: _periodo == e.key, child: Text(e.value)),
+          ],
+        ),
         IconButton(tooltip: 'Novo modelo', icon: const Icon(Icons.add), onPressed: () => _abrir(const ModeloForm())),
       ]),
       body: Column(children: [
@@ -63,25 +82,6 @@ class _CatalogoAbaState extends State<CatalogoAba> {
             },
           ),
         ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(children: [
-            DropdownButton<String>(
-              value: _ordem,
-              underline: const SizedBox(),
-              items: [for (final e in _ordens.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-              onChanged: (v) => setState(() => _ordem = v!),
-            ),
-            const SizedBox(width: 12),
-            DropdownButton<int>(
-              value: _periodo,
-              underline: const SizedBox(),
-              items: [for (final e in _periodos.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-              onChanged: (v) => setState(() => _periodo = v!),
-            ),
-          ]),
-        ),
         Expanded(
           child: EstadoTela<List>(
             key: ValueKey('$_versao|$_query'),
@@ -90,7 +90,7 @@ class _CatalogoAbaState extends State<CatalogoAba> {
             estadoVazio: EstadoVazio(
               icone: Icons.category_outlined,
               titulo: 'Seu catálogo está vazio',
-              explicacao: 'Cadastre cada peça que você vende, com foto e preço. A venda rápida e o lucro saem daqui.',
+              explicacao: 'Cada peça que você vende, com foto e preço.',
               acao: 'Cadastrar modelo',
               aoTocar: () => _abrir(const ModeloForm()),
             ),
@@ -186,7 +186,14 @@ class _CatalogoAbaState extends State<CatalogoAba> {
                 else if (lucro != null)
                   Text('lucro ${moeda(lucro)}${preco != null && preco > 0 ? ' (${numero(lucro / preco * 100)}%)' : ''}',
                       style: TextStyle(fontSize: 12, color: corResultado(lucro), fontFeatures: tabular)),
-                Text('${numero(num0(m['vendidos']))} vend.', style: const TextStyle(fontSize: 12)),
+                Tooltip(
+                  message: 'Vendidos',
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.shopping_bag_outlined, size: 12),
+                    const SizedBox(width: 2),
+                    Text(numero(num0(m['vendidos'])), style: const TextStyle(fontSize: 12, fontFeatures: tabular)),
+                  ]),
+                ),
               ]),
             ]),
           ),

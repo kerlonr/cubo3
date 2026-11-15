@@ -25,7 +25,6 @@ class PainelSecao extends StatelessWidget {
                 child: ListTile(
                   leading: const Icon(Icons.pending_actions, color: amarelo),
                   title: Text(aConfirmar == 1 ? '1 impressão a confirmar' : '$aConfirmar impressões a confirmar'),
-                  subtitle: const Text('Confirme os gramas reais para o estoque e o custo ficarem certos'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: verHistorico,
                 ),

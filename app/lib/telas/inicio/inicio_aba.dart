@@ -111,7 +111,6 @@ class _InicioAbaState extends State<InicioAba> {
               child: ListTile(
                 leading: const Icon(Icons.pending_actions, color: amarelo),
                 title: Text('A confirmar (${num0(p['a_confirmar']).toInt()})'),
-                subtitle: const Text('Impressões que terminaram e esperam os gramas reais'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.findAncestorStateOfType<CascaState>()?.irPara(1),
               ),
@@ -126,14 +125,21 @@ class _InicioAbaState extends State<InicioAba> {
           const SizedBox(height: 8),
           Entrada(ordem: 2, child: CartaoInvestimento(investido: num0(p['investido']), recebido: num0(p['recebido']), oculto: oculto)),
           ..._filamentoAcabando(lista(p['estoque_baixo'])),
-          const Secao('Receita × gastos (12 meses)'),
+          const Secao('Últimos 12 meses'),
           if (semMovimento)
             Text('Sem vendas nem gastos ainda', style: TextStyle(color: t.colorScheme.onSurfaceVariant))
           else ...[
             Entrada(ordem: 4, child: SizedBox(height: 200, child: GraficoMeses(lista(p['por_mes']), oculto: oculto))),
             const SizedBox(height: 8),
-            Text('Toque e segure um mês no gráfico para ver os valores.',
-                style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
+            // Legenda no lugar da instrução: tocar numa barra já mostra o valor.
+            Wrap(spacing: 16, children: [
+              for (final (cor, nome) in [(t.colorScheme.primary, 'Receita'), (t.colorScheme.outline, 'Gastos')])
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(width: 10, height: 10, decoration: BoxDecoration(color: cor, borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(width: 6),
+                  Text(nome, style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
+                ]),
+            ]),
           ],
         ]),
       ),

@@ -64,13 +64,20 @@ class ItemCusto {
 
 class Receita {
   const Receita(this.filamentos, this.horas, this.maoObraMin,
-      {this.insumos = const [], this.embalagem = const [], this.custoEnvio = 0, this.aplicarEficiencia = true});
+      {this.insumos = const [],
+      this.embalagem = const [],
+      this.custoEnvio = 0,
+      this.aplicarEficiencia = true,
+      this.rendimento = 1});
 
   final List<ItemFilamento> filamentos;
   final double horas, maoObraMin;
   final List<ItemCusto> insumos, embalagem;
   final double custoEnvio;
   final bool aplicarEficiencia;
+
+  /// Peças por impressão: gramas e horas são da mesa inteira (6 chaveiros de uma vez).
+  final double rendimento;
 }
 
 class Custo {
@@ -90,9 +97,10 @@ double _soma(List<ItemCusto> itens) => itens.fold(0.0, (s, i) => s + i.qtd * i.c
 
 Custo calcularCusto(Receita r, ParamImpressora imp, ParamEmpresa emp) {
   final fator = r.aplicarEficiencia ? emp.eficiencia : 1.0;
-  final material = r.filamentos.fold(0.0, (s, f) => s + f.gramas / 1000 * f.precoKg) * fator;
+  final rendimento = r.rendimento < 1 ? 1 : r.rendimento;
+  final material = r.filamentos.fold(0.0, (s, f) => s + f.gramas / 1000 * f.precoKg) * fator / rendimento;
   final maoObra = r.maoObraMin / 60 * emp.maoObraHora;
-  final maquina = r.horas * custoHoraImpressora(imp, emp);
+  final maquina = r.horas * custoHoraImpressora(imp, emp) / rendimento;
   final insumos = _soma(r.insumos);
   final embalagem = _soma(r.embalagem) + r.custoEnvio;
   final total = material + maoObra + maquina + insumos + embalagem;
@@ -135,7 +143,10 @@ Custo custoDaReceita(
   final imp = achar(impressoras, impressoraId) ?? (ativas.isEmpty ? null : ativas.first);
   return calcularCusto(
     Receita(fils, _n(receita['horas'], 0), _n(receita['mao_obra_min'], 0),
-        insumos: ins, embalagem: emb, custoEnvio: _n(receita['custo_envio'], 0)),
+        insumos: ins,
+        embalagem: emb,
+        custoEnvio: _n(receita['custo_envio'], 0),
+        rendimento: _n(receita['pecas_por_impressao'], 1)),
     imp == null ? const ParamImpressora() : ParamImpressora.fromJson(imp),
     ParamEmpresa.fromJson(config),
   );

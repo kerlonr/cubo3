@@ -183,6 +183,7 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
           const SizedBox(width: 8),
           SizedBox(width: 96, child: CampoNumero(l.gramas, 'Gramas', sufixo: 'g')),
           IconButton(
+            tooltip: 'Tirar',
             onPressed: () => setState(() => (perda ? _perdas : _linhas).removeAt(i)),
             icon: const Icon(Icons.close),
           ),

@@ -175,7 +175,7 @@ class _ImpressoraFormState extends State<ImpressoraForm> {
             dica: 'http://192.168.1.110:7125',
             teclado: TextInputType.url,
             aoMudar: (_) => setState(() => _teste = null),
-            ajuda: 'Com o Klipper você vê a impressão ao vivo, a câmera e os gramas chegam sozinhos.'),
+            ajuda: 'Ao vivo, câmera e gramas automáticos.'),
         Row(children: [
           OutlinedButton.icon(
             onPressed: _testando || _url.text.trim().isEmpty ? null : _testar,
@@ -192,9 +192,9 @@ class _ImpressoraFormState extends State<ImpressoraForm> {
         ]),
         if (_teste != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_teste!)),
         passo(3, 'Custos'),
-        Text('Já vem com valores comuns; ajuste se souber. Eles entram no custo de máquina (energia e desgaste) de cada peça.',
+        Text('Valores comuns; ajuste se souber. Entram no custo de máquina de cada peça.',
             style: TextStyle(fontSize: 13, color: t.colorScheme.onSurfaceVariant)),
-        CampoDinheiro(_preco, 'Preço da impressora', ajuda: 'Quanto você pagou nela.'),
+        CampoDinheiro(_preco, 'Preço da impressora'),
         CampoNumero(_potencia, 'Potência', sufixo: 'W', ajuda: 'Consumo médio imprimindo; 150 W é comum.'),
         MaisDetalhes(children: [
           CampoTexto(_modelo, 'Modelo', dica: 'Ender 3 V3 SE'),

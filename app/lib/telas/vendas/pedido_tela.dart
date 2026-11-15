@@ -5,10 +5,12 @@ import '../../api/fila.dart';
 import '../../api/modelos.dart';
 import '../../tema.dart';
 import '../../util/formatos.dart';
+import '../../widgets/campos.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../../dominio/mensagens.dart';
 import 'clientes_tela.dart' show BotaoWhatsapp;
+import 'comprovantes.dart';
 import 'venda_rapida_tela.dart';
 
 const nomesStatusPedido = {
@@ -49,6 +51,23 @@ double totalPedido(Map p) {
   if (p['receita'] != null) return num0(p['receita']);
   final bruto = lista(p['itens']).fold<double>(0, (s, i) => s + num0(i['quantidade']) * num0(i['preco_unitario']));
   return bruto - num0(p['desconto']) + num0(p['frete_cobrado']);
+}
+
+/// Preços unitários novos para os itens somarem [alvo]: proporcional ao valor de cada linha (sem valor, igual por
+/// unidade). A sobra de centavos vai no último item de 1 unidade (fecha exato); sem nenhum, no último.
+List<double> distribuirTotal(List<({double quantidade, double preco})> itens, double alvo) {
+  final soma = itens.fold<double>(0, (s, i) => s + i.quantidade * i.preco);
+  final unidades = itens.fold<double>(0, (s, i) => s + i.quantidade);
+  final precos = [for (final i in itens) arred2(soma > 0 ? i.preco * alvo / soma : alvo / unidades)];
+  var k = itens.lastIndexWhere((i) => i.quantidade == 1);
+  if (k < 0) k = itens.length - 1;
+  var outros = 0.0;
+  for (var j = 0; j < itens.length; j++) {
+    if (j != k) outros += precos[j] * itens[j].quantidade;
+  }
+  precos[k] = arred2((alvo - outros) / itens[k].quantidade);
+  if (precos[k] < 0) precos[k] = 0;
+  return precos;
 }
 
 class PedidoTela extends StatefulWidget {
@@ -101,8 +120,38 @@ class _PedidoTelaState extends State<PedidoTela> {
           )
         : null;
     if (!mounted || (pago && forma == null)) return;
-    if (await salvar(context, 'PUT', '/api/pedidos/${widget.id}', {'pago': pago, 'forma_pagamento': forma},
-            feito: pago ? 'Marcado como pago' : 'Voltou para a receber') &&
+    if (!await salvar(context, 'PUT', '/api/pedidos/${widget.id}', {'pago': pago, 'forma_pagamento': forma},
+            feito: pago ? 'Marcado como pago' : 'Voltou para a receber') ||
+        !mounted) {
+      return;
+    }
+    // Comprovante só sobe online: se o "pago" ficou guardado na fila, não oferece.
+    if (pago && context.read<FilaOffline>().pendentes == 0) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(
+          content: const Text('Marcado como pago'),
+          behavior: SnackBarBehavior.floating,
+          persist: false,
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Anexar comprovante',
+            onPressed: () async {
+              if (await escolherComprovante(context, widget.id) && mounted) setState(() => _versao++);
+            },
+          ),
+        ));
+    }
+    setState(() => _versao++);
+  }
+
+  /// Preços, desconto e frete (também em pedido entregue: o servidor recalcula receita e lucro).
+  Future<void> _editarValores(Map p) async {
+    final corpo = await showModalBottomSheet<Map>(
+        context: context, isScrollControlled: true, showDragHandle: true, builder: (_) => EditarValores(pedido: p));
+    if (corpo == null || !mounted) return;
+    if (await salvar(context, 'PUT', '/api/pedidos/${widget.id}', corpo,
+            feito: 'Valores salvos', versaoBase: p['atualizado_em'] as String?) &&
         mounted) {
       setState(() => _versao++);
     }
@@ -167,7 +216,13 @@ class _PedidoTelaState extends State<PedidoTela> {
                 ),
               ),
             ),
-          const Secao('Itens'),
+          Secao('Itens',
+              acao: status == 'cancelado'
+                  ? null
+                  : IconButton(
+                      tooltip: 'Editar valores',
+                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: () => _editarValores(p))),
           for (final it in lista(p['itens']))
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -200,6 +255,7 @@ class _PedidoTelaState extends State<PedidoTela> {
             else if (status != 'cancelado')
               FilledButton.tonal(onPressed: () => _pago(true), child: const Text('Marcar como pago')),
           ]),
+          Comprovantes(pedidoId: widget.id, anexos: lista(p['anexos']), aoMudar: () => setState(() => _versao++)),
           if (proximos.isNotEmpty) ...[
             const Secao('Mudar status'),
             Wrap(spacing: 8, runSpacing: 8, children: [
@@ -222,4 +278,101 @@ class _PedidoTelaState extends State<PedidoTela> {
       ),
     );
   }
+}
+
+/// Folha de editar valores: "Total do pedido" (digitar 45 ajusta os preços) e o preço de cada item.
+class EditarValores extends StatefulWidget {
+  const EditarValores({super.key, required this.pedido});
+  final Map pedido;
+
+  @override
+  State<EditarValores> createState() => _EditarValoresState();
+}
+
+class _EditarValoresState extends State<EditarValores> {
+  late final _itens = lista(widget.pedido['itens']);
+  late final _precos = [for (final it in _itens) ctrlDinheiro(num0(it['preco_unitario']))];
+  late final _desconto = ctrlDinheiro(num0(widget.pedido['desconto']));
+  late final _frete = ctrlDinheiro(num0(widget.pedido['frete_cobrado']));
+  late final _total = ctrlDinheiro(_somaTotal());
+
+  /// Preços de onde o total distribui (os do pedido ou os digitados à mão): sem isso, cada tecla
+  /// redistribuiria o arredondamento da anterior.
+  late var _base = [for (final it in _itens) num0(it['preco_unitario'])];
+
+  double _v(TextEditingController c) => lerNumero(c.text) ?? 0;
+  double _qtd(int k) => num0(_itens[k]['quantidade']);
+
+  double _somaTotal() {
+    var s = 0.0;
+    for (var k = 0; k < _itens.length; k++) {
+      s += _qtd(k) * _v(_precos[k]);
+    }
+    return s - _v(_desconto) + _v(_frete);
+  }
+
+  void _recalcular() {
+    _base = [for (final c in _precos) _v(c)];
+    _total.text = DinheiroFormatter.formatar(_somaTotal());
+  }
+
+  void _distribuir(String _) {
+    final alvo = _v(_total) + _v(_desconto) - _v(_frete);
+    if (_itens.isEmpty || alvo < 0) return;
+    final novos = distribuirTotal([for (var k = 0; k < _itens.length; k++) (quantidade: _qtd(k), preco: _base[k])], alvo);
+    for (var k = 0; k < _itens.length; k++) {
+      _precos[k].text = DinheiroFormatter.formatar(novos[k]);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in [..._precos, _desconto, _frete, _total]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+            const Text('Editar valores', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            CampoDinheiro(_total, 'Total do pedido',
+                key: const Key('total-pedido'),
+                aoMudar: _distribuir,
+                ajuda: 'Os itens se ajustam ao total'),
+            for (var k = 0; k < _itens.length; k++)
+              CampoDinheiro(_precos[k],
+                  _qtd(k) == 1 ? nomeItem(_itens[k]) : '${nomeItem(_itens[k])} · cada (${numero(_qtd(k))} un.)',
+                  key: Key('preco$k'), aoMudar: (_) => _recalcular()),
+            Row(children: [
+              Expanded(child: CampoDinheiro(_desconto, 'Desconto', aoMudar: (_) => _recalcular())),
+              const SizedBox(width: 12),
+              Expanded(child: CampoDinheiro(_frete, 'Frete cobrado', aoMudar: (_) => _recalcular())),
+            ]),
+            const SizedBox(height: 12),
+            FilledButton(
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              onPressed: () => Navigator.pop(context, {
+                'itens': [
+                  for (var k = 0; k < _itens.length; k++)
+                    {
+                      'id': _itens[k]['id'],
+                      'modelo_id': _itens[k]['modelo_id'],
+                      'descricao': _itens[k]['descricao'] ?? nomeItem(_itens[k]),
+                      'quantidade': _itens[k]['quantidade'],
+                      'preco_unitario': arred2(_v(_precos[k])),
+                    }
+                ],
+                'desconto': arred2(_v(_desconto)),
+                'frete_cobrado': arred2(_v(_frete)),
+              }),
+              child: const Text('Salvar'),
+            ),
+          ]),
+        ),
+      );
 }
