@@ -64,7 +64,7 @@ void main() {
     await tester.enterText(find.byKey(const Key('nome')), 'Vaso');
     // Receita à vista (não mais escondida) e a primeira linha já vem com o filamento cadastrado.
     await tester.enterText(find.byKey(const Key('gramas0')), '33');
-    await tester.enterText(find.byKey(const Key('horas')), '3');
+    await tester.enterText(find.byKey(const Key('horas0')), '3');
     await tester.enterText(find.byKey(const Key('mao_obra')), '10');
     await tester.pumpAndSettle();
     expect(find.text('Custo R\$ 6,32'), findsOneWidget);
@@ -100,7 +100,7 @@ void main() {
     await tester.pumpAndSettle();
     final put = amb.recebidos.lastWhere((r) => r.method == 'PUT');
     final fil = ((jsonDecode(put.body) as Map)['receita'] as Map)['filamentos'] as List;
-    expect(fil.single, {'filamento_id': null, 'preco_kg': 100.0, 'gramas': 33.0});
+    expect(fil.single, {'filamento_id': null, 'preco_kg': 100.0, 'gramas': 33.0, 'horas': 3.0});
   });
 
   testWidgets('tempo "3h11" vira 3,18 h; receita sem filamento pede confirmação', (tester) async {
@@ -110,7 +110,7 @@ void main() {
     await tester.pumpWidget(amb.tela(const ModeloForm()));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('nome')), 'Chaveiro');
-    await tester.enterText(find.byKey(const Key('horas')), '3h11');
+    await tester.enterText(find.byKey(const Key('horas0')), '3h11');
     await tester.tap(find.text('Salvar'));
     await tester.pumpAndSettle();
     expect(find.text('Receita incompleta'), findsOneWidget);

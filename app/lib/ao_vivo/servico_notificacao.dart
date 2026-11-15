@@ -25,6 +25,7 @@ NotificationDetails _detalhesAlerta(String corpo) => NotificationDetails(
         importance: Importance.high,
         priority: Priority.high,
         playSound: true,
+        onlyAlertOnce: true, // mesma impressão (mesmo id) chegando de novo não toca de novo
         icon: iconeNotificacao,
         color: indigo,
         category: AndroidNotificationCategory.status,
@@ -169,8 +170,9 @@ class TarefaMonitor extends TaskHandler {
     _canal = CanalAoVivo(api)
       ..addListener(_atualizar)
       ..iniciar();
+    final avisadas = <String>{}; // a reconexão pode repetir o mesmo fim: alerta uma vez só
     _eventos = _canal!.eventos.listen((e) {
-      if (e['tipo'] == 'impressao_terminou') mostrarAlertaFim(e);
+      if (e['tipo'] == 'impressao_terminou' && avisadas.add('${e['impressao_id']}')) mostrarAlertaFim(e);
     });
   }
 

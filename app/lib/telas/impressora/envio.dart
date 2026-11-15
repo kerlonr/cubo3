@@ -38,16 +38,23 @@ mixin EnvioComando<T extends StatefulWidget> on State<T> {
 void avisarRecusa(BuildContext context, ErroApi e, String impressoraId) {
   final api = context.read<ApiCliente>();
   final mensageiro = ScaffoldMessenger.of(context);
-  mensageiro.showSnackBar(SnackBar(
-    content: Text(e.mensagem),
-    duration: const Duration(seconds: 8),
-    action: pedeHome(e.mensagem)
-        ? SnackBarAction(
-            label: 'Fazer Home',
-            onPressed: () => comandar(api, impressoraId, 'home', extra: {'eixos': 'XYZ'}).then(
-                (_) => mensageiro.showSnackBar(const SnackBar(content: Text('Home enviado'))),
-                onError: (Object erro) => mensageiro.showSnackBar(SnackBar(content: Text('$erro')))),
-          )
-        : null,
-  ));
+  mensageiro
+    ..clearSnackBars()
+    ..showSnackBar(SnackBar(
+      content: Text(e.mensagem),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 5),
+      persist: false, // com ação, o padrão do Flutter é ficar na tela até alguém tocar
+      showCloseIcon: true,
+      action: pedeHome(e.mensagem)
+          ? SnackBarAction(
+              label: 'Fazer Home',
+              onPressed: () => comandar(api, impressoraId, 'home', extra: {'eixos': 'XYZ'}).then(
+                  (_) => mensageiro.showSnackBar(
+                      const SnackBar(content: Text('Home enviado'), behavior: SnackBarBehavior.floating)),
+                  onError: (Object erro) => mensageiro.showSnackBar(
+                      SnackBar(content: Text('$erro'), behavior: SnackBarBehavior.floating, showCloseIcon: true))),
+            )
+          : null,
+    ));
 }

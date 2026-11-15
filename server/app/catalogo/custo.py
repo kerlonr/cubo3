@@ -26,10 +26,14 @@ def receita_do_modelo(db: Session, empresa_id, receita: dict, multiplicar_insumo
     insumos, embalagem = [], []
     for i in receita.get("insumos", []):
         ins = _da_empresa(db, Insumo, i.get("insumo_id"), empresa_id)
-        if ins is None:
+        if ins is not None and not ins.excluido:  # igual ao app, que só conhece os insumos ativos
+            custo, emb = ins.custo_unitario, ins.categoria == "embalagem"
+        elif i.get("custo_unitario") is not None:  # avulso, ou cadastro que sumiu: vale o preço copiado
+            custo, emb = D(str(i["custo_unitario"])), bool(i.get("embalagem"))
+        else:
             continue
-        item = ItemCusto(D(str(i.get("qtd", 0))) * multiplicar_insumos, ins.custo_unitario)
-        (embalagem if ins.categoria == "embalagem" else insumos).append(item)
+        item = ItemCusto(D(str(i.get("qtd", 0))) * multiplicar_insumos, custo)
+        (embalagem if emb else insumos).append(item)
     return Receita(filamentos, D(str(receita.get("horas", 0))), D(str(receita.get("mao_obra_min", 0))),
                    insumos, embalagem, D(str(receita.get("custo_envio", 0))))
 

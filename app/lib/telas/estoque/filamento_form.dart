@@ -19,6 +19,14 @@ const _paleta = [
   ('Rosa', '#EC407A'),
   ('Marrom', '#6D4C41'),
   ('Transparente', '#E0F7FA'),
+  ('Bege', '#D7C4A3'),
+  ('Dourado', '#C9A227'),
+  ('Prata', '#BDBDBD'),
+  ('Verde-claro', '#9CCC65'),
+  ('Azul-claro', '#4FC3F7'),
+  ('Vinho', '#7B1F3A'),
+  ('Lilás', '#B39DDB'),
+  ('Laranja neon', '#FF6D00'),
 ];
 
 const _materiais = ['PLA', 'PETG', 'ABS', 'TPU', 'ASA'];

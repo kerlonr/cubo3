@@ -20,14 +20,28 @@ from app.estoque.servico import saldo
 
 
 class ItemReceitaFilamento(BaseModel):
+    """Uma peça impressa do modelo (ex.: keycap, case): filamento, gramas e, opcional, nome e tempo."""
     filamento_id: uuid.UUID | None = None
     preco_kg: Decimal | None = Field(None, ge=0)  # filamento avulso (sem cadastro), como no orçamento
     gramas: Decimal = Field(ge=0)
+    nome: str | None = Field(None, max_length=80)
+    horas: Decimal | None = Field(None, ge=0)  # tempo desta peça; receita.horas é a soma
 
 
 class ItemReceitaInsumo(BaseModel):
-    insumo_id: uuid.UUID
+    """Insumo do cadastro (insumo_id) ou avulso (nome + custo_unitario), ex.: switch, argola."""
+    insumo_id: uuid.UUID | None = None
     qtd: Decimal = Field(ge=0)
+    nome: str | None = Field(None, max_length=80)
+    custo_unitario: Decimal | None = Field(None, ge=0)  # cópia do preço: vale se o cadastro sumir
+    embalagem: bool = False
+
+
+class AjusteCapa(BaseModel):
+    """Enquadramento da foto de capa: foco (-1 a 1 em cada eixo) e zoom."""
+    x: float = Field(0, ge=-1, le=1)
+    y: float = Field(0, ge=-1, le=1)
+    zoom: float = Field(1, ge=1, le=4)
 
 
 class ReceitaEntrada(BaseModel):
@@ -53,11 +67,13 @@ class ModeloEntrada(BaseModel):
     impressora_id: uuid.UUID | None = None
     preco_venda: Decimal | None = Field(None, ge=0)
     nomes_arquivo: list[str] | None = None
+    capa_id: uuid.UUID | None = None
+    capa_ajuste: AjusteCapa | None = None
 
     def model_dump(self, **kw):
         # JSON das colunas precisa de tipos simples (UUID/Decimal viram texto).
         d = super().model_dump(**kw)
-        for campo in ("receita", "links"):
+        for campo in ("receita", "links", "capa_ajuste"):
             if campo in d and d[campo] is not None:
                 d[campo] = super().model_dump(mode="json", include={campo})[campo]
         return d
@@ -81,7 +97,15 @@ def saida_modelo(db: Session, m: Modelo, vendidos: Decimal | None = None) -> dic
             "capa_url": f"/api/arquivos/{m.capa_id}" if m.capa_id else None}
 
 
-rotas_modelos = rotas_crud(Modelo, ModeloEntrada, saida_modelo, "/modelos", nome="Modelo", com_listagem=False)
+def ao_salvar_modelo(db: Session, c: Ctx, m: Modelo, criado: bool) -> None:
+    if m.capa_id is not None:
+        a = db.get(Arquivo, m.capa_id)
+        if a is None or a.modelo_id != m.id or a.tipo != "foto":
+            raise HTTPException(422, "A capa precisa ser uma foto deste modelo")
+
+
+rotas_modelos = rotas_crud(Modelo, ModeloEntrada, saida_modelo, "/modelos", nome="Modelo", com_listagem=False,
+                           ao_salvar=ao_salvar_modelo)
 rotas = APIRouter(prefix="/api", tags=["catalogo"])
 
 

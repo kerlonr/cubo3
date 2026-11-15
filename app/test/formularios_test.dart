@@ -51,7 +51,7 @@ void main() {
     await amb.preparar();
     await tamanhoTela(tester, 400, 1600);
     await abrir(tester, amb, const CarretelForm());
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.byType(DropdownButtonFormField<String?>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Voolt PLA Preto').last);
     await tester.pumpAndSettle();

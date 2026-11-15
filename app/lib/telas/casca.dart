@@ -54,22 +54,31 @@ class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
+  /// Impressões já avisadas: o servidor pode mandar o mesmo fim de novo (reconexão).
+  final _avisadas = <String>{};
+
   /// Fim de impressão com o app aberto: recarrega a lista, avisa na tela e, no navegador, notifica.
   void _aoEvento(Map e) {
     if (e['tipo'] != 'impressao_terminou' || !mounted) return;
     impressoes.currentState?.recarregar();
     final a = alertaFim(e);
     final id = '${e['impressao_id'] ?? ''}';
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(a.titulo),
-      duration: const Duration(seconds: 10),
-      action: id.isEmpty
-          ? null
-          : SnackBarAction(
-              label: 'Confirmar',
-              onPressed: () =>
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => ConfirmarTela(impressaoId: id)))),
-    ));
+    if (id.isNotEmpty && !_avisadas.add(id)) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text(a.titulo),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+        persist: false, // com ação, o padrão do Flutter é ficar na tela até alguém tocar
+        showCloseIcon: true,
+        action: id.isEmpty
+            ? null
+            : SnackBarAction(
+                label: 'Confirmar',
+                onPressed: () =>
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => ConfirmarTela(impressaoId: id)))),
+      ));
     if (kIsWeb) mostrarAlertaFim(e).catchError((_) {});
   }
 

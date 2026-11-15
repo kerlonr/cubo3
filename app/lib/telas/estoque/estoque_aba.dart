@@ -299,6 +299,9 @@ class _CarreteisTelaState extends State<CarreteisTela> {
                 Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
+                    onTap: () async => _recarregar(await Navigator.push<bool>(
+                            context, MaterialPageRoute(builder: (_) => CarretelForm(dados: c))) ==
+                        true),
                     title: Text(gramas(num0(c['saldo_g'])),
                         style: const TextStyle(fontFeatures: tabular, fontWeight: FontWeight.w600, fontSize: 18)),
                     subtitle: Text([
@@ -311,6 +314,10 @@ class _CarreteisTelaState extends State<CarreteisTela> {
                       onSelected: (acao) async {
                         final id = c['id'] as String;
                         switch (acao) {
+                          case 'editar':
+                            _recarregar(await Navigator.push<bool>(
+                                    context, MaterialPageRoute(builder: (_) => CarretelForm(dados: c))) ==
+                                true);
                           case 'pesar':
                             _recarregar(await pesarCarretel(context, c));
                           case 'ajustar':
@@ -328,6 +335,7 @@ class _CarreteisTelaState extends State<CarreteisTela> {
                         }
                       },
                       itemBuilder: (_) => [
+                        const PopupMenuItem(value: 'editar', child: Text('Editar (preço, peso, data)')),
                         const PopupMenuItem(value: 'pesar', child: Text('Pesar na balança')),
                         const PopupMenuItem(value: 'ajustar', child: Text('Ajustar saldo')),
                         PopupMenuItem(value: 'aberto', child: Text(c['aberto'] == true ? 'Marcar fechado' : 'Marcar aberto')),

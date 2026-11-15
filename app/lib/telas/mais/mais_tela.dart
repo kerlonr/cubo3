@@ -5,7 +5,7 @@ import '../../api/sessao.dart';
 import '../estoque/estoque_aba.dart';
 import '../vendas/clientes_tela.dart';
 import 'configuracoes_tela.dart';
-import 'despesas_tela.dart';
+import 'financeiro_tela.dart';
 
 /// Tudo o que não cabe nas 4 abas. Empresa, custos, canais e impressoras ficam nas Configurações.
 class MaisTela extends StatelessWidget {
@@ -25,7 +25,11 @@ class MaisTela extends StatelessWidget {
         const Divider(),
         ListTile(leading: const Icon(Icons.inventory_2_outlined), title: const Text('Estoque'), onTap: () => abrir(const EstoqueAba())),
         ListTile(leading: const Icon(Icons.people_outline), title: const Text('Clientes'), onTap: () => abrir(const ClientesTela())),
-        ListTile(leading: const Icon(Icons.payments_outlined), title: const Text('Despesas'), onTap: () => abrir(const DespesasTela())),
+        ListTile(
+            leading: const Icon(Icons.account_balance_wallet_outlined),
+            title: const Text('Financeiro'),
+            subtitle: const Text('Entradas, gastos e resultado do mês'),
+            onTap: () => abrir(const FinanceiroTela())),
         ListTile(
             leading: const Icon(Icons.settings_outlined),
             title: const Text('Configurações'),

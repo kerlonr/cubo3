@@ -1,6 +1,5 @@
 import 'dart:ui' as ui;
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:intl/intl.dart';
@@ -20,28 +19,45 @@ import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../../widgets/logo.dart';
 import '../../widgets/seletores.dart';
+import '../catalogo/insumos_receita.dart';
 import '../catalogo/modelo_form.dart' show caminhosCusto, ModeloForm, QuebraCusto;
-import '../impressora/arquivos.dart' show resumoArquivo;
 import 'historico.dart';
+import 'importar.dart';
+
+export 'importar.dart' show itemDeArquivo;
 
 const _prefFilamento = 'orcar_filamento';
 const _prefMaoObra = 'orcar_mao_obra';
 
 /// Uma peça do orçamento (o kit pode ter várias).
 class ItemOrcado {
-  ItemOrcado({String nome = '', String gramas = '', String tempo = '', this.qtd = 1})
+  ItemOrcado({String nome = '', String gramas = '', String tempo = '', this.qtd = 1, this.filamento})
       : nome = TextEditingController(text: nome),
         gramas = TextEditingController(text: gramas),
         tempo = TextEditingController(text: tempo);
 
   factory ItemOrcado.deJson(Map j) =>
-      ItemOrcado(nome: '${j['nome'] ?? ''}', gramas: '${j['gramas'] ?? ''}', tempo: '${j['tempo'] ?? ''}', qtd: num0(j['qtd'] ?? 1).toInt());
+      ItemOrcado(
+          nome: '${j['nome'] ?? ''}',
+          gramas: '${j['gramas'] ?? ''}',
+          tempo: '${j['tempo'] ?? ''}',
+          qtd: num0(j['qtd'] ?? 1).toInt(),
+          filamento: j['filamento_id'] as String?);
 
   final TextEditingController nome, gramas, tempo;
   int qtd;
 
+  /// Cor/filamento desta peça quando é diferente do geral (ex.: keycap colorida, case preto).
+  String? filamento;
+
   bool get vazio => gramas.text.trim().isEmpty && tempo.text.trim().isEmpty;
-  Json get json => {'nome': nome.text.trim(), 'gramas': gramas.text.trim(), 'tempo': tempo.text.trim(), 'qtd': qtd};
+  Json get json => {
+        'nome': nome.text.trim(),
+        'gramas': gramas.text.trim(),
+        'tempo': tempo.text.trim(),
+        'qtd': qtd,
+        if (filamento != null) 'filamento_id': filamento,
+      };
 
   void dispose() {
     nome.dispose();
@@ -49,14 +65,6 @@ class ItemOrcado {
     tempo.dispose();
   }
 }
-
-/// Item vindo de um arquivo fatiado (do aparelho ou da impressora).
-Json itemDeArquivo(String nomeArquivo, num? gramasLidos, num? segundos) => {
-      'nome': nomeArquivo.replaceAll(RegExp(r'(\.gcode)?(\.3mf)?$|\.gcode$', caseSensitive: false), ''),
-      'gramas': gramasLidos == null ? '' : paraCampo(gramasLidos.toDouble()),
-      'tempo': segundos == null ? '' : duracao(segundos),
-      'qtd': 1,
-    };
 
 /// Orçar peça: digita gramas e tempo (ou puxa de um arquivo fatiado) e vê o preço na hora.
 /// Funciona sem internet com os cadastros do cache (ou, sem cache nenhum, os padrões da planilha).
@@ -78,6 +86,8 @@ class _OrcarTelaState extends State<OrcarTela> {
   final _extra = TextEditingController();
   final _cliente = TextEditingController();
   final _obs = TextEditingController();
+  final _meuPreco = TextEditingController();
+  final _insumos = <LinhaInsumo>[];
   final _imagem = GlobalKey();
   String? _filamento;
   String? _impressora;
@@ -102,6 +112,8 @@ class _OrcarTelaState extends State<OrcarTela> {
       _margem = num0(ini['margem'] ?? margemAlvo).toDouble();
       _cliente.text = '${ini['cliente'] ?? ''}';
       _obs.text = '${ini['obs'] ?? ''}';
+      _meuPreco.text = '${ini['preco_manual'] ?? ''}';
+      _insumos.addAll([for (final i in lista(ini['insumos'])) LinhaInsumo.deJson(i)]);
     }
     SharedPreferences.getInstance().then((p) {
       if (!mounted) return;
@@ -122,6 +134,7 @@ class _OrcarTelaState extends State<OrcarTela> {
     _extra.dispose();
     _cliente.dispose();
     _obs.dispose();
+    _meuPreco.dispose();
     super.dispose();
   }
 
@@ -139,40 +152,13 @@ class _OrcarTelaState extends State<OrcarTela> {
       });
 
   Future<void> _doArquivo() async {
-    final escolhidos = await FilePicker.pickFiles();
-    if (escolhidos.isEmpty || !mounted) return;
-    final f = escolhidos.first;
-    final lido = lerArquivoFatiado(f.name, await f.readAsBytes());
-    if (!mounted) return;
-    if (!lido.temDados) {
-      avisar(context, 'Esse arquivo não tem gramas nem tempo. No Bambu Studio, fatie e exporte o G-code ou o 3MF fatiado.');
-      return;
-    }
-    _adicionar(itemDeArquivo(f.name, lido.gramas, lido.segundos));
+    final item = await itemDoAparelho(context);
+    if (item != null && mounted) _adicionar(item);
   }
 
   Future<void> _daImpressora(Json impressora) async {
-    final arquivo = await showModalBottomSheet<Json>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (c) => SizedBox(
-        height: MediaQuery.sizeOf(c).height * 0.7,
-        child: EstadoTela<List>(
-          carregar: () => buscar(c, '/api/impressoras/${impressora['id']}/arquivos'),
-          construir: (c, l) => ListView(children: [
-            for (final a in lista(l))
-              ListTile(
-                title: Text('${a['nome']}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text(resumoArquivo(a)),
-                onTap: () => Navigator.pop(c, a),
-              ),
-          ]),
-        ),
-      ),
-    );
-    if (arquivo == null) return;
-    _adicionar(itemDeArquivo('${arquivo['nome']}', arquivo['gramas'] as num?, arquivo['tempo_estimado_s'] as num?));
+    final item = await itemDaImpressora(context, impressora);
+    if (item != null && mounted) _adicionar(item);
   }
 
   Custo _custo(Map cad) {
@@ -182,7 +168,7 @@ class _OrcarTelaState extends State<OrcarTela> {
       if (g == 0 && h == 0) continue;
       final receita = {
         'filamentos': [
-          {'filamento_id': _filamento, 'preco_kg': lerNumero(_precoKg.text) ?? 0, 'gramas': g}
+          {'filamento_id': i.filamento ?? _filamento, 'preco_kg': lerNumero(_precoKg.text) ?? 0, 'gramas': g}
         ],
         'horas': h,
         'mao_obra_min': lerNumero(_maoObra.text) ?? 0,
@@ -197,46 +183,61 @@ class _OrcarTelaState extends State<OrcarTela> {
         i.qtd
       ));
     }
+    if (partes.isNotEmpty && _insumos.isNotEmpty) {
+      // Insumos valem para o orçamento todo (a quantidade de cada um já é o total).
+      partes.add((
+        custoDaReceita({'insumos': [for (final i in _insumos) i.json]},
+            filamentos: const [], insumos: lista(cad['insumos']), impressoras: const [], config: mapa(cad['config'])),
+        1
+      ));
+    }
     return somarCustos(partes, extra: partes.isEmpty ? 0 : lerNumero(_extra.text) ?? 0);
   }
 
   Map? _cad; // cadastros da última montagem, para salvar a peça no catálogo com o mesmo custo
 
-  /// Uma peça vira modelo com a mesma receita (filamento ou preço avulso, gramas, tempo, mão de obra)
-  /// e o preço de 50% de uma unidade.
-  void _paraCatalogo(ItemOrcado it) {
-    final cad = _cad ?? const {};
-    final receita = {
-      'filamentos': [
-        {
-          'filamento_id': _filamento,
-          if (_filamento == null) 'preco_kg': lerNumero(_precoKg.text) ?? 0,
-          'gramas': lerNumero(it.gramas.text) ?? 0,
+  /// O orçamento inteiro vira um modelo: cada peça é uma parte impressa (gramas e tempo × quantidade),
+  /// com os insumos, a embalagem e o preço escolhido. Abre o cadastro já preenchido para conferir e salvar.
+  void _paraCatalogo(PrecoSugerido p) {
+    final itens = [for (final i in _itens) if (!i.vazio) i];
+    final pecas = [
+      for (final (n, it) in itens.indexed)
+        <String, Object?>{
+          'filamento_id': it.filamento ?? _filamento,
+          if ((it.filamento ?? _filamento) == null) 'preco_kg': lerNumero(_precoKg.text) ?? 0,
+          'gramas': (lerNumero(it.gramas.text) ?? 0) * it.qtd,
+          'horas': (lerHoras(it.tempo.text) ?? 0) * it.qtd,
+          'nome': [it.nome.text.trim().isEmpty ? 'Peça ${n + 1}' : it.nome.text.trim(), if (it.qtd > 1) '(${it.qtd}x)']
+              .join(' '),
         }
-      ],
-      'horas': lerHoras(it.tempo.text) ?? 0,
-      'mao_obra_min': lerNumero(_maoObra.text) ?? 0,
-      'insumos': const [],
-      'custo_envio': 0,
+    ];
+    final receita = {
+      'filamentos': pecas,
+      'horas': pecas.fold<double>(0, (s, f) => s + (f['horas'] as num)),
+      'mao_obra_min': (lerNumero(_maoObra.text) ?? 0) * itens.fold<int>(0, (s, i) => s + i.qtd),
+      'insumos': [for (final i in _insumos) i.json],
+      'custo_envio': lerNumero(_extra.text) ?? 0,
     };
-    final custo = custoDaReceita(receita,
-        filamentos: lista(cad['filamentos']),
-        insumos: const [],
-        impressoras: lista(cad['impressoras']),
-        config: mapa(cad['config']),
-        impressoraId: _impressora);
     Navigator.push(
         context,
         MaterialPageRoute(
             builder: (_) => ModeloForm(dados: {
-                  'nome': it.nome.text.trim(),
-                  'preco_venda': _escolhido(custo.total).preco,
+                  'nome': itens.length == 1 ? itens.single.nome.text.trim() : '',
+                  'preco_venda': p.preco,
                   'receita': receita,
                   'impressora_id': _impressora,
                 })));
   }
 
+  /// Preço digitado pelo Kerlon (vale mais que as margens), ou null.
+  double? get _precoManual {
+    final v = lerNumero(_meuPreco.text);
+    return v == null || v <= 0 ? null : v;
+  }
+
   PrecoSugerido _escolhido(double custo) {
+    final manual = _precoManual;
+    if (manual != null) return PrecoSugerido(arred2((manual - custo) / manual * 100), custo, manual, manual);
     final ops = opcoesDePreco(custo, ParamEmpresa.fromJson(mapa((_cad ?? const {})['config'])).margens);
     return ops.firstWhere((p) => p.margem == _margem, orElse: () => precoDestaque(custo));
   }
@@ -250,6 +251,8 @@ class _OrcarTelaState extends State<OrcarTela> {
         'mao_obra': _maoObra.text,
         'extra': _extra.text,
         'margem': p.margem,
+        'preco_manual': _meuPreco.text.trim(),
+        'insumos': [for (final i in _insumos) i.json],
         'cliente': _cliente.text.trim(),
         'obs': _obs.text.trim(),
         'preco': p.preco,
@@ -257,7 +260,8 @@ class _OrcarTelaState extends State<OrcarTela> {
       };
 
   DadosEnvio _dados(PrecoSugerido p) {
-    final fil = lista((_cad ?? const {})['filamentos']).where((f) => f['id'] == _filamento).firstOrNull;
+    final mesmaCor = _itens.every((i) => i.filamento == null || i.filamento == _filamento);
+    final fil = !mesmaCor ? null : lista((_cad ?? const {})['filamentos']).where((f) => f['id'] == _filamento).firstOrNull;
     return DadosEnvio(
       pecas: [
         for (final (i, it) in _itens.where((x) => !x.vazio).indexed)
@@ -417,18 +421,11 @@ class _OrcarTelaState extends State<OrcarTela> {
               if (filamentos.isEmpty)
                 CampoDinheiro(_precoKg, 'Preço do filamento por kg', aoMudar: _mudou)
               else
-                DropdownButtonFormField<String?>(
-                  key: ValueKey('fil$_filamento'),
-                  initialValue: _filamento,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Filamento'),
-                  items: [
-                    for (final f in filamentos)
-                      DropdownMenuItem<String?>(
-                          value: f['id'] as String, child: Text(nomeFilamento(f), overflow: TextOverflow.ellipsis)),
-                    const DropdownMenuItem<String?>(value: null, child: Text('Preço avulso')),
-                  ],
-                  onChanged: (v) {
+                SeletorFilamento(
+                  filamentos: filamentos,
+                  valor: _filamento,
+                  rotulo: 'Filamento',
+                  aoMudar: (v) {
                     setState(() {
                       _filamento = v;
                       _escolheuFilamento = true;
@@ -440,6 +437,11 @@ class _OrcarTelaState extends State<OrcarTela> {
                 const SizedBox(height: 12),
                 CampoDinheiro(_precoKg, 'Preço do filamento por kg', aoMudar: _mudou),
               ],
+              const Secao('Insumos'),
+              Text('O que vai junto: switch, argola, ímã... (quantidade do orçamento todo)',
+                  style: TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 8),
+              EditorInsumos(linhas: _insumos, cadastro: lista(cad['insumos']), aoMudar: _mudou),
               MaisDetalhes(titulo: 'Ajustes', children: [
                 CampoNumero(_maoObra, 'Mão de obra por peça', sufixo: 'min', key: const Key('mao_obra'), aoMudar: (v) {
                   _mudou();
@@ -464,11 +466,29 @@ class _OrcarTelaState extends State<OrcarTela> {
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.only(right: 8),
-                        child: Entrada(ordem: opcoes.indexOf(p), child: _opcaoMargem(p, p.margem == destaque.margem)),
+                        child: Entrada(
+                            ordem: opcoes.indexOf(p),
+                            child: _opcaoMargem(p, _precoManual == null && p.margem == destaque.margem)),
                       ),
                     ),
                 ]),
+                const SizedBox(height: 8),
+                CampoDinheiro(_meuPreco, 'Meu preço (opcional)',
+                    key: const Key('meu_preco'),
+                    aoMudar: _mudou,
+                    ajuda: _precoManual == null
+                        ? 'Quer cobrar outro valor? Digite aqui e veja o lucro.'
+                        : 'Lucro ${moeda(destaque.lucro)} (${numero(destaque.lucroPct)}%)'),
                 MaisDetalhes(titulo: 'Detalhe do custo', children: [QuebraCusto(custo)]),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    key: const Key('para_catalogo'),
+                    onPressed: () => _paraCatalogo(destaque),
+                    icon: const Icon(Icons.bookmark_add_outlined),
+                    label: const Text('Salvar no catálogo'),
+                  ),
+                ),
               ],
             ]),
           ),
@@ -492,7 +512,10 @@ class _OrcarTelaState extends State<OrcarTela> {
       child: InkWell(
         key: Key('margem${p.margem.toInt()}'),
         borderRadius: BorderRadius.circular(16),
-        onTap: () => setState(() => _margem = p.margem),
+        onTap: () => setState(() {
+          _margem = p.margem;
+          _meuPreco.clear();
+        }),
         child: Padding(
           padding: const EdgeInsets.all(10),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -534,14 +557,11 @@ class _OrcarTelaState extends State<OrcarTela> {
             Text('${it.qtd}', key: Key('qtd$i'), style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),
             IconButton(
                 tooltip: 'Mais uma', onPressed: () => setState(() => it.qtd++), icon: const Icon(Icons.add_circle_outline)),
-            PopupMenuButton<String>(
-              tooltip: 'Mais opções da peça',
-              onSelected: (o) => o == 'tirar' ? setState(() => _itens.removeAt(i).dispose()) : _paraCatalogo(it),
-              itemBuilder: (_) => [
-                PopupMenuItem(value: 'catalogo', enabled: !it.vazio, child: const Text('Salvar no catálogo')),
-                if (_itens.length > 1) const PopupMenuItem(value: 'tirar', child: Text('Tirar peça')),
-              ],
-            ),
+            if (_itens.length > 1)
+              IconButton(
+                  tooltip: 'Tirar peça',
+                  onPressed: () => setState(() => _itens.removeAt(i).dispose()),
+                  icon: const Icon(Icons.close)),
           ]),
           const SizedBox(height: 4),
           Padding(
@@ -563,7 +583,45 @@ class _OrcarTelaState extends State<OrcarTela> {
               ),
             ]),
           ),
+          _corDaPeca(it),
         ]),
+      ),
+    );
+  }
+
+  /// Filamento da peça: o geral do orçamento ou outro (outra cor). Só aparece com filamentos cadastrados.
+  Widget _corDaPeca(ItemOrcado it) {
+    final filamentos = lista((_cad ?? const {})['filamentos']);
+    if (filamentos.isEmpty) return const SizedBox.shrink();
+    final f = filamentos.where((x) => x['id'] == (it.filamento ?? _filamento)).firstOrNull;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: () async {
+          final escolhido = await showModalBottomSheet<String>(
+            context: context,
+            showDragHandle: true,
+            builder: (c) => SafeArea(
+              child: ListView(shrinkWrap: true, children: [
+                ListTile(
+                    leading: const Icon(Icons.link),
+                    title: const Text('Igual ao filamento geral'),
+                    onTap: () => Navigator.pop(c, '')),
+                for (final x in filamentos)
+                  ListTile(
+                    leading: BolinhaCor(corHex(x['cor_hex'])),
+                    title: Text(nomeFilamento(x)),
+                    onTap: () => Navigator.pop(c, '${x['id']}'),
+                  ),
+              ]),
+            ),
+          );
+          if (escolhido == null) return;
+          setState(() => it.filamento = escolhido.isEmpty ? null : escolhido);
+        },
+        icon: BolinhaCor(corHex(f?['cor_hex']), tamanho: 14),
+        label: Text(f == null ? 'Preço avulso' : '${nomeFilamento(f)}${it.filamento == null ? '' : ' (só esta peça)'}',
+            overflow: TextOverflow.ellipsis),
       ),
     );
   }
@@ -590,7 +648,10 @@ class _OrcarTelaState extends State<OrcarTela> {
               : Row(children: [
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                      Text('Preço com ${numero(p.margem)}% de lucro${p.margem == margemAlvo ? ' (recomendado)' : ''}',
+                      Text(
+                          _precoManual != null
+                              ? 'Meu preço (${numero(p.margem)}% de lucro)'
+                              : 'Preço com ${numero(p.margem)}% de lucro${p.margem == margemAlvo ? ' (recomendado)' : ''}',
                           style: fraco),
                       FittedBox(
                         fit: BoxFit.scaleDown,

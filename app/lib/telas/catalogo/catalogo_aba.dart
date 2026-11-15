@@ -154,24 +154,37 @@ class _CatalogoAbaState extends State<CatalogoAba> {
   Widget _cartao(Json m) {
     final lucro = numOu(m['lucro_unitario']);
     final preco = numOu(m['preco_venda']);
+    final r = resumoReceita(mapa(m['receita']));
+    final fraco = TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant, fontFeatures: tabular);
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => _abrir(ModeloTela(id: m['id'] as String)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Expanded(child: ImagemApi(m['capa_url'] as String?)),
+          Expanded(child: ImagemApi(m['capa_url'] as String?, enquadramento: mapa(m['capa_ajuste']))),
           Padding(
             padding: const EdgeInsets.all(10),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(m['nome'] as String, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
+              if (r.gramas > 0 || r.horas > 0)
+                Text(
+                    [
+                      if (r.gramas > 0) gramas(r.gramas),
+                      if (r.horas > 0) duracao(r.horas * 3600),
+                      if (r.pecas > 1) '${r.pecas} peças',
+                      if (r.insumos > 0) '+${r.insumos} ins.',
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: fraco),
               Text(preco == null ? 'Sem preço' : moeda(preco), style: const TextStyle(fontFeatures: tabular)),
               // Wrap: em cartão estreito o "vendidos" desce inteiro em vez de partir o valor do lucro.
               Wrap(spacing: 8, children: [
                 if (receitaIncompleta(mapa(m['receita'])))
                   const Selo('falta receita', cor: amarelo)
                 else if (lucro != null)
-                  Text('lucro ${moeda(lucro)}',
+                  Text('lucro ${moeda(lucro)}${preco != null && preco > 0 ? ' (${numero(lucro / preco * 100)}%)' : ''}',
                       style: TextStyle(fontSize: 12, color: corResultado(lucro), fontFeatures: tabular)),
                 Text('${numero(num0(m['vendidos']))} vend.', style: const TextStyle(fontSize: 12)),
               ]),

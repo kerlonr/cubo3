@@ -10,8 +10,12 @@ import '../../tema.dart';
 import '../../util/formatos.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
+import '../../widgets/seletores.dart';
 import '../impressora/envio.dart';
 import 'arquivos.dart';
+import 'capa_tela.dart';
+import 'catalogo_aba.dart' show receitaIncompleta;
+import 'insumos_receita.dart';
 import 'modelo_form.dart';
 
 /// Perfil do modelo: capa, preço × custo × lucro, estoque, arquivos e histórico.
@@ -100,6 +104,8 @@ class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
             'impressoes': '/api/impressoes',
             'pedidos': '/api/pedidos',
             'impressoras': '/api/impressoras',
+            'filamentos': '/api/filamentos',
+            'insumos': '/api/insumos',
           });
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) setState(() => _modelo = mapa((r.dados as Map)['modelo']));
@@ -109,6 +115,56 @@ class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
         construir: (context, dados) => _corpo(dados),
       ),
     );
+  }
+
+  /// Ficha técnica: gramas, tempo, peças impressas (com a cor) e insumos.
+  Widget _ficha(Json m, double custo, List filamentos, List insumos) {
+    final r = mapa(m['receita']);
+    final res = resumoReceita(r);
+    final preco = numOu(m['preco_venda']);
+    final fraco = TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant);
+    Widget info(IconData icone, String texto) => Chip(
+          avatar: Icon(icone, size: 16),
+          label: Text(texto, style: const TextStyle(fontFeatures: tabular)),
+          visualDensity: VisualDensity.compact,
+        );
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const Secao('Ficha'),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        info(Icons.scale_outlined, gramas(res.gramas)),
+        info(Icons.schedule, res.horas > 0 ? duracao(res.horas * 3600) : 'sem tempo'),
+        info(Icons.layers_outlined, res.pecas == 1 ? '1 peça impressa' : '${res.pecas} peças impressas'),
+        if (res.insumos > 0) info(Icons.inventory_2_outlined, res.insumos == 1 ? '1 insumo' : '${res.insumos} insumos'),
+        if (num0(r['mao_obra_min']) > 0) info(Icons.handyman_outlined, '${numero(num0(r['mao_obra_min']))} min de mão de obra'),
+        if (preco != null && preco > 0) info(Icons.percent, 'margem ${numero((preco - custo) / preco * 100)}%'),
+      ]),
+      const SizedBox(height: 4),
+      for (final (n, p) in lista(r['filamentos']).indexed)
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: BolinhaCor(corHex(filamentos.where((f) => f['id'] == p['filamento_id']).firstOrNull?['cor_hex'])),
+          title: Text('${p['nome'] ?? ''}'.isEmpty ? 'Peça ${n + 1}' : '${p['nome']}'),
+          subtitle: Text([
+            p['filamento_id'] == null
+                ? 'Filamento avulso'
+                : nomeFilamento(filamentos.where((f) => f['id'] == p['filamento_id']).firstOrNull),
+            gramas(num0(p['gramas'])),
+            if (num0(p['horas']) > 0) duracao(num0(p['horas']) * 3600),
+          ].join(' · ')),
+        ),
+      for (final i in lista(r['insumos']))
+        Builder(builder: (_) {
+          final l = LinhaInsumo.deJson(i)..sincronizar(insumos);
+          return ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(l.embalagem ? Icons.redeem_outlined : Icons.inventory_2_outlined, size: 20),
+            title: Text(l.nome.isEmpty ? 'Insumo' : l.nome),
+            trailing: Text('${numero(l.qtd)} × ${moeda(l.custo)}', style: fraco.copyWith(fontFeatures: tabular)),
+          );
+        }),
+    ]);
   }
 
   Widget _corpo(Map dados) {
@@ -131,11 +187,40 @@ class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
         child: ListView(padding: const EdgeInsets.all(16), children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: AspectRatio(aspectRatio: 16 / 10, child: ImagemApi(m['capa_url'] as String?)),
-          ),
+          Stack(children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: AspectRatio(
+                  aspectRatio: 16 / 10,
+                  child: ImagemApi(m['capa_url'] as String?, enquadramento: mapa(m['capa_ajuste']))),
+            ),
+            if (lista(m['arquivos']).any((a) => a['tipo'] == 'foto'))
+              Positioned(
+                right: 8,
+                bottom: 8,
+                child: FilledButton.tonalIcon(
+                  key: const Key('ajustar_foto'),
+                  onPressed: () async {
+                    final ok = await Navigator.push<bool>(
+                        context, MaterialPageRoute(builder: (_) => CapaTela(modelo: m)));
+                    if (ok == true) _recarregar();
+                  },
+                  icon: const Icon(Icons.crop, size: 18),
+                  label: const Text('Ajustar foto'),
+                ),
+              ),
+          ]),
           const SizedBox(height: 12),
+          if (receitaIncompleta(mapa(m['receita'])))
+            Card(
+              color: amarelo.withValues(alpha: 0.15),
+              child: ListTile(
+                leading: const Icon(Icons.warning_amber_rounded, color: amarelo),
+                title: const Text('Faltam gramas ou tempo'),
+                subtitle: const Text('O custo sai menor que o real. Puxe do arquivo fatiado ou da impressora.'),
+                trailing: TextButton(onPressed: _editar, child: const Text('Completar')),
+              ),
+            ),
           if ((m['categoria'] ?? '') != '' || (m['tags'] as List? ?? const []).isNotEmpty)
             Wrap(spacing: 6, runSpacing: 6, children: [
               if ((m['categoria'] ?? '') != '') Selo(m['categoria'] as String),
@@ -158,6 +243,7 @@ class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
             const SizedBox(width: 8),
             Expanded(child: CartaoValor('Vendidos', numero(num0(m['vendidos'])))),
           ]),
+          _ficha(m, custo.total, lista(dados['filamentos']), lista(dados['insumos'])),
           const Secao('Custo'),
           QuebraCusto(custo),
           if (lista(m['links']).isNotEmpty) ...[

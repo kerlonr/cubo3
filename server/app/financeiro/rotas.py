@@ -18,7 +18,8 @@ from app.financeiro.modelos import Despesa
 
 class DespesaEntrada(BaseModel):
     data: date | None = None
-    categoria: Literal["equipamento", "manutencao", "energia", "ferramenta", "outros"] | None = None
+    categoria: Literal["filamento", "insumo", "desperdicio", "embalagem", "equipamento", "manutencao", "energia",
+                       "ferramenta", "outros"] | None = None
     valor: Decimal | None = Field(None, gt=0)
     descricao: str | None = None
 
@@ -27,14 +28,27 @@ rotas_despesas = rotas_crud(Despesa, DespesaEntrada, lambda db, o: serializar(o)
 rotas = APIRouter(prefix="/api", tags=["painel"])
 
 
-@rotas.get("/painel")
-def ver_painel(inicio: date | None = None, fim: date | None = None, c: Ctx = Depends(ctx),
-               db: Session = Depends(get_db)):
+def _periodo(inicio: date | None, fim: date | None) -> tuple[date, date]:
     hoje = datetime.now(ZoneInfo(config().fuso)).date()
     inicio = inicio or hoje.replace(day=1)
     fim = fim or (inicio.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
     if fim < inicio:
         raise HTTPException(422, "Fim antes do início")
+    return inicio, fim
+
+
+@rotas.get("/extrato")
+def ver_extrato(inicio: date | None = None, fim: date | None = None, c: Ctx = Depends(ctx),
+                db: Session = Depends(get_db)):
+    """Tudo que entrou e saiu no período (padrão: mês atual), linha a linha, para conferir e corrigir."""
+    inicio, fim = _periodo(inicio, fim)
+    return painel.extrato(db, c.empresa_id, inicio, fim, config().fuso)
+
+
+@rotas.get("/painel")
+def ver_painel(inicio: date | None = None, fim: date | None = None, c: Ctx = Depends(ctx),
+               db: Session = Depends(get_db)):
+    inicio, fim = _periodo(inicio, fim)
     dados = painel.calcular(db, c.empresa_id, inicio, fim, config().fuso)
     e = estoque(c, db)
     dados["estoque_baixo"] = (

@@ -81,11 +81,25 @@ def ao_salvar_carretel(db: Session, c: Ctx, car: Carretel, criado: bool) -> None
     if criado:
         lancar(db, c, id=id_derivado(car.id, "compra"), item_tipo="carretel", item_id=car.id, tipo="compra",
                quantidade=car.peso_inicial_g, valor=car.preco_pago, data=meio_dia_local(car.data_compra))
+        return
+    # Edição (preço, peso ou data digitados errado): a compra acompanha, e o gasto e o saldo ficam certos.
+    compra = db.get(Movimento, id_derivado(car.id, "compra"))
+    if compra is not None:
+        compra.quantidade, compra.valor = car.peso_inicial_g, car.preco_pago
+        compra.data = meio_dia_local(car.data_compra)
+        db.flush()
+
+
+def ao_excluir_carretel(db: Session, c: Ctx, car: Carretel) -> None:
+    # Carretel cadastrado por engano: o gasto da compra sai do financeiro junto.
+    compra = db.get(Movimento, id_derivado(car.id, "compra"))
+    if compra is not None:
+        compra.excluido = True
 
 
 rotas_filamentos = rotas_crud(Filamento, FilamentoEntrada, lambda db, o: serializar(o), "/filamentos", nome="Filamento")
 rotas_carreteis = rotas_crud(Carretel, CarretelEntrada, saida_carretel, "/carreteis",
-                             ao_salvar=ao_salvar_carretel, nome="Carretel")
+                             ao_salvar=ao_salvar_carretel, ao_excluir=ao_excluir_carretel, nome="Carretel")
 rotas_insumos = rotas_crud(Insumo, InsumoEntrada, saida_insumo, "/insumos", nome="Insumo")
 
 rotas = APIRouter(prefix="/api", tags=["estoque"])
@@ -96,6 +110,18 @@ def gravar_movimento(id: uuid.UUID, dados: MovimentoEntrada, c: Ctx = Depends(ct
     m = lancar(db, c, id=id, **dados.model_dump())
     db.commit()
     return serializar(m)
+
+
+@rotas.delete("/movimentos/{id}")
+def excluir_movimento(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    """Desfaz um lançamento manual (compra de insumo, ajuste). Os de impressão, venda e compra de
+    carretel são corrigidos na origem (confirmação, pedido, cadastro do carretel)."""
+    m = obter(db, c, Movimento, id, "Movimento")
+    if m.impressao_id or m.pedido_id or (m.item_tipo == "carretel" and m.id == id_derivado(m.item_id, "compra")):
+        raise HTTPException(409, "Esse lançamento é corrigido na origem (impressão, pedido ou carretel)")
+    m.excluido = True
+    db.commit()
+    return {"ok": True}
 
 
 @rotas.get("/movimentos")

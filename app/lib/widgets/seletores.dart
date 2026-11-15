@@ -11,6 +11,58 @@ String nomeFilamento(Map? f) {
   return f['excluido'] == true ? '$nome (excluído)' : nome;
 }
 
+/// Escolha de filamento mostrando a cor (bolinha) e o preço por kg; [comAvulso] acrescenta "Preço avulso" (null).
+class SeletorFilamento extends StatelessWidget {
+  const SeletorFilamento({
+    super.key,
+    required this.filamentos,
+    required this.valor,
+    required this.aoMudar,
+    this.rotulo = 'Filamento',
+    this.comAvulso = true,
+  });
+
+  final List filamentos;
+  final String? valor;
+  final ValueChanged<String?> aoMudar;
+  final String rotulo;
+  final bool comAvulso;
+
+  @override
+  Widget build(BuildContext context) {
+    final ativos = [for (final f in filamentos) if (f is Map && f['excluido'] != true) f];
+    final fraco = TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant);
+    return DropdownButtonFormField<String?>(
+      key: ValueKey('$rotulo$valor'),
+      initialValue: ativos.any((f) => f['id'] == valor) ? valor : null,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: rotulo),
+      items: [
+        for (final f in ativos)
+          DropdownMenuItem<String?>(
+            value: f['id'] as String,
+            child: Row(children: [
+              BolinhaCor(corHex(f['cor_hex']), tamanho: 16),
+              const SizedBox(width: 8),
+              Expanded(child: Text(nomeFilamento(f), overflow: TextOverflow.ellipsis)),
+              if (f['preco_kg'] != null) Text('${moeda(num0(f['preco_kg']))}/kg', style: fraco),
+            ]),
+          ),
+        if (comAvulso)
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Row(children: [
+              Icon(Icons.edit_outlined, size: 16),
+              SizedBox(width: 8),
+              Expanded(child: Text('Preço avulso')),
+            ]),
+          ),
+      ],
+      onChanged: aoMudar,
+    );
+  }
+}
+
 /// Carretéis que podem ser usados agora (sem excluídos/arquivados), com os que combinam
 /// com a cor (peso 2) e o material (peso 1) pedidos primeiro.
 List<Json> ordenarCarreteis(List<Json> carreteis, {String? material, String? cor}) {

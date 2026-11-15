@@ -119,7 +119,7 @@ void main() {
     }
   });
 
-  testWidgets('tocar em "Pedidos em aberto" abre Vendas já filtrando os em aberto', (tester) async {
+  testWidgets('tocar em "Pedidos em aberto" abre Vendas já filtrando os em andamento', (tester) async {
     final amb = Ambiente({
       'GET /api/pedidos': (_) => [
             {'id': 'p1', 'status': 'produzindo', 'itens': []},
@@ -133,7 +133,8 @@ void main() {
     await tester.tap(find.text('Pedidos em aberto'));
     await tester.pumpAndSettle();
     expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 3);
-    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Em aberto')).selected, isTrue);
+    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Em andamento')).selected, isTrue);
+    expect(find.text('1 pedido'), findsOneWidget); // só o produzindo; o entregue fica fora
   });
 
   testWidgets('clientes agrupados pela letra, com telefone formatado e WhatsApp', (tester) async {

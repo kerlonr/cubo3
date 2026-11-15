@@ -157,7 +157,7 @@ Widget? _pedidosAbertosDe(BuildContext context, List pedidos) {
       ].join(' · ')),
       trailing: const Icon(Icons.chevron_right),
       onTap: () {
-        filtroVendasPedido.value = 'Em aberto';
+        filtroVendasPedido.value = produzindo > 0 ? 'Em andamento' : 'Orçamentos';
         context.findAncestorStateOfType<CascaState>()?.irPara(3);
       },
     ),

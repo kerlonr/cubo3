@@ -93,3 +93,60 @@ def calcular(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dic
         "horas_impressao": round(segundos / 3600, 2),
         "kg_filamento": float(abs(D(gramas)) / 1000),
     }
+
+
+def extrato(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dict:
+    """Linhas de dinheiro do período: vendas entregues (entrada), compras do estoque e despesas (saída).
+    Mesmas regras de `_entradas_saidas`, com o que cada linha é para o app abrir e corrigir."""
+    from app.estoque.modelos import Carretel, Filamento, Insumo
+    from app.vendas.modelos import Cliente
+
+    tz = ZoneInfo(fuso)
+    a, b = _limites(inicio, fim, tz)
+    linhas = []
+    for p in db.scalars(select(Pedido).where(
+            Pedido.empresa_id == empresa_id, Pedido.status == "entregue", Pedido.excluido.is_(False),
+            Pedido.entregue_em >= a, Pedido.entregue_em < b)):
+        cl = db.get(Cliente, p.cliente_id) if p.cliente_id else None
+        nomes = []
+        for i in db.scalars(select(PedidoItem).where(PedidoItem.pedido_id == p.id).order_by(PedidoItem.criado_em)):
+            m = db.get(Modelo, i.modelo_id) if i.modelo_id else None
+            nomes.append(m.nome if m else i.descricao)
+        resumo = (nomes[0] + (f" +{len(nomes) - 1}" if len(nomes) > 1 else "")) if nomes else "Venda"
+        linhas.append({"tipo": "venda", "id": str(p.id), "data": p.entregue_em.astimezone(tz).date().isoformat(),
+                       "descricao": f"{resumo} · {cl.nome}" if cl else resumo, "valor": float(r2(D(p.receita or 0))),
+                       "lucro": float(r2(D(p.lucro or 0))), "pago": p.pago})
+    for m in db.scalars(select(Movimento).where(
+            Movimento.empresa_id == empresa_id, Movimento.tipo == "compra", Movimento.valor.is_not(None),
+            Movimento.excluido.is_(False), Movimento.data >= a, Movimento.data < b)):
+        if m.item_tipo == "carretel":
+            car = db.get(Carretel, m.item_id)
+            f = db.get(Filamento, car.filamento_id) if car else None
+            nome = " ".join(x for x in (f.marca, f.material, f.cor_nome) if x) if f else "Filamento"
+            descricao, categoria = f"Carretel {nome} · {D(m.quantidade).normalize():f} g", "filamento"
+        else:
+            ins = db.get(Insumo, m.item_id) if m.item_tipo == "insumo" else None
+            descricao = f"{ins.nome if ins else 'Insumo'} · {D(m.quantidade).normalize():f} un"
+            categoria = "embalagem" if ins and ins.categoria == "embalagem" else "insumo"
+        linhas.append({"tipo": "compra", "id": str(m.id), "data": m.data.astimezone(tz).date().isoformat(),
+                       "descricao": descricao, "valor": float(r2(D(m.valor))), "categoria": categoria,
+                       "item_tipo": m.item_tipo, "item_id": str(m.item_id)})
+    for d in db.scalars(select(Despesa).where(
+            Despesa.empresa_id == empresa_id, Despesa.excluido.is_(False), Despesa.data >= inicio, Despesa.data <= fim)):
+        linhas.append({"tipo": "despesa", "id": str(d.id), "data": d.data.isoformat(), "descricao": d.descricao,
+                       "valor": float(r2(D(d.valor))), "categoria": d.categoria})
+    linhas.sort(key=lambda l: l["data"], reverse=True)
+
+    # Filamento perdido em falhas (informativo: o dinheiro já saiu na compra do carretel).
+    perdas_g, perdas_valor = D(0), D(0)
+    for q, car in db.execute(select(Movimento.quantidade, Carretel).join(Carretel, Carretel.id == Movimento.item_id).where(
+            Movimento.empresa_id == empresa_id, Movimento.item_tipo == "carretel", Movimento.tipo == "perda",
+            Movimento.excluido.is_(False), Movimento.data >= a, Movimento.data < b)):
+        perdas_g += abs(D(q))
+        perdas_valor += abs(D(q)) * car.preco_kg_real / 1000
+    entrou = sum((D(str(l["valor"])) for l in linhas if l["tipo"] == "venda"), D(0))
+    saiu = sum((D(str(l["valor"])) for l in linhas if l["tipo"] != "venda"), D(0))
+    lucro = sum((D(str(l["lucro"])) for l in linhas if l["tipo"] == "venda"), D(0))
+    return {"inicio": inicio.isoformat(), "fim": fim.isoformat(), "entrou": float(r2(entrou)), "saiu": float(r2(saiu)),
+            "resultado": float(r2(entrou - saiu)), "lucro_vendas": float(r2(lucro)),
+            "perdas_g": float(r2(perdas_g)), "perdas_valor": float(r2(perdas_valor)), "linhas": linhas}

@@ -20,6 +20,7 @@ class Modelo(DaEmpresa, Base):
     preco_venda: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     nomes_arquivo: Mapped[list] = mapped_column(JSON, default=list)
     capa_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    capa_ajuste: Mapped[dict | None] = mapped_column(JSON)
 
 
 class Arquivo(DaEmpresa, Base):

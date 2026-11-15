@@ -19,6 +19,8 @@ const nomesStatusPedido = {
   'entregue': 'Entregue',
   'cancelado': 'Cancelado',
 };
+const formasPagamento = ['Pix', 'Dinheiro', 'Cartão', 'Outro'];
+
 /// Etapas pedidas pelo Kerlon; "pago" fica à parte. Pedidos antigos em Aprovado/Pronto seguem dali.
 const fluxoPedido = ['orcamento', 'produzindo', 'entregue'];
 const _etapaEquivalente = {'aprovado': 'orcamento', 'pronto': 'produzindo'};
@@ -84,8 +86,24 @@ class _PedidoTelaState extends State<PedidoTela> {
     }
   }
 
-  Future<void> _pago() async {
-    if (await salvar(context, 'PUT', '/api/pedidos/${widget.id}', {'pago': true}, feito: 'Marcado como pago')) {
+  /// Pergunta a forma (um toque) e marca pago; [pago] false desfaz (marcou errado).
+  Future<void> _pago(bool pago) async {
+    final forma = pago
+        ? await showDialog<String>(
+            context: context,
+            builder: (c) => SimpleDialog(title: const Text('Como foi pago?'), children: [
+              for (final f in formasPagamento)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(c, f),
+                  child: Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(f)),
+                ),
+            ]),
+          )
+        : null;
+    if (!mounted || (pago && forma == null)) return;
+    if (await salvar(context, 'PUT', '/api/pedidos/${widget.id}', {'pago': pago, 'forma_pagamento': forma},
+            feito: pago ? 'Marcado como pago' : 'Voltou para a receber') &&
+        mounted) {
       setState(() => _versao++);
     }
   }
@@ -171,10 +189,17 @@ class _PedidoTelaState extends State<PedidoTela> {
           ] else
             linha('Total', totalPedido(p), forte: true),
           const SizedBox(height: 8),
-          Text(p['pago'] == true ? 'Pago${p['forma_pagamento'] == null ? '' : ' · ${p['forma_pagamento']}'}' : 'Não pago',
-              style: TextStyle(color: p['pago'] == true ? verde : amarelo)),
-          if (p['pago'] != true && status != 'cancelado')
-            Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: _pago, child: const Text('Marcar como pago'))),
+          Row(children: [
+            Expanded(
+              child: Text(
+                  p['pago'] == true ? 'Pago${p['forma_pagamento'] == null ? '' : ' · ${p['forma_pagamento']}'}' : 'A receber',
+                  style: TextStyle(color: p['pago'] == true ? verde : amarelo, fontWeight: FontWeight.w600)),
+            ),
+            if (p['pago'] == true)
+              TextButton(onPressed: () => _pago(false), child: const Text('Desfazer pago'))
+            else if (status != 'cancelado')
+              FilledButton.tonal(onPressed: () => _pago(true), child: const Text('Marcar como pago')),
+          ]),
           if (proximos.isNotEmpty) ...[
             const Secao('Mudar status'),
             Wrap(spacing: 8, runSpacing: 8, children: [

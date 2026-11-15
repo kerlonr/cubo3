@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../api/modelos.dart';
+import '../../tema.dart';
+import '../../util/formatos.dart';
 import '../../widgets/animacoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../casca.dart';
@@ -8,13 +10,17 @@ import 'clientes_tela.dart';
 import 'pedido_tela.dart';
 import 'venda_rapida_tela.dart';
 
-const _filtros = {
-  'Em aberto': {'orcamento', 'aprovado', 'produzindo', 'pronto'},
-  'Orçamentos': {'orcamento'},
-  'Em andamento': {'aprovado', 'produzindo', 'pronto'},
-  'Entregues': {'entregue'},
-  'Todos': <String>{},
+/// Filtros da aba Vendas. "Pago" anda à parte do status do pedido.
+final filtrosPedido = <String, bool Function(Map p)>{
+  'Em andamento': (p) => const {'aprovado', 'produzindo', 'pronto'}.contains(p['status']),
+  'Entregues': (p) => p['status'] == 'entregue',
+  'Pagos': (p) => p['pago'] == true && p['status'] != 'cancelado',
+  'A receber': (p) => p['pago'] != true && !const {'orcamento', 'cancelado'}.contains(p['status']),
+  'Orçamentos': (p) => p['status'] == 'orcamento',
+  'Todos': (_) => true,
 };
+
+double totalDe(Iterable<Map> pedidos) => pedidos.fold(0, (s, p) => s + totalPedido(p));
 
 /// Filtro pedido de fora (Início → "Pedidos em aberto"). A aba aplica e limpa.
 final filtroVendasPedido = ValueNotifier<String?>(null);
@@ -43,7 +49,7 @@ class _VendasAbaState extends State<VendasAba> {
 
   void _aplicarFiltroPedido() {
     final f = filtroVendasPedido.value;
-    if (f == null || !_filtros.containsKey(f)) return;
+    if (f == null || !filtrosPedido.containsKey(f)) return;
     filtroVendasPedido.value = null;
     if (mounted) setState(() => _filtro = f);
   }
@@ -64,7 +70,7 @@ class _VendasAbaState extends State<VendasAba> {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: Row(children: [
-            for (final f in _filtros.keys)
+            for (final f in filtrosPedido.keys)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(label: Text(f), selected: _filtro == f, onSelected: (_) => setState(() => _filtro = f)),
@@ -75,8 +81,7 @@ class _VendasAbaState extends State<VendasAba> {
           child: EstadoTela<List>(
             carregar: () => buscar(context, '/api/pedidos'),
             construir: (context, l) {
-              final status = _filtros[_filtro]!;
-              final pedidos = [for (final p in lista(l)) if (status.isEmpty || status.contains(p['status'])) p];
+              final pedidos = [for (final p in lista(l)) if (filtrosPedido[_filtro]!(p)) p];
               if (pedidos.isEmpty) {
                 return ListView(children: [
                   EstadoVazio(
@@ -94,6 +99,17 @@ class _VendasAbaState extends State<VendasAba> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 900),
                   child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                      child: Row(children: [
+                        Expanded(
+                          child: Text('${pedidos.length} ${pedidos.length == 1 ? 'pedido' : 'pedidos'}',
+                              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                        ),
+                        Text(moeda(totalDe(pedidos)),
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),
+                      ]),
+                    ),
                     for (final (i, p) in pedidos.indexed)
                       Entrada(
                           key: ValueKey(p['id']),

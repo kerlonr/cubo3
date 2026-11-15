@@ -128,7 +128,7 @@ Custo custoDaReceita(
     final cad = achar(insumos, i['insumo_id']);
     final custo = cad != null ? _n(cad['custo_unitario'], 0) : _n(i['custo_unitario'], 0);
     final embalagem = cad != null ? cad['categoria'] == 'embalagem' : i['embalagem'] == true;
-    if (cad == null && i['insumo_id'] != null) continue; // insumo excluído: o servidor também ignora
+    // Sem cadastro (avulso ou excluído) vale o preço copiado na receita; sem ele, R$ 0 — igual ao servidor.
     (embalagem ? emb : ins).add(ItemCusto(_n(i['qtd'], 0), custo));
   }
   final ativas = [for (final i in impressoras) if (i is Map && i['excluido'] != true) i];

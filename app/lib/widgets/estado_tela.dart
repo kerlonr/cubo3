@@ -149,15 +149,24 @@ class FaixaSemConexao extends StatelessWidget {
       );
 }
 
-void avisar(BuildContext context, String mensagem) =>
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagem)));
+/// Aviso curto e flutuante. Tira o anterior da tela (sem fila de avisos esperando a vez);
+/// erro fica um pouco mais e tem o "x" para fechar.
+void avisar(BuildContext context, String mensagem, {bool erro = false}) => ScaffoldMessenger.of(context)
+  ..clearSnackBars()
+  ..showSnackBar(SnackBar(
+    content: Text(mensagem),
+    behavior: SnackBarBehavior.floating,
+    duration: Duration(milliseconds: erro ? 4000 : 2500),
+    showCloseIcon: erro,
+  ));
 
 void avisarErro(BuildContext context, Object erro) =>
-    avisar(context, erro is ErroApi ? erro.mensagem : 'Algo deu errado: $erro');
+    avisar(context, erro is ErroApi ? erro.mensagem : 'Algo deu errado: $erro', erro: true);
 
 /// Mensagem padrão depois de gravar pela fila (ou o motivo da recusa).
-void avisarEnvio(BuildContext context, ResultadoEnvio r, [String feito = 'Salvo']) =>
-    avisar(context, r.recusada ?? (r.guardada ? 'Salvo no aparelho, envia quando tiver internet' : feito));
+void avisarEnvio(BuildContext context, ResultadoEnvio r, [String feito = 'Salvo']) => avisar(
+    context, r.recusada ?? (r.guardada ? 'Salvo no aparelho, envia quando tiver internet' : feito),
+    erro: r.recusada != null);
 
 /// Grava pela fila offline e avisa. true = aceito (enviado ou guardado no aparelho).
 /// Em edição, [versaoBase] = `atualizado_em` do registro carregado (o servidor recusa se outro mudou depois).

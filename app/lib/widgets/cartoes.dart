@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api.dart';
+import '../api/modelos.dart';
 import '../tema.dart';
 
 /// Total grande com rótulo pequeno acima.
@@ -112,9 +113,12 @@ class BolinhaCor extends StatelessWidget {
 
 /// Imagem protegida da API (capa, miniatura): manda o token junto.
 class ImagemApi extends StatelessWidget {
-  const ImagemApi(this.caminho, {super.key, this.ajuste = BoxFit.cover});
+  const ImagemApi(this.caminho, {super.key, this.ajuste = BoxFit.cover, this.enquadramento});
   final String? caminho;
   final BoxFit ajuste;
+
+  /// `capa_ajuste` do modelo: {x, y} de -1 a 1 (ponto que fica à mostra) e zoom ≥ 1.
+  final Map? enquadramento;
 
   @override
   Widget build(BuildContext context) {
@@ -124,8 +128,12 @@ class ImagemApi extends StatelessWidget {
     );
     if (caminho == null) return vazio;
     final api = context.read<ApiCliente>();
-    return Image.network(api.url(caminho!).toString(),
-        headers: api.cabecalhosAuth, fit: ajuste, errorBuilder: (_, _, _) => vazio);
+    final e = enquadramento ?? const {};
+    final foco = Alignment(num0(e['x']).clamp(-1, 1).toDouble(), num0(e['y']).clamp(-1, 1).toDouble());
+    final zoom = num0(e['zoom'] ?? 1).clamp(1, 4).toDouble();
+    final img = Image.network(api.url(caminho!).toString(),
+        headers: api.cabecalhosAuth, fit: ajuste, alignment: foco, errorBuilder: (_, _, _) => vazio);
+    return zoom == 1 ? img : ClipRect(child: Transform.scale(scale: zoom, alignment: foco, child: img));
   }
 }
 
