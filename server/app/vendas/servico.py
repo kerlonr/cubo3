@@ -165,8 +165,19 @@ def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> t
     if falta := faltando(p):
         raise HTTPException(422, f"Campos obrigatórios: {', '.join(falta)}")
     db.flush()
+    bruto = sum((D(i.quantidade) * D(i.preco_unitario) for i in _itens(db, p)), D(0))
+    if D(p.desconto or 0) > bruto + D(p.frete_cobrado or 0):
+        raise HTTPException(422, "Desconto maior que o total do pedido")
     avisos = mudar_status(db, c, p, dados.status, dados.entregue_em) if dados.status else []
     return p, avisos
+
+
+def ja_aplicado(db: Session, p: Pedido, dados: PedidoEntrada) -> bool:
+    """A mesma edição já está gravada (a resposta se perdeu e a fila reenviou)."""
+    campos = dados.model_dump(exclude_unset=True, exclude={"itens", "entregue_em"})
+    if any(getattr(p, k) != v for k, v in campos.items()):
+        return False
+    return dados.itens is None or _assinatura(dados.itens) == _assinatura(_itens(db, p))
 
 
 def vendidos_por_modelo(db: Session, empresa_id, periodo_dias: int | None = None) -> dict[uuid.UUID, tuple[Decimal, Decimal]]:

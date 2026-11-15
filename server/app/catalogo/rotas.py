@@ -140,7 +140,7 @@ def listar_modelos(busca: str | None = None, categoria: str | None = None, tag: 
 async def enviar_arquivo(id: uuid.UUID, arquivo: UploadFile, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     m = obter(db, c, Modelo, id, "Modelo")
     ext, tipo = tipo_do_arquivo(arquivo.filename or "")
-    a = Arquivo(id=uuid.uuid4(), empresa_id=c.empresa_id, modelo_id=m.id, nome_original=arquivo.filename,
+    a = Arquivo(id=uuid.uuid4(), empresa_id=c.empresa_id, modelo_id=m.id, nome_original=(arquivo.filename or "")[-255:],
                 tipo=tipo, tamanho=0, caminho="")
     a.caminho = f"{c.empresa_id}/{m.id}/{a.id}{ext}"
     a.tamanho = await salvar_upload(arquivo, config().arquivos_dir / a.caminho, config().max_upload_mb * 1024 * 1024)

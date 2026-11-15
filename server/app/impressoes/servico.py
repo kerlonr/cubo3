@@ -70,7 +70,9 @@ def confirmar(db: Session, c: Ctx, imp: Impressao, dados: Confirmacao) -> Impres
     impressora = db.get(Impressora, imp.impressora_id) if imp.impressora_id else None
     maquina = D(imp.duracao_s or 0) / 3600 * custo_hora_impressora(param_impressora(impressora), emp)
     receita = (modelo.receita or {}) if modelo else {}
-    minutos = dados.mao_obra_min if dados.mao_obra_min is not None else D(str(receita.get("mao_obra_min", 0)))
+    # Digitada na confirmação = da impressão toda; a da receita é por peça (montagem de cada uma).
+    minutos = dados.mao_obra_min if dados.mao_obra_min is not None else \
+        D(str(receita.get("mao_obra_min", 0))) * max(dados.pecas_boas, 1)
     mao_obra = minutos / 60 * emp.mao_obra_hora
     r = receita_do_modelo(db, c.empresa_id, receita, D(dados.pecas_boas))
     insumos = sum((i.qtd * i.custo_unitario for i in r.insumos + r.embalagem), D(0))

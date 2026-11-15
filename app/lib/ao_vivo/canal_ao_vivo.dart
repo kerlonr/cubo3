@@ -168,6 +168,8 @@ class CanalAoVivo extends ChangeNotifier {
       return _agendar();
     }
     _assinatura = _conexao!.stream.listen(_receber, onError: (_) => _agendar(), onDone: _agendar, cancelOnError: true);
+    if (_reconectou) _avisarMudanca(); // o que mudou enquanto estava fora não chegou por aqui
+    _reconectou = false;
     _ping = Timer.periodic(const Duration(seconds: 30), (_) {
       try {
         _conexao?.enviar('ping');
@@ -187,8 +189,7 @@ class CanalAoVivo extends ChangeNotifier {
       estados['${ev['impressora_id']}'] = EstadoImpressora(ev);
       notifyListeners();
     }
-    if (ev['tipo'] == 'dados' || _reconectou) _avisarMudanca();
-    _reconectou = false;
+    if (ev['tipo'] == 'dados' || ev['tipo'] == 'impressao_terminou') _avisarMudanca();
     _eventos.add(ev);
   }
 

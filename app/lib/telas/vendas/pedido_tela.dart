@@ -311,9 +311,13 @@ class _EditarValoresState extends State<EditarValores> {
     return s - _v(_desconto) + _v(_frete);
   }
 
+  /// Quando as quantidades não fecham o total digitado em centavos (ex.: 3 un. por R$ 10,00), diz quanto fecha.
+  String? _naoFecha;
+
   void _recalcular() {
     _base = [for (final c in _precos) _v(c)];
     _total.text = DinheiroFormatter.formatar(_somaTotal());
+    setState(() => _naoFecha = null);
   }
 
   void _distribuir(String _) {
@@ -323,6 +327,8 @@ class _EditarValoresState extends State<EditarValores> {
     for (var k = 0; k < _itens.length; k++) {
       _precos[k].text = DinheiroFormatter.formatar(novos[k]);
     }
+    final fecha = _somaTotal();
+    setState(() => _naoFecha = (fecha - _v(_total)).abs() >= 0.005 ? 'Com essas quantidades fecha em ${moeda(fecha)}' : null);
   }
 
   @override
@@ -343,7 +349,7 @@ class _EditarValoresState extends State<EditarValores> {
             CampoDinheiro(_total, 'Total do pedido',
                 key: const Key('total-pedido'),
                 aoMudar: _distribuir,
-                ajuda: 'Os itens se ajustam ao total'),
+                ajuda: _naoFecha ?? 'Os itens se ajustam ao total'),
             for (var k = 0; k < _itens.length; k++)
               CampoDinheiro(_precos[k],
                   _qtd(k) == 1 ? nomeItem(_itens[k]) : '${nomeItem(_itens[k])} · cada (${numero(_qtd(k))} un.)',
@@ -356,7 +362,7 @@ class _EditarValoresState extends State<EditarValores> {
             const SizedBox(height: 12),
             FilledButton(
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              onPressed: () => Navigator.pop(context, {
+              onPressed: _somaTotal() < 0 ? null : () => Navigator.pop(context, {
                 'itens': [
                   for (var k = 0; k < _itens.length; k++)
                     {

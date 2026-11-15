@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.ao_vivo import hub
 from app.auth.deps import Ctx, ctx, papel_na_empresa, so_dono, usuario_do_token
+from app.auth.modelos import Usuario
 from app.auth.seguranca import ler_token, token_link
 from app.catalogo.modelos import Arquivo
 from app.config import config
@@ -351,6 +352,16 @@ async def ao_vivo(ws: WebSocket, token: str = "", empresa: str = "", db: Session
     except ValueError:
         membro = False
     db.close()  # não segura conexão do banco enquanto o WebSocket fica aberto
+    usuario_id, versao = usuario.id, usuario.token_versao
+
+    def ainda_membro() -> bool:
+        try:
+            u = db.get(Usuario, usuario_id)
+            return u is not None and not u.excluido and u.token_versao == versao \
+                and papel_na_empresa(db, usuario_id, empresa_id) is not None
+        finally:
+            db.close()
+
     if not membro:
         await ws.close(code=4403)
         return
@@ -367,7 +378,11 @@ async def ao_vivo(ws: WebSocket, token: str = "", empresa: str = "", db: Session
                 pega.cancel()
                 if leitor.exception() is not None:
                     break
-                leitor = asyncio.create_task(ws.receive_text())  # cliente mandou "ping": ignora
+                # Cliente mandou "ping" (a cada 30 s): aproveita para conferir se ainda é da empresa.
+                if not await asyncio.to_thread(ainda_membro):
+                    await ws.close(code=4403)
+                    break
+                leitor = asyncio.create_task(ws.receive_text())
                 continue
             await ws.send_json(pega.result())
     except WebSocketDisconnect:

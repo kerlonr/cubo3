@@ -58,6 +58,12 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
   final _maoObra = TextEditingController();
   bool _enviando = false;
 
+  /// Peças que saem numa impressão do modelo (6 chaveiros na mesa = 6 peças boas de cara).
+  int _porImpressao(List modelos, String? id) {
+    final m = modelos.where((m) => m['id'] == id).firstOrNull;
+    return m == null ? 1 : num0(mapa(m['receita'])['pecas_por_impressao'] ?? 1).clamp(1, 1000).toInt();
+  }
+
   void _iniciar(Map cad) {
     if (_iniciado) return;
     _iniciado = true;
@@ -65,6 +71,7 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
     final carreteis = lista(mapa(cad['estoque'])['carreteis']);
     _modelo = _imp?['modelo_id'] as String?;
     if (_modelo != null) _finalidade = 'venda';
+    _pecas = _porImpressao(lista(cad['modelos']), _modelo);
     // Lançamento manual: com uma impressora só (sem seletor) ou sem escolha, usa a primeira — sem ela o custo/hora sai do padrão.
     final impressoras = lista(cad['impressoras']);
     if (impressoras.isNotEmpty) _impressora = impressoras.first['id'] as String;
@@ -226,7 +233,10 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
         decoration: const InputDecoration(labelText: 'Modelo'),
         hint: const Text('Sem modelo'),
         items: [for (final m in modelos) DropdownMenuItem(value: m['id'] as String, child: Text('${m['nome']}'))],
-        onChanged: (v) => setState(() => _modelo = v),
+        onChanged: (v) => setState(() {
+          _modelo = v;
+          if (_finalidade != 'falhou') _pecas = _porImpressao(modelos, v);
+        }),
       ),
       const SizedBox(height: 12),
       SegmentedButton<String>(

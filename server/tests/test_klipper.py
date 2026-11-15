@@ -100,6 +100,24 @@ def test_hub_isola_empresas(cliente, dono, outro, empresas):
     assert e.value.code == 4401
 
 
+def test_ao_vivo_membro_removido_para_de_receber(cliente, membro, empresas, db):
+    """Socket aberto confere o vínculo a cada ping: quem saiu da empresa deixa de receber os avisos."""
+    from app.ao_vivo import hub
+    from app.auth.modelos import Membro, Usuario
+    a = empresas["a"]
+    with pytest.raises(WebSocketDisconnect) as e:
+        with cliente.websocket_connect(f"/api/ao-vivo?token={_token(membro)}&empresa={a}") as ws:
+            ws.send_text("ping")  # ainda é membro: segue aberto
+            hub.publicar(a, {"tipo": "dados", "caminho": "/api/despesas/1"})
+            assert ws.receive_json()["tipo"] == "dados"
+            u = db.query(Usuario).filter(Usuario.email == "membro@a.com").one()
+            db.query(Membro).filter(Membro.usuario_id == u.id, Membro.empresa_id == a).delete()
+            db.commit()
+            ws.send_text("ping")
+            ws.receive_json()
+    assert e.value.code == 4403
+
+
 def _porta_livre():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))

@@ -1,9 +1,9 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -78,7 +78,14 @@ def um(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
 
 
 @rotas.put("/pedidos/{id}")
-def salvar(id: uuid.UUID, dados: servico.PedidoEntrada, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+def salvar(id: uuid.UUID, dados: servico.PedidoEntrada, c: Ctx = Depends(ctx), db: Session = Depends(get_db),
+           x_versao_base: AwareDatetime | None = Header(None)):
+    existente = db.get(Pedido, id)
+    if existente is not None and existente.empresa_id == c.empresa_id and x_versao_base is not None \
+            and existente.atualizado_em > x_versao_base:
+        if servico.ja_aplicado(db, existente, dados):
+            return saida_pedido(db, existente)  # reenvio da mesma edição (resposta perdida): já está gravada
+        raise HTTPException(409, "Pedido foi alterado por outra pessoa. Abra de novo e refaça a edição.")
     p, avisos = servico.salvar_pedido(db, c, id, dados)
     db.commit()
     return saida_pedido(db, p, avisos)
@@ -106,10 +113,12 @@ def excluir(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db))
 async def anexar(id: uuid.UUID, arquivo: UploadFile, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     """Comprovante de pagamento (foto ou PDF), em qualquer etapa do pedido."""
     p = obter(db, c, Pedido, id, "Pedido")
+    if p.excluido:
+        raise HTTPException(404, "Pedido não encontrado")
     ext = Path(arquivo.filename or "").suffix.lower()
     if ext not in TIPOS_ANEXO:
         raise HTTPException(415, f"Comprovante precisa ser foto ou PDF (veio {ext or 'sem extensão'})")
-    a = PedidoAnexo(id=uuid.uuid4(), empresa_id=c.empresa_id, pedido_id=p.id, nome_original=arquivo.filename,
+    a = PedidoAnexo(id=uuid.uuid4(), empresa_id=c.empresa_id, pedido_id=p.id, nome_original=(arquivo.filename or "")[-255:],
                     tipo=TIPOS_ANEXO[ext], tamanho=0, caminho="")
     a.caminho = f"{c.empresa_id}/pedidos/{p.id}/{a.id}{ext}"
     a.tamanho = await salvar_upload(arquivo, config().arquivos_dir / a.caminho, config().max_upload_mb * 1024 * 1024)
@@ -121,6 +130,8 @@ async def anexar(id: uuid.UUID, arquivo: UploadFile, c: Ctx = Depends(ctx), db: 
 @rotas.get("/anexos/{id}")
 def baixar_anexo(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     a = obter(db, c, PedidoAnexo, id, "Comprovante")
+    if a.excluido:
+        raise HTTPException(404, "Comprovante não encontrado")
     return FileResponse(config().arquivos_dir / a.caminho, filename=a.nome_original)
 
 

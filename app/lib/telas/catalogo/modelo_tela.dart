@@ -154,7 +154,7 @@ class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
             p['filamento_id'] == null
                 ? 'Filamento avulso'
                 : nomeFilamento(filamentos.where((f) => f['id'] == p['filamento_id']).firstOrNull),
-            gramas(num0(p['gramas'])),
+            gramas(num0(p['gramas'])) + (res.porImpressao > 1 ? ' por mesa' : ''),
             if (num0(p['horas']) > 0) duracao(num0(p['horas']) * 3600),
           ].join(' · ')),
         ),
