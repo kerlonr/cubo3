@@ -104,9 +104,15 @@ def extrato(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dict
     tz = ZoneInfo(fuso)
     a, b = _limites(inicio, fim, tz)
     linhas = []
-    for p in db.scalars(select(Pedido).where(
-            Pedido.empresa_id == empresa_id, Pedido.status == "entregue", Pedido.excluido.is_(False),
-            Pedido.entregue_em >= a, Pedido.entregue_em < b)):
+    vendas = list(db.scalars(select(Pedido).where(
+        Pedido.empresa_id == empresa_id, Pedido.status == "entregue", Pedido.excluido.is_(False),
+        Pedido.entregue_em >= a, Pedido.entregue_em < b)))
+    compras = list(db.scalars(select(Movimento).where(
+        Movimento.empresa_id == empresa_id, Movimento.tipo == "compra", Movimento.valor.is_not(None),
+        Movimento.excluido.is_(False), Movimento.data >= a, Movimento.data < b)))
+    despesas = list(db.scalars(select(Despesa).where(
+        Despesa.empresa_id == empresa_id, Despesa.excluido.is_(False), Despesa.data >= inicio, Despesa.data <= fim)))
+    for p in vendas:
         cl = db.get(Cliente, p.cliente_id) if p.cliente_id else None
         nomes = []
         for i in db.scalars(select(PedidoItem).where(PedidoItem.pedido_id == p.id).order_by(PedidoItem.criado_em)):
@@ -116,9 +122,7 @@ def extrato(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dict
         linhas.append({"tipo": "venda", "id": str(p.id), "data": p.entregue_em.astimezone(tz).date().isoformat(),
                        "descricao": f"{resumo} · {cl.nome}" if cl else resumo, "valor": float(r2(D(p.receita or 0))),
                        "lucro": float(r2(D(p.lucro or 0))), "pago": p.pago})
-    for m in db.scalars(select(Movimento).where(
-            Movimento.empresa_id == empresa_id, Movimento.tipo == "compra", Movimento.valor.is_not(None),
-            Movimento.excluido.is_(False), Movimento.data >= a, Movimento.data < b)):
+    for m in compras:
         if m.item_tipo == "carretel":
             car = db.get(Carretel, m.item_id)
             f = db.get(Filamento, car.filamento_id) if car else None
@@ -130,9 +134,9 @@ def extrato(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dict
             categoria = "embalagem" if ins and ins.categoria == "embalagem" else "insumo"
         linhas.append({"tipo": "compra", "id": str(m.id), "data": m.data.astimezone(tz).date().isoformat(),
                        "descricao": descricao, "valor": float(r2(D(m.valor))), "categoria": categoria,
+                       "quantidade": float(m.quantidade),
                        "item_tipo": m.item_tipo, "item_id": str(m.item_id)})
-    for d in db.scalars(select(Despesa).where(
-            Despesa.empresa_id == empresa_id, Despesa.excluido.is_(False), Despesa.data >= inicio, Despesa.data <= fim)):
+    for d in despesas:
         linhas.append({"tipo": "despesa", "id": str(d.id), "data": d.data.isoformat(), "descricao": d.descricao,
                        "valor": float(r2(D(d.valor))), "categoria": d.categoria})
     linhas.sort(key=lambda l: l["data"], reverse=True)
@@ -144,9 +148,10 @@ def extrato(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dict
             Movimento.excluido.is_(False), Movimento.data >= a, Movimento.data < b)):
         perdas_g += abs(D(q))
         perdas_valor += abs(D(q)) * car.preco_kg_real / 1000
-    entrou = sum((D(str(l["valor"])) for l in linhas if l["tipo"] == "venda"), D(0))
-    saiu = sum((D(str(l["valor"])) for l in linhas if l["tipo"] != "venda"), D(0))
-    lucro = sum((D(str(l["lucro"])) for l in linhas if l["tipo"] == "venda"), D(0))
+    # Totais pelos valores exatos (arredonda só no fim, como o painel).
+    entrou = sum((D(p.receita or 0) for p in vendas), D(0))
+    lucro = sum((D(p.lucro or 0) for p in vendas), D(0))
+    saiu = sum((D(m.valor) for m in compras), D(0)) + sum((D(d.valor) for d in despesas), D(0))
     return {"inicio": inicio.isoformat(), "fim": fim.isoformat(), "entrou": float(r2(entrou)), "saiu": float(r2(saiu)),
             "resultado": float(r2(entrou - saiu)), "lucro_vendas": float(r2(lucro)),
             "perdas_g": float(r2(perdas_g)), "perdas_valor": float(r2(perdas_valor)), "linhas": linhas}

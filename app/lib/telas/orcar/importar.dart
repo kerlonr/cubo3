@@ -1,5 +1,9 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+
+import '../../api/api.dart';
 
 import '../../api/modelos.dart';
 import '../../dominio/orcamento.dart';
@@ -27,6 +31,47 @@ Future<Json?> itemDoAparelho(BuildContext context) async {
     return null;
   }
   return itemDeArquivo(f.name, lido.gramas, lido.segundos);
+}
+
+/// Arquivos fatiados anexados a um modelo (G-code ou 3MF), de onde dá para ler gramas e tempo.
+List<Json> fatiadosDoModelo(Map modelo) =>
+    [for (final a in lista(modelo['arquivos'])) if (a['tipo'] == 'gcode' || a['tipo'] == '3mf') a];
+
+/// Escolhe um arquivo já anexado ao modelo, baixa e lê gramas e tempo (sem pedir o arquivo de novo).
+Future<Json?> itemDosArquivosDoModelo(BuildContext context, List<Json> arquivos) async {
+  final a = arquivos.length == 1
+      ? arquivos.single
+      : await showModalBottomSheet<Json>(
+          context: context,
+          showDragHandle: true,
+          builder: (c) => SafeArea(
+            child: ListView(shrinkWrap: true, children: [
+              for (final a in arquivos)
+                ListTile(
+                  leading: const Icon(Icons.code),
+                  title: Text('${a['nome_original']}', overflow: TextOverflow.ellipsis),
+                  onTap: () => Navigator.pop(c, a),
+                ),
+            ]),
+          ),
+        );
+  if (a == null || !context.mounted) return null;
+  final api = context.read<ApiCliente>();
+  try {
+    final link = mapa(await api.post('/api/arquivos/${a['id']}/link'));
+    final r = await http.get(api.url('${link['url']}'));
+    if (r.statusCode != 200) throw ErroApi(r.statusCode, 'Não deu para baixar ${a['nome_original']}');
+    final lido = lerArquivoFatiado('${a['nome_original']}', r.bodyBytes);
+    if (!context.mounted) return null;
+    if (!lido.temDados) {
+      avisar(context, '${a['nome_original']} não tem gramas nem tempo (precisa ser o arquivo já fatiado).');
+      return null;
+    }
+    return itemDeArquivo('${a['nome_original']}', lido.gramas, lido.segundos);
+  } catch (e) {
+    if (context.mounted) avisarErro(context, e);
+    return null;
+  }
 }
 
 /// Lista os arquivos da impressora (metadados do Moonraker) e devolve o escolhido como item.

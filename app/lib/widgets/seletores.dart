@@ -11,6 +11,9 @@ String nomeFilamento(Map? f) {
   return f['excluido'] == true ? '$nome (excluído)' : nome;
 }
 
+/// Cadastros que ainda podem ser escolhidos (a lista do custo inclui os excluídos).
+List<Json> ativos(Object? l) => [for (final f in lista(l)) if (f['excluido'] != true) f];
+
 /// Escolha de filamento mostrando a cor (bolinha) e o preço por kg; [comAvulso] acrescenta "Preço avulso" (null).
 class SeletorFilamento extends StatelessWidget {
   const SeletorFilamento({

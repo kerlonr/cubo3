@@ -161,45 +161,16 @@ class _OrcarTelaState extends State<OrcarTela> {
     if (item != null && mounted) _adicionar(item);
   }
 
-  Custo _custo(Map cad) {
-    final partes = <(Custo, int)>[];
-    for (final i in _itens) {
-      final g = lerNumero(i.gramas.text) ?? 0, h = lerHoras(i.tempo.text) ?? 0;
-      if (g == 0 && h == 0) continue;
-      final receita = {
-        'filamentos': [
-          {'filamento_id': i.filamento ?? _filamento, 'preco_kg': lerNumero(_precoKg.text) ?? 0, 'gramas': g}
-        ],
-        'horas': h,
-        'mao_obra_min': lerNumero(_maoObra.text) ?? 0,
-      };
-      partes.add((
-        custoDaReceita(receita,
-            filamentos: lista(cad['filamentos']),
-            insumos: const [],
-            impressoras: lista(cad['impressoras']),
-            config: mapa(cad['config']),
-            impressoraId: _impressora),
-        i.qtd
-      ));
-    }
-    if (partes.isNotEmpty && _insumos.isNotEmpty) {
-      // Insumos valem para o orçamento todo (a quantidade de cada um já é o total).
-      partes.add((
-        custoDaReceita({'insumos': [for (final i in _insumos) i.json]},
-            filamentos: const [], insumos: lista(cad['insumos']), impressoras: const [], config: mapa(cad['config'])),
-        1
-      ));
-    }
-    return somarCustos(partes, extra: partes.isEmpty ? 0 : lerNumero(_extra.text) ?? 0);
-  }
+  /// Peças com gramas ou tempo.
+  List<ItemOrcado> get _comDados => [
+        for (final i in _itens)
+          if ((lerNumero(i.gramas.text) ?? 0) > 0 || (lerHoras(i.tempo.text) ?? 0) > 0) i
+      ];
 
-  Map? _cad; // cadastros da última montagem, para salvar a peça no catálogo com o mesmo custo
-
-  /// O orçamento inteiro vira um modelo: cada peça é uma parte impressa (gramas e tempo × quantidade),
-  /// com os insumos, a embalagem e o preço escolhido. Abre o cadastro já preenchido para conferir e salvar.
-  void _paraCatalogo(PrecoSugerido p) {
-    final itens = [for (final i in _itens) if (!i.vazio) i];
+  /// O orçamento como UMA receita (cada peça × quantidade, mão de obra por peça, insumos e envio).
+  /// O custo sai dela e o "Salvar no catálogo" guarda ela: os dois dão o mesmo valor, arredondado só no fim.
+  Json _receitaKit() {
+    final itens = _comDados;
     final pecas = [
       for (final (n, it) in itens.indexed)
         <String, Object?>{
@@ -211,13 +182,62 @@ class _OrcarTelaState extends State<OrcarTela> {
               .join(' '),
         }
     ];
-    final receita = {
+    return {
       'filamentos': pecas,
       'horas': pecas.fold<double>(0, (s, f) => s + (f['horas'] as num)),
       'mao_obra_min': (lerNumero(_maoObra.text) ?? 0) * itens.fold<int>(0, (s, i) => s + i.qtd),
       'insumos': [for (final i in _insumos) i.json],
       'custo_envio': lerNumero(_extra.text) ?? 0,
     };
+  }
+
+  Custo _custo(Map cad) {
+    if (_comDados.isEmpty) return const Custo(0, 0, 0, 0, 0, 0);
+    return custoDaReceita(_receitaKit(),
+        filamentos: lista(cad['filamentos']),
+        insumos: lista(cad['insumos']),
+        impressoras: lista(cad['impressoras']),
+        config: mapa(cad['config']),
+        impressoraId: _impressora);
+  }
+
+  Map? _cad; // cadastros da última montagem, para salvar a peça no catálogo com o mesmo custo
+
+  /// O orçamento inteiro vira um modelo: cada peça é uma parte impressa (gramas e tempo × quantidade),
+  /// com os insumos, a embalagem e o preço escolhido. Abre o cadastro já preenchido para conferir e salvar.
+  void _paraCatalogo(PrecoSugerido p) {
+    final itens = _comDados;
+    // Uma peça em quantidade (ex.: 10 chaveiros): o catálogo guarda UMA unidade, com custo e preço divididos.
+    final n = itens.length == 1 ? itens.single.qtd : 1;
+    if (n > 1) {
+      final it = itens.single;
+      final unidade = {
+        'filamentos': [
+          {
+            'filamento_id': it.filamento ?? _filamento,
+            if ((it.filamento ?? _filamento) == null) 'preco_kg': lerNumero(_precoKg.text) ?? 0,
+            'gramas': lerNumero(it.gramas.text) ?? 0,
+            'horas': lerHoras(it.tempo.text) ?? 0,
+            if (it.nome.text.trim().isNotEmpty) 'nome': it.nome.text.trim(),
+          }
+        ],
+        'horas': lerHoras(it.tempo.text) ?? 0,
+        'mao_obra_min': lerNumero(_maoObra.text) ?? 0,
+        'insumos': [for (final i in _insumos) {...i.json, 'qtd': i.qtd / n}],
+        'custo_envio': (lerNumero(_extra.text) ?? 0) / n,
+      };
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => ModeloForm(dados: {
+                    'nome': it.nome.text.trim(),
+                    'preco_venda': arred2(p.preco / n),
+                    'receita': unidade,
+                    'impressora_id': _impressora,
+                  })));
+      return;
+    }
+    final receita = _receitaKit();
     Navigator.push(
         context,
         MaterialPageRoute(
@@ -367,7 +387,7 @@ class _OrcarTelaState extends State<OrcarTela> {
   Widget _corpo(Map cad) {
     _cad = cad;
     final t = Theme.of(context);
-    final filamentos = lista(cad['filamentos']);
+    final filamentos = ativos(cad['filamentos']);
     final impressoras = [for (final i in lista(cad['impressoras'])) if (i['excluido'] != true) i];
     final comKlipper = [for (final i in impressoras) if ('${i['moonraker_url'] ?? ''}'.isNotEmpty) i];
     if (_filamento != null && !filamentos.any((f) => f['id'] == _filamento)) _filamento = null;
@@ -591,7 +611,7 @@ class _OrcarTelaState extends State<OrcarTela> {
 
   /// Filamento da peça: o geral do orçamento ou outro (outra cor). Só aparece com filamentos cadastrados.
   Widget _corDaPeca(ItemOrcado it) {
-    final filamentos = lista((_cad ?? const {})['filamentos']);
+    final filamentos = ativos((_cad ?? const {})['filamentos']);
     if (filamentos.isEmpty) return const SizedBox.shrink();
     final f = filamentos.where((x) => x['id'] == (it.filamento ?? _filamento)).firstOrNull;
     return Align(

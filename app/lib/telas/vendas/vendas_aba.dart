@@ -33,7 +33,7 @@ class VendasAba extends StatefulWidget {
 }
 
 class _VendasAbaState extends State<VendasAba> {
-  String _filtro = 'Entregues';
+  String _filtro = 'Em andamento';
 
   @override
   void initState() {

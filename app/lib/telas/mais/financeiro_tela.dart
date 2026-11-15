@@ -12,16 +12,17 @@ import '../casca.dart';
 import '../estoque/carretel_form.dart';
 import '../vendas/pedido_tela.dart';
 
-/// Gastos lançados à mão. Os da impressão vêm primeiro (são os do dia a dia).
+/// Gastos lançados à mão. Filamento e desperdício ficam no fim: carretel cadastrado no Estoque
+/// e falha de impressão já entram sozinhos, e lançar de novo contaria em dobro.
 const categoriasDespesa = {
-  'filamento': 'Filamento',
   'insumo': 'Insumo',
-  'desperdicio': 'Desperdício',
   'embalagem': 'Embalagem',
   'equipamento': 'Equipamento',
   'manutencao': 'Manutenção',
   'energia': 'Energia',
   'ferramenta': 'Ferramenta',
+  'filamento': 'Filamento',
+  'desperdicio': 'Desperdício',
   'outros': 'Outros',
 };
 
@@ -53,6 +54,58 @@ class _FinanceiroTelaState extends State<FinanceiroTela> {
   DateTime _mes = DateTime(DateTime.now().year, DateTime.now().month);
   String _filtro = 'Tudo';
 
+  /// Compra de insumo: lançamentos de estoque não se editam (são a soma do saldo), então corrigir =
+  /// excluir o errado e lançar o certo, na mesma data, pela fila (em ordem, funciona sem internet).
+  Future<void> _corrigirCompra(Map l) async {
+    final qtd = ctrlNumero(numOu(l['quantidade']));
+    final valor = ctrlDinheiro(num0(l['valor']));
+    final acao = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Corrigir compra'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('${l['descricao']}'),
+          CampoNumero(qtd, 'Quantidade', key: const Key('compra_qtd')),
+          CampoDinheiro(valor, 'Valor pago (total)', key: const Key('compra_valor')),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c, 'excluir'),
+              style: TextButton.styleFrom(foregroundColor: vermelho),
+              child: const Text('Excluir')),
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(c, 'salvar'), child: const Text('Salvar')),
+        ],
+      ),
+    );
+    if (acao == null || !mounted) return;
+    final q = lerNumero(qtd.text) ?? 0, v = lerNumero(valor.text) ?? 0;
+    if (acao == 'salvar' && (q <= 0 || v <= 0)) return avisar(context, 'Quantidade e valor precisam ser maiores que zero', erro: true);
+    if (acao == 'excluir' &&
+        (!await confirmar(context, 'Excluir este lançamento?',
+                'O gasto sai do financeiro e a quantidade sai do estoque.', sim: 'Excluir', cor: vermelho) ||
+            !mounted)) {
+      return;
+    }
+    if (!await salvar(context, 'DELETE', '/api/movimentos/${l['id']}', {},
+            feito: acao == 'excluir' ? 'Lançamento excluído' : 'Compra corrigida') ||
+        !mounted) {
+      return;
+    }
+    if (acao == 'salvar') {
+      final d = DateTime.parse('${l['data']}');
+      await salvar(context, 'PUT', '/api/movimentos/${novoId()}', {
+        'item_tipo': l['item_tipo'],
+        'item_id': l['item_id'],
+        'tipo': 'compra',
+        'quantidade': q,
+        'valor': v,
+        'data': DateTime(d.year, d.month, d.day, 12).toUtc().toIso8601String(),
+      }, feito: 'Compra corrigida');
+    }
+    dadosMudaram.value++;
+  }
+
   Future<void> _tocar(Map l) async {
     try {
       switch (l['tipo']) {
@@ -64,21 +117,8 @@ class _FinanceiroTelaState extends State<FinanceiroTela> {
         case 'compra' when l['item_tipo'] == 'carretel':
           final c = mapa((await buscar(context, '/api/carreteis/${l['item_id']}')).dados);
           if (mounted) await abrirTela(context, CarretelForm(dados: c));
-        default: // compra de insumo lançada no Estoque: só dá para desfazer
-          if (!await confirmar(
-                  context,
-                  'Excluir este lançamento?',
-                  '${l['descricao']} · ${moeda(num0(l['valor']))}\n\n'
-                      'O gasto sai do financeiro e a quantidade sai do estoque. '
-                      'Se o valor estava errado, lance a compra de novo no Estoque.',
-                  sim: 'Excluir',
-                  cor: vermelho) ||
-              !mounted) {
-            return;
-          }
-          if (await salvar(context, 'DELETE', '/api/movimentos/${l['id']}', {}, feito: 'Lançamento excluído')) {
-            dadosMudaram.value++;
-          }
+        default: // compra de insumo lançada no Estoque: corrige (troca o lançamento) ou exclui
+          await _corrigirCompra(l);
       }
     } catch (e) {
       if (mounted) avisarErro(context, e);
@@ -262,7 +302,9 @@ class _DespesaFormState extends State<DespesaForm> {
           CampoDinheiro(_valor, 'Valor', obrigatorio: true),
           CampoComAjuda(
             rotulo: 'Categoria',
-            ajuda: 'Carretel ou insumo que vai para o estoque: cadastre no Estoque, que ele já entra aqui.',
+            ajuda: _categoria == 'desperdicio'
+                ? 'Só o que não veio de carretel do Estoque: falha de impressão com carretel cadastrado já está no custo da compra.'
+                : 'Carretel ou insumo que vai para o estoque: cadastre no Estoque, que ele já entra aqui.',
             child: SeletorChips<String>(
                 opcoes: categoriasDespesa, valor: _categoria, aoMudar: (v) => setState(() => _categoria = v)),
           ),

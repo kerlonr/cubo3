@@ -125,7 +125,7 @@ class EditorInsumos extends StatelessWidget {
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   tooltip: 'Menos',
-                  onPressed: l.qtd > 1
+                  onPressed: l.qtd - 1 > 0
                       ? () {
                           l.qtd -= 1;
                           aoMudar();
@@ -222,7 +222,7 @@ Future<LinhaInsumo?> editarInsumo(BuildContext context, LinhaInsumo? atual) asyn
   if (ok != true || !context.mounted) return null;
   final linha = atual ?? LinhaInsumo();
   linha
-    ..nome = nome.text.trim()
+    ..nome = nome.text.trim().length > 80 ? nome.text.trim().substring(0, 80) : nome.text.trim()
     ..custo = lerNumero(custo.text) ?? 0
     ..embalagem = embalagem;
   if (guardar) {

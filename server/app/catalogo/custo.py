@@ -26,7 +26,7 @@ def receita_do_modelo(db: Session, empresa_id, receita: dict, multiplicar_insumo
     insumos, embalagem = [], []
     for i in receita.get("insumos", []):
         ins = _da_empresa(db, Insumo, i.get("insumo_id"), empresa_id)
-        if ins is not None and not ins.excluido:  # igual ao app, que só conhece os insumos ativos
+        if ins is not None:  # mesmo excluído: receita antiga (sem preço copiado) mantém o custo
             custo, emb = ins.custo_unitario, ins.categoria == "embalagem"
         elif i.get("custo_unitario") is not None:  # avulso, ou cadastro que sumiu: vale o preço copiado
             custo, emb = D(str(i["custo_unitario"])), bool(i.get("embalagem"))

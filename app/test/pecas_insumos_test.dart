@@ -106,7 +106,7 @@ void main() {
     expect((_corpoPut(amb)['receita'] as Map)['horas'], 3.0);
   });
 
-  testWidgets('orçar: meu preço vale mais que as margens e o kit vai para o catálogo com o mesmo custo', (tester) async {
+  testWidgets('orçar: meu preço vale mais que as margens; 2 unidades viram modelo de UMA unidade', (tester) async {
     final amb = _amb();
     await amb.preparar();
     await tamanhoTela(tester, 400, 2600);
@@ -125,7 +125,28 @@ void main() {
     await tester.tap(find.byKey(const Key('para_catalogo')));
     await tester.pumpAndSettle();
     expect(find.text('Novo modelo'), findsOneWidget);
-    expect(find.text('Custo R\$ 12,64'), findsOneWidget, reason: 'mesmo custo do orçamento');
-    expect(find.text('30,00'), findsOneWidget);
+    expect(find.text('Custo R\$ 6,32'), findsOneWidget, reason: 'custo de uma unidade');
+    expect(find.text('15,00'), findsOneWidget, reason: 'preço de uma unidade');
+  });
+
+  testWidgets('orçar: kit de duas peças diferentes vai para o catálogo como um modelo com o mesmo custo', (tester) async {
+    final amb = _amb();
+    await amb.preparar();
+    await tamanhoTela(tester, 400, 2600);
+    await tester.pumpWidget(amb.tela(const OrcarTela(inicial: {
+      'itens': [
+        {'nome': 'Case', 'gramas': '20', 'tempo': '2', 'qtd': 1},
+        {'nome': 'Keycap', 'gramas': '13', 'tempo': '1', 'qtd': 1, 'filamento_id': 'f2'},
+      ],
+      'filamento_id': 'f1',
+      'mao_obra': '5',
+    })));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.byKey(const Key('lucro'))).data, endsWith('custo R\$ 6,32'));
+    await tester.ensureVisible(find.byKey(const Key('para_catalogo')));
+    await tester.tap(find.byKey(const Key('para_catalogo')));
+    await tester.pumpAndSettle();
+    expect(find.text('Custo R\$ 6,32'), findsOneWidget, reason: 'mesmo custo do orçamento');
+    expect(find.text('Keycap'), findsOneWidget);
   });
 }

@@ -16,19 +16,12 @@ class _Item {
   final preco = TextEditingController();
 }
 
-/// Mostra os avisos do servidor (ex.: estoque negativo) num diálogo amarelo.
+/// Avisos do servidor (ex.: estoque negativo) num aviso de baixo: quem produz sob encomenda
+/// vende sem estoque o tempo todo e a janela travava cada entrega.
 Future<void> mostrarAvisos(BuildContext context, Object? resposta) async {
   final avisos = resposta is Map ? (resposta['avisos'] as List? ?? const []) : const [];
   if (avisos.isEmpty || !context.mounted) return;
-  await showDialog<void>(
-    context: context,
-    builder: (c) => AlertDialog(
-      icon: const Icon(Icons.warning_amber_rounded, color: amarelo),
-      title: const Text('Atenção'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [for (final a in avisos) Text('$a')]),
-      actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Ok'))],
-    ),
-  );
+  avisar(context, avisos.join('\n'));
 }
 
 /// Venda rápida (já entregue) ou novo pedido (orçamento): uma tela.

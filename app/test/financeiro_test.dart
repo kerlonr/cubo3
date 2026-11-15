@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cubo3/telas/estoque/carretel_form.dart';
 import 'package:cubo3/telas/mais/financeiro_tela.dart';
 import 'package:cubo3/telas/vendas/pedido_tela.dart';
@@ -19,7 +21,7 @@ const extrato = {
     {'tipo': 'despesa', 'id': 'd1', 'data': '2026-11-09', 'descricao': null, 'valor': 20, 'categoria': 'desperdicio'},
     {
       'tipo': 'compra', 'id': 'mov1', 'data': '2026-11-08', 'descricao': 'Cola · 2 un', 'valor': 30,
-      'categoria': 'insumo', 'item_tipo': 'insumo', 'item_id': 'i1'
+      'categoria': 'insumo', 'item_tipo': 'insumo', 'item_id': 'i1', 'quantidade': 2
     },
     {
       'tipo': 'compra', 'id': 'mov2', 'data': '2026-11-07', 'descricao': 'Carretel PLA · 1000 g', 'valor': 90,
@@ -78,14 +80,33 @@ void main() {
     expect(find.text(mascaraValor), findsWidgets);
   });
 
-  testWidgets('Financeiro: compra de insumo se desfaz com confirmação (DELETE do movimento)', (tester) async {
+  testWidgets('Financeiro: compra de insumo se exclui com confirmação (DELETE do movimento)', (tester) async {
     final amb = await abrirFinanceiro(tester);
     await tester.tap(find.text('Cola · 2 un'));
     await tester.pumpAndSettle();
-    expect(find.text('Excluir este lançamento?'), findsOneWidget);
     await tester.tap(find.text('Excluir'));
     await tester.pumpAndSettle();
+    expect(find.text('Excluir este lançamento?'), findsOneWidget);
+    await tester.tap(find.text('Excluir').last);
+    await tester.pumpAndSettle();
     expect(amb.ultimo('DELETE /api/movimentos/mov1'), isNotNull);
+    expect(amb.recebidos.where((r) => r.method == 'PUT'), isEmpty);
+  });
+
+  testWidgets('Financeiro: corrigir compra de insumo troca o lançamento (mesma data, valor novo)', (tester) async {
+    final amb = await abrirFinanceiro(tester);
+    await tester.tap(find.text('Cola · 2 un'));
+    await tester.pumpAndSettle();
+    expect(find.text('Corrigir compra'), findsOneWidget);
+    await tester.enterText(find.descendant(of: find.byKey(const Key('compra_valor')), matching: find.byType(TextFormField)), '25,00');
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    final escritas = [for (final r in amb.recebidos) if (r.method != 'GET') r];
+    expect([for (final r in escritas) r.method], ['DELETE', 'PUT']);
+    expect(escritas.first.url.path, '/api/movimentos/mov1');
+    final corpo = jsonDecode(escritas.last.body) as Map;
+    expect([corpo['item_id'], corpo['tipo'], corpo['quantidade'], corpo['valor']], ['i1', 'compra', 2.0, 25.0]);
+    expect(DateTime.parse(corpo['data'] as String).toLocal().day, 8);
   });
 
   testWidgets('Financeiro: compra de carretel abre a edição do carretel', (tester) async {

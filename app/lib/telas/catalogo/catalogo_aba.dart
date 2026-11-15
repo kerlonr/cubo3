@@ -197,5 +197,7 @@ class _CatalogoAbaState extends State<CatalogoAba> {
 }
 
 /// Sem filamento com gramas ou sem tempo: o custo sai menor que o real e o lucro, inflado.
-bool receitaIncompleta(Map receita) =>
-    !lista(receita['filamentos']).any((f) => num0(f['gramas']) > 0) || num0(receita['horas']) == 0;
+bool receitaIncompleta(Map receita) {
+  final pecas = lista(receita['filamentos']);
+  return pecas.isEmpty || pecas.any((f) => num0(f['gramas']) <= 0) || num0(receita['horas']) == 0;
+}

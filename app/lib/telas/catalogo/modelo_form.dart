@@ -14,19 +14,24 @@ import 'insumos_receita.dart';
 
 /// Cadastros que o custo ao vivo precisa (cacheados para funcionar sem internet).
 const caminhosCusto = {
-  'filamentos': '/api/filamentos',
-  'insumos': '/api/insumos',
+  // Inclui os excluídos: modelo antigo com filamento excluído continua com o preço dele (igual ao servidor).
+  'filamentos': '/api/filamentos?incluir_excluidos=true',
+  'insumos': '/api/insumos?incluir_excluidos=true',
   'impressoras': '/api/impressoras',
   'config': '/api/empresa/config',
 };
 
 /// Peça impressa do modelo. Um modelo pode juntar várias (ex.: fidget de switch = case + keycap).
 class PecaReceita {
-  PecaReceita({this.filamentoId, String nome = '', num? gramas, String tempo = '', num? precoKg})
+  PecaReceita({this.filamentoId, String nome = '', num? gramas, String tempo = '', num? precoKg, this.horasSalvas})
       : nome = TextEditingController(text: nome),
         gramas = ctrlNumero(gramas),
         tempo = TextEditingController(text: tempo),
-        precoKg = ctrlDinheiro(precoKg);
+        precoKg = ctrlDinheiro(precoKg),
+        _gramasSalvas = gramas?.toDouble() {
+    _gramasLidas = this.gramas.text;
+    _tempoLido = this.tempo.text;
+  }
 
   String? filamentoId;
   final TextEditingController nome, gramas, tempo;
@@ -34,15 +39,25 @@ class PecaReceita {
   /// Só para filamento avulso (sem cadastro): sem ele o material contava R$ 0.
   final TextEditingController precoKg;
 
+  /// Valores exatos da receita salva: o campo mostra arredondado ("3h10", "12,35"), e abrir e salvar
+  /// sem mexer não pode mudar o custo de um modelo que já existe.
+  final double? horasSalvas;
+  final double? _gramasSalvas;
+  late final String _gramasLidas, _tempoLido;
+
   bool get vazia => gramas.text.trim().isEmpty && tempo.text.trim().isEmpty;
 
-  /// Linha de `receita.filamentos`; null quando não há o que guardar (avulso sem preço e sem tempo).
+  double? get horas => tempo.text == _tempoLido && horasSalvas != null ? horasSalvas : lerHoras(tempo.text);
+  double get gramasValor =>
+      (gramas.text == _gramasLidas && _gramasSalvas != null ? _gramasSalvas : lerNumero(gramas.text)) ?? 0;
+
+  /// Linha de `receita.filamentos`; null quando não há o que guardar (avulso sem preço, gramas nem tempo).
   Json? get json {
-    final g = lerNumero(gramas.text) ?? 0, h = lerHoras(tempo.text);
-    final extra = <String, Object>{if (nome.text.trim().isNotEmpty) 'nome': nome.text.trim(), 'horas': ?h};
+    final g = gramasValor, h = horas;
+    final extra = <String, Object>{if (nome.text.trim().isNotEmpty) 'nome': _curto(nome.text.trim()), 'horas': ?h};
     if (filamentoId != null) return {'filamento_id': filamentoId, 'gramas': g, ...extra};
     final p = lerNumero(precoKg.text) ?? 0;
-    if (p > 0 || (h ?? 0) > 0) return {'filamento_id': null, 'preco_kg': p, 'gramas': g, ...extra};
+    if (p > 0 || g > 0 || (h ?? 0) > 0) return {'filamento_id': null, 'preco_kg': p, 'gramas': g, ...extra};
     return null;
   }
 
@@ -53,6 +68,9 @@ class PecaReceita {
     if ('${item['tempo'] ?? ''}'.isNotEmpty) tempo.text = '${item['tempo']}';
   }
 }
+
+/// O servidor guarda até 80 caracteres por nome; mais que isso recusaria o modelo inteiro.
+String _curto(String s) => s.length > 80 ? s.substring(0, 80) : s;
 
 /// Peças da receita salva. Receita antiga (tempo só no total) põe o tempo na primeira peça.
 List<PecaReceita> pecasDaReceita(Map receita) {
@@ -68,9 +86,10 @@ List<PecaReceita> pecasDaReceita(Map receita) {
         gramas: numOu(f['gramas']),
         precoKg: numOu(f['preco_kg']),
         tempo: f['horas'] != null ? tempo(num0(f['horas'])) : (semTempoPorPeca && i == 0 ? tempo(total) : ''),
+        horasSalvas: f['horas'] != null ? num0(f['horas']) : (semTempoPorPeca && i == 0 && total > 0 ? total : null),
       ),
   ];
-  if (pecas.isEmpty) pecas.add(PecaReceita(tempo: tempo(total)));
+  if (pecas.isEmpty) pecas.add(PecaReceita(tempo: tempo(total), horasSalvas: total > 0 ? total : null));
   return pecas;
 }
 
@@ -111,7 +130,7 @@ class _ModeloFormState extends State<ModeloForm> {
   late final _insumos = [for (final i in lista(receita['insumos'])) LinhaInsumo.deJson(i)];
   late String? _impressora = d['impressora_id'] as String?;
 
-  double get _horas => _pecas.fold(0.0, (s, p) => s + (lerHoras(p.tempo.text) ?? 0));
+  double get _horas => _pecas.fold(0.0, (s, p) => s + (p.horas ?? 0));
 
   Json get _receita => {
         'filamentos': [for (final p in _pecas) ?p.json],
@@ -186,7 +205,7 @@ class _ModeloFormState extends State<ModeloForm> {
           // Peça nova (sem nada digitado) já vem com o primeiro filamento cadastrado.
           for (final p in _pecas) {
             if (p.filamentoId == null && p.precoKg.text.isEmpty && p.vazia && filamentos.isNotEmpty) {
-              p.filamentoId = filamentos.first['id'] as String;
+              p.filamentoId = ativos(filamentos).firstOrNull?['id'] as String?;
             }
           }
           final custo = custoDaReceita(_receita,
@@ -198,7 +217,7 @@ class _ModeloFormState extends State<ModeloForm> {
           final preco = lerNumero(_preco.text);
           final t = Theme.of(context);
           final fraco = TextStyle(fontSize: 12, color: t.colorScheme.onSurfaceVariant);
-          final gramasTotal = _pecas.fold(0.0, (s, p) => s + (lerNumero(p.gramas.text) ?? 0));
+          final gramasTotal = _pecas.fold(0.0, (s, p) => s + p.gramasValor);
           return CorpoFormulario(chave: _form, children: [
             CampoTexto(_nome, 'Nome', key: const Key('nome'), obrigatorio: true, dica: 'Fidget switch chaveiro...'),
             const Secao('Peças impressas'),
@@ -209,6 +228,12 @@ class _ModeloFormState extends State<ModeloForm> {
                   onPressed: () => _importar(() => itemDoAparelho(context)),
                   icon: const Icon(Icons.upload_file),
                   label: const Text('Do arquivo')),
+              if (fatiadosDoModelo(d).isNotEmpty)
+                OutlinedButton.icon(
+                    key: const Key('dos_anexos'),
+                    onPressed: () => _importar(() => itemDosArquivosDoModelo(context, fatiadosDoModelo(d))),
+                    icon: const Icon(Icons.attach_file),
+                    label: const Text('Dos arquivos do modelo')),
               for (final k in klipper.take(1))
                 OutlinedButton.icon(
                     onPressed: () => _importar(() => itemDaImpressora(context, k)),

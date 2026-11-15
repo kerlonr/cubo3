@@ -38,7 +38,7 @@ class CarretelEntrada(BaseModel):
 
 
 class InsumoEntrada(BaseModel):
-    nome: str | None = Field(None, min_length=1)
+    nome: str | None = Field(None, min_length=1, max_length=80)
     unidade: str | None = None
     categoria: Literal["insumo", "embalagem"] | None = None
     custo_unitario: Decimal | None = Field(None, ge=0)
@@ -91,7 +91,11 @@ def ao_salvar_carretel(db: Session, c: Ctx, car: Carretel, criado: bool) -> None
 
 
 def ao_excluir_carretel(db: Session, c: Ctx, car: Carretel) -> None:
-    # Carretel cadastrado por engano: o gasto da compra sai do financeiro junto.
+    # Carretel cadastrado por engano: o gasto da compra sai do financeiro junto. Já usado, o gasto aconteceu.
+    usado = db.scalar(select(Movimento.id).where(Movimento.item_tipo == "carretel", Movimento.item_id == car.id,
+                                                 Movimento.excluido.is_(False), Movimento.tipo != "compra").limit(1))
+    if usado is not None:
+        raise HTTPException(409, "Esse carretel já foi usado. Arquive em vez de excluir (o gasto aconteceu).")
     compra = db.get(Movimento, id_derivado(car.id, "compra"))
     if compra is not None:
         compra.excluido = True

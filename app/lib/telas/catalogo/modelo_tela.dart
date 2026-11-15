@@ -104,8 +104,8 @@ class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
             'impressoes': '/api/impressoes',
             'pedidos': '/api/pedidos',
             'impressoras': '/api/impressoras',
-            'filamentos': '/api/filamentos',
-            'insumos': '/api/insumos',
+            'filamentos': '/api/filamentos?incluir_excluidos=true',
+            'insumos': '/api/insumos?incluir_excluidos=true',
           });
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) setState(() => _modelo = mapa((r.dados as Map)['modelo']));
