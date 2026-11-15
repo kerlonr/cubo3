@@ -50,8 +50,9 @@ def _itens(db: Session, p: Pedido) -> list[PedidoItem]:
     return list(db.scalars(select(PedidoItem).where(PedidoItem.pedido_id == p.id).order_by(PedidoItem.criado_em)))
 
 
-def _assinatura(itens) -> set:
-    return {(str(i.id), str(i.modelo_id), D(i.quantidade).normalize(), D(i.preco_unitario).normalize()) for i in itens}
+def _assinatura(itens, com_preco: bool = True) -> set:
+    return {(str(i.id), str(i.modelo_id), D(i.quantidade).normalize()) + ((D(i.preco_unitario).normalize(),) if com_preco else ())
+            for i in itens}
 
 
 def _custo_item(db: Session, empresa_id, modelo_id) -> Decimal:
@@ -77,11 +78,19 @@ def _entregar(db: Session, c: Ctx, p: Pedido, quando: datetime | None) -> list[s
             s = saldo(db, c.empresa_id, "peca", it.modelo_id)
             if s < 0:
                 avisos.append(f"Estoque de {db.get(Modelo, it.modelo_id).nome} ficou em {s.normalize()}")
+    _recalcular(db, p)
+    return avisos
+
+
+def _recalcular(db: Session, p: Pedido) -> None:
+    """Valores congelados da entrega a partir dos itens (custo de cada item e taxas do canal já fixados)."""
+    itens = _itens(db, p)
+    bruto = sum((D(i.quantidade) * D(i.preco_unitario) for i in itens), D(0))
+    custo_itens = sum((D(i.quantidade) * D(i.custo_unitario or 0) for i in itens), D(0))
     receita = bruto - D(p.desconto or 0) + D(p.frete_cobrado or 0)
-    taxas = bruto * D(p.taxa_pct) / 100 + D(p.taxa_fixa)
+    taxas = bruto * D(p.taxa_pct or 0) / 100 + D(p.taxa_fixa or 0)
     p.bruto, p.receita, p.custo_itens, p.taxas = r2(bruto), r2(receita), r2(custo_itens), r2(taxas)
     p.lucro = r2(receita - custo_itens - taxas - D(p.custo_envio or 0))
-    return avisos
 
 
 def _estornar(db: Session, c: Ctx, p: Pedido) -> None:
@@ -125,10 +134,26 @@ def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> t
     if p is None:
         p = Pedido(id=id, empresa_id=c.empresa_id, status="orcamento")
         db.add(p)
-    elif p.status in FECHADOS:
+    elif p.status == "cancelado":
         if dados.itens is not None and _assinatura(dados.itens) != _assinatura(_itens(db, p)):
-            raise HTTPException(409, "Não dá para mudar os itens de um pedido entregue ou cancelado")
+            raise HTTPException(409, "Não dá para mudar os itens de um pedido cancelado")
         campos = {k: v for k, v in campos.items() if k in ("pago", "forma_pagamento", "cliente_id", "obs")}
+    elif p.status == "entregue":
+        # Entregue: preço, desconto e frete podem ser corrigidos (o estoque já baixou, então itens e
+        # quantidades ficam). Os valores congelados são recalculados com o mesmo custo e as mesmas taxas.
+        atuais = {str(i.id): i for i in _itens(db, p)}
+        if dados.itens is not None:
+            if _assinatura(dados.itens, False) != _assinatura(atuais.values(), False):
+                raise HTTPException(409, "Pedido entregue: só dá para mudar preço, desconto e frete (não os itens)")
+            for it in dados.itens:
+                atuais[str(it.id)].preco_unitario = it.preco_unitario
+        campos = {k: v for k, v in campos.items()
+                  if k in ("pago", "forma_pagamento", "cliente_id", "obs", "desconto", "frete_cobrado", "custo_envio")}
+        for k, v in campos.items():
+            setattr(p, k, v)
+        db.flush()
+        _recalcular(db, p)
+        campos = {}
     for k, v in campos.items():
         setattr(p, k, v)
     if dados.itens is not None and p.status not in FECHADOS:

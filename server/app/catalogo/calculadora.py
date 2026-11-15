@@ -37,6 +37,7 @@ class Calculo(BaseModel):
     mao_obra_min: Decimal = Field(D(0), ge=0)
     insumos: list[InsumoCalc] = []
     custo_envio: Decimal = Field(D(0), ge=0)
+    pecas_por_impressao: int = Field(1, ge=1, le=1000)
     impressora_id: uuid.UUID | None = None
 
 
@@ -56,7 +57,8 @@ def calcular(dados: Calculo, c: Ctx = Depends(ctx), db: Session = Depends(get_db
         (embalagem if emb else insumos).append(ItemCusto(i.qtd, custo))
     emp = param_empresa(db, c.empresa_id)
     imp = param_impressora(impressora_padrao(db, c.empresa_id, dados.impressora_id))
-    custo = calcular_custo(Receita(filamentos, dados.horas, dados.mao_obra_min, insumos, embalagem, dados.custo_envio),
+    custo = calcular_custo(Receita(filamentos, dados.horas, dados.mao_obra_min, insumos, embalagem, dados.custo_envio,
+                                   rendimento=D(dados.pecas_por_impressao)),
                            imp, emp)
     margem_meio = emp.margens[len(emp.margens) // 2]
     por_canal = []

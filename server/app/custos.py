@@ -54,6 +54,7 @@ class Receita:
     embalagem: list[ItemCusto] = field(default_factory=list)
     custo_envio: Decimal = D("0")
     aplicar_eficiencia: bool = True
+    rendimento: Decimal = D("1")  # peças por impressão: gramas e horas são da mesa inteira
 
 
 @dataclass
@@ -81,9 +82,10 @@ def _soma(itens: list[ItemCusto]) -> Decimal:
 
 def calcular_custo(r: Receita, imp: ParamImpressora, emp: ParamEmpresa) -> Custo:
     fator = D(emp.eficiencia) if r.aplicar_eficiencia else D(1)
-    material = sum((D(f.gramas) / 1000 * D(f.preco_kg) for f in r.filamentos), D(0)) * fator
+    rendimento = max(D(r.rendimento), D(1))
+    material = sum((D(f.gramas) / 1000 * D(f.preco_kg) for f in r.filamentos), D(0)) * fator / rendimento
     mao_obra = D(r.mao_obra_min) / 60 * D(emp.mao_obra_hora)
-    maquina = D(r.horas) * custo_hora_impressora(imp, emp)
+    maquina = D(r.horas) * custo_hora_impressora(imp, emp) / rendimento
     insumos = _soma(r.insumos)
     embalagem = _soma(r.embalagem) + D(r.custo_envio)
     total = material + mao_obra + maquina + insumos + embalagem

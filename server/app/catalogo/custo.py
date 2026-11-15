@@ -35,7 +35,8 @@ def receita_do_modelo(db: Session, empresa_id, receita: dict, multiplicar_insumo
         item = ItemCusto(D(str(i.get("qtd", 0))) * multiplicar_insumos, custo)
         (embalagem if emb else insumos).append(item)
     return Receita(filamentos, D(str(receita.get("horas", 0))), D(str(receita.get("mao_obra_min", 0))),
-                   insumos, embalagem, D(str(receita.get("custo_envio", 0))))
+                   insumos, embalagem, D(str(receita.get("custo_envio", 0))),
+                   rendimento=D(str(receita.get("pecas_por_impressao") or 1)))
 
 
 def custo_do_modelo(db: Session, empresa_id, modelo: Modelo) -> Custo:

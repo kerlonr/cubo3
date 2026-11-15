@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -7,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 
+from app.ao_vivo import hub
 from app.auth.rotas import rotas as rotas_auth
 from app.catalogo import calculadora
 from app.catalogo import rotas as catalogo
@@ -38,6 +41,18 @@ def criar_app() -> FastAPI:
         erros = [{"loc": list(e.get("loc", [])), "msg": e.get("msg", ""), "type": e.get("type", "")} for e in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": erros})
 
+    @app.middleware("http")
+    async def avisar_mudanca(request: Request, call_next):
+        """Toda escrita aceita avisa os aparelhos da empresa (WebSocket /api/ao-vivo): o celular e o
+        PC recarregam a tela aberta na hora. Comandos da impressora e leituras via POST não contam."""
+        resposta = await call_next(request)
+        if request.method in ("PUT", "POST", "DELETE") and resposta.status_code < 400                 and request.url.path.startswith("/api/") and not _SEM_AVISO.match(request.url.path):
+            try:
+                hub.publicar(uuid.UUID(request.headers.get("x-empresa", "")), {"tipo": "dados", "caminho": request.url.path})
+            except ValueError:
+                pass  # sem empresa (não acontece em escrita aceita): nada a avisar
+        return resposta
+
     @app.get("/api/saude")
     def saude():
         return {"ok": True}
@@ -50,6 +65,10 @@ def criar_app() -> FastAPI:
         app.include_router(r)
     _versao_e_web(app)
     return app
+
+
+_SEM_AVISO = re.compile(r"^/api/(auth/|calculadora$|arquivos/[^/]+/(link|imprimir)$|"
+                        r"impressoras/[^/]+/(comando|gcode|camera/link|arquivos/imprimir)$)")
 
 
 def _versao_e_web(app: FastAPI) -> None:

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Numeric, String, Text, Uuid
+from sqlalchemy import ForeignKey, Integer, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, DaEmpresa, UtcDateTime, agora
@@ -49,3 +49,13 @@ class PedidoItem(DaEmpresa, Base):
     quantidade: Mapped[Decimal] = mapped_column(Num)
     preco_unitario: Mapped[Decimal] = mapped_column(Num)
     custo_unitario: Mapped[Decimal | None] = mapped_column(Num)
+
+
+class PedidoAnexo(DaEmpresa, Base):
+    """Comprovante (Pix, recibo) anexado ao pedido."""
+    __tablename__ = "pedido_anexos"
+    pedido_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("pedidos.id"), index=True)
+    nome_original: Mapped[str] = mapped_column(String(255))
+    tipo: Mapped[str] = mapped_column(String(10))
+    tamanho: Mapped[int] = mapped_column(Integer)
+    caminho: Mapped[str] = mapped_column(String(255))

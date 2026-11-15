@@ -50,6 +50,7 @@ class ReceitaEntrada(BaseModel):
     mao_obra_min: Decimal = Field(Decimal(0), ge=0)
     insumos: list[ItemReceitaInsumo] = []
     custo_envio: Decimal = Field(Decimal(0), ge=0)
+    pecas_por_impressao: int = Field(1, ge=1, le=1000)  # 6 chaveiros na mesa: gramas e horas são das 6
 
 
 class Link(BaseModel):
