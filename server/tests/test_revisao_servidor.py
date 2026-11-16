@@ -65,7 +65,6 @@ def test_revisao_margem_acima_de_100_aceita(cli, dono):
     assert r.status_code == 422, f"percentual fora de 0–100 aceito: {r.status_code} {r.text}"
 
 
-@BUG
 def test_revisao_data_sem_fuso_vira_500(cli, dono):
     m = criar_modelo(cli, dono)
     r = cli.put(f"/api/pedidos/{uuid.uuid4()}", headers=dono, json={
@@ -74,7 +73,6 @@ def test_revisao_data_sem_fuso_vira_500(cli, dono):
     assert r.status_code in (200, 422), f"esperado 200 (assumindo fuso local) ou 422, veio {r.status_code}"
 
 
-@BUG
 def test_revisao_movimento_data_sem_fuso(cli, dono):
     car = criar_carretel(cli, dono, criar_filamento(cli, dono)["id"])
     r = cli.put(f"/api/movimentos/{uuid.uuid4()}", headers=dono, json={

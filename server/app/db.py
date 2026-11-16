@@ -1,10 +1,22 @@
 import os
+from typing import Annotated
+
+from pydantic import AfterValidator, AwareDatetime
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Uuid, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, declared_attr, mapped_column, sessionmaker
 from sqlalchemy.types import TypeDecorator
+
+
+def _ano_ok(d: datetime) -> datetime:
+    if not 2000 <= d.year <= 2100:
+        raise ValueError("Data fora do intervalo 2000–2100")
+    return d
+
+
+Data = Annotated[AwareDatetime, AfterValidator(_ano_ok)]  # data de entrada da API
 
 
 def agora() -> datetime:

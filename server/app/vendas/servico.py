@@ -14,7 +14,7 @@ from app.catalogo.custo import custo_do_modelo
 from app.catalogo.modelos import Modelo
 from app.crud import faltando, obter
 from app.custos import r2
-from app.db import agora
+from app.db import Data, agora
 from app.empresa.modelos import CanalVenda
 from app.estoque.modelos import Movimento
 from app.estoque.servico import custo_medio_peca, id_derivado, lancar, saldo
@@ -43,8 +43,8 @@ class PedidoEntrada(BaseModel):
     pago: bool | None = None
     forma_pagamento: str | None = Field(None, max_length=30)
     obs: str | None = Field(None, max_length=2000)
-    data: datetime | None = None
-    entregue_em: datetime | None = None  # o app manda o momento real da entrega (fila offline)
+    data: Data | None = None
+    entregue_em: Data | None = None  # o app manda o momento real da entrega (fila offline)
     itens: list[ItemEntrada] | None = None
 
 
@@ -83,17 +83,10 @@ def _entregar(db: Session, c: Ctx, p: Pedido, quando: datetime | None,
         mesmo = congelado is not None and modelo_antes == it.modelo_id  # trocou o modelo: custo do novo
         it.custo_unitario = congelado if mesmo else _custo_item(db, c.empresa_id, it.modelo_id)
         if it.modelo_id:
-            mid = id_derivado(it.id, "venda")
-            antiga = db.get(Movimento, mid)
-            if antiga is not None and antiga.excluido:  # pedido reaberto ou corrigido: a mesma baixa volta, atualizada
-                antiga.excluido, antiga.item_id = False, it.modelo_id
-                antiga.quantidade, antiga.valor = -D(it.quantidade), it.custo_unitario * D(it.quantidade)
-                antiga.data = p.entregue_em
-                db.flush()
-            else:
-                lancar(db, c, id=mid, item_tipo="peca", item_id=it.modelo_id, tipo="venda",
-                       quantidade=-D(it.quantidade), valor=it.custo_unitario * D(it.quantidade), pedido_id=p.id,
-                       data=p.entregue_em)
+            # pedido reaberto ou corrigido: a mesma baixa volta, atualizada
+            lancar(db, c, id=id_derivado(it.id, "venda"), item_tipo="peca", item_id=it.modelo_id, tipo="venda",
+                   quantidade=-D(it.quantidade), valor=it.custo_unitario * D(it.quantidade), pedido_id=p.id,
+                   data=p.entregue_em, reativar=True)
             s = saldo(db, c.empresa_id, "peca", it.modelo_id)
             if s < 0:
                 avisos.append(f"Estoque de {db.get(Modelo, it.modelo_id).nome} ficou em {s.normalize()}")
@@ -113,9 +106,9 @@ def _recalcular(db: Session, p: Pedido) -> None:
 
 
 def _desfazer_entrega(db: Session, p: Pedido) -> None:
-    """Volta o pedido para antes da entrega: as peças voltam ao estoque e os valores congelados saem."""
-    for m in db.scalars(select(Movimento).where(Movimento.pedido_id == p.id, Movimento.tipo == "venda",
-                                                Movimento.excluido.is_(False))):
+    """Volta o pedido para antes da entrega (ou do cancelamento): as baixas e os estornos do pedido saem
+    (o estoque fica como se ele nunca tivesse sido entregue) e os valores congelados saem."""
+    for m in db.scalars(select(Movimento).where(Movimento.pedido_id == p.id, Movimento.excluido.is_(False))):
         m.excluido = True
     p.bruto = p.receita = p.custo_itens = p.taxas = p.lucro = p.taxa_pct = p.taxa_fixa = None
     p.entregue_em = None
@@ -168,19 +161,17 @@ def _estornar(db: Session, c: Ctx, p: Pedido) -> None:
     for it in _itens(db, p):
         if it.modelo_id:
             lancar(db, c, id=id_derivado(it.id, "estorno"), item_tipo="peca", item_id=it.modelo_id, tipo="ajuste",
-                   quantidade=D(it.quantidade), pedido_id=p.id)
+                   quantidade=D(it.quantidade), pedido_id=p.id, reativar=True)
 
 
 def mudar_status(db: Session, c: Ctx, p: Pedido, status: str, quando: datetime | None = None) -> list[str]:
     if status == p.status:
         return []
-    if p.status == "cancelado":
-        raise HTTPException(409, "Pedido cancelado não muda mais de status")
+    if p.status == "cancelado" or (p.status == "entregue" and status != "cancelado"):
+        _desfazer_entrega(db, p)  # reabrir: cancelou sem querer, errou a entrega ou vai refazer
     avisos = _entregar(db, c, p, quando) if status == "entregue" else []
     if status == "cancelado" and p.status == "entregue":
         _estornar(db, c, p)
-    elif p.status == "entregue" and status != "cancelado":
-        _desfazer_entrega(db, p)  # reabrir: errou a entrega ou o cliente devolveu para refazer
     p.status = status
     db.flush()
     return avisos
@@ -188,7 +179,7 @@ def mudar_status(db: Session, c: Ctx, p: Pedido, status: str, quando: datetime |
 
 def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> tuple[Pedido, list[str]]:
     p = db.get(Pedido, id)
-    if p is not None and p.empresa_id != c.empresa_id:
+    if p is not None and (p.empresa_id != c.empresa_id or p.excluido):
         raise HTTPException(404, "Pedido não encontrado")
     if dados.cliente_id:
         obter(db, c, Cliente, dados.cliente_id, "Cliente")
@@ -221,6 +212,11 @@ def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> t
         mudou_canal = "canal_id" in campos and campos["canal_id"] != p.canal_id
         for k, v in campos.items():
             setattr(p, k, v)
+        if dados.entregue_em is not None and dados.entregue_em != p.entregue_em:  # data da venda corrigida
+            p.entregue_em = dados.entregue_em
+            for m in db.scalars(select(Movimento).where(Movimento.pedido_id == p.id, Movimento.tipo == "venda",
+                                                        Movimento.excluido.is_(False))):
+                m.data = dados.entregue_em
         if mudou_canal:  # venda lançada no canal errado: as taxas passam a ser as do canal certo
             canal = db.get(CanalVenda, p.canal_id) if p.canal_id else None
             p.taxa_pct, p.taxa_fixa = (canal.taxa_pct, canal.taxa_fixa) if canal else (D(0), D(0))
@@ -260,6 +256,9 @@ def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> t
     if total_antes is not None and total_pedido(db, p) != total_antes:
         converter_pago_antigo(db, p, total_antes)
     atualizar_pago(db, p)
+    if pagamentos(db, p) and (sobra := recebido(db, p) - total_pedido(db, p)) > D("0.005"):
+        avisos.append(f"Já recebeu R$ {r2(recebido(db, p)):.2f} e o total ficou R$ {r2(total_pedido(db, p)):.2f}: "
+                      f"sobram R$ {r2(sobra):.2f} (devolva ou corrija as parcelas)".replace(".", ","))
     return p, avisos_correcao + avisos
 
 

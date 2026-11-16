@@ -16,7 +16,7 @@ from app.custos import custo_hora_impressora, r2
 from app.db import agora
 from app.empresa.modelos import Impressora
 from app.empresa.rotas import param_empresa, param_impressora
-from app.estoque.modelos import Carretel, Insumo
+from app.estoque.modelos import Carretel, Insumo, Movimento
 from app.estoque.servico import id_derivado, lancar
 from app.impressoes.modelos import Impressao
 
@@ -30,7 +30,7 @@ class Uso(BaseModel):
 
 class Confirmacao(BaseModel):
     finalidade: Literal["venda", "pessoal", "teste", "falhou"]
-    pecas_boas: int = Field(0, ge=0)
+    pecas_boas: int = Field(0, ge=0, le=100_000)
     consumos: list[Uso] = []
     perdas: list[Uso] = []
     mao_obra_min: Decimal | None = Field(None, ge=0, le=TETO)
@@ -84,17 +84,17 @@ def confirmar(db: Session, c: Ctx, imp: Impressao, dados: Confirmacao) -> Impres
 
     for (tipo, cid), gramas in usos.items():
         lancar(db, c, id=id_derivado(imp.id, f"{tipo}:{cid}"), item_tipo="carretel",
-               item_id=cid, tipo=tipo, quantidade=-gramas, impressao_id=imp.id, data=imp.fim)
+               item_id=cid, tipo=tipo, quantidade=-gramas, impressao_id=imp.id, data=imp.fim, reativar=True)
     if dados.pecas_boas > 0:  # insumos da receita saem do estoque (o alerta de "repor" passa a funcionar)
         for i in receita.get("insumos", []):
             ins = db.get(Insumo, uuid.UUID(str(i["insumo_id"]))) if i.get("insumo_id") else None
             qtd = D(str(i.get("qtd") or 0)) * dados.pecas_boas
             if ins is not None and ins.empresa_id == c.empresa_id and qtd > 0:
                 lancar(db, c, id=id_derivado(imp.id, f"insumo:{ins.id}"), item_tipo="insumo", item_id=ins.id,
-                       tipo="consumo", quantidade=-qtd, impressao_id=imp.id, data=imp.fim)
+                       tipo="consumo", quantidade=-qtd, impressao_id=imp.id, data=imp.fim, reativar=True)
     if dados.finalidade == "venda" and modelo and dados.pecas_boas > 0:
         lancar(db, c, id=id_derivado(imp.id, "producao"), item_tipo="peca", item_id=modelo.id, tipo="producao",
-               quantidade=dados.pecas_boas, valor=total, impressao_id=imp.id, data=imp.fim)
+               quantidade=dados.pecas_boas, valor=total, impressao_id=imp.id, data=imp.fim, reativar=True)
     if modelo and imp.arquivo and imp.arquivo not in (modelo.nomes_arquivo or []):
         modelo.nomes_arquivo = [*(modelo.nomes_arquivo or []), imp.arquivo]
 
@@ -104,6 +104,20 @@ def confirmar(db: Session, c: Ctx, imp: Impressao, dados: Confirmacao) -> Impres
     imp.custo_unitario = r2(total / dados.pecas_boas) if dados.pecas_boas else None
     imp.status, imp.confirmada_por, imp.confirmada_em = "confirmada", c.usuario.id, agora()
     imp.fim = imp.fim or agora()
+    db.flush()
+    return imp
+
+
+def reabrir(db: Session, c: Ctx, imp: Impressao) -> Impressao:
+    """Confirmou errado ou descartou sem querer: volta para "a confirmar". Os gastos de filamento, os
+    insumos e as peças produzidas saem do estoque; a próxima confirmação lança tudo de novo."""
+    if imp.status not in ("confirmada", "descartada"):
+        raise HTTPException(409, "Só dá para reabrir impressão confirmada ou descartada")
+    for m in db.scalars(select(Movimento).where(Movimento.impressao_id == imp.id, Movimento.empresa_id == c.empresa_id,
+                                                Movimento.excluido.is_(False))):
+        m.excluido = True
+    imp.status, imp.finalidade, imp.pecas_boas = "a_confirmar", None, 0
+    imp.custo_total = imp.custo_unitario = imp.confirmada_por = imp.confirmada_em = None
     db.flush()
     return imp
 

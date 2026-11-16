@@ -44,7 +44,7 @@ def emitir_tokens(u) -> dict:
 
 def ler_token(t: str, tipo: str) -> dict:
     try:
-        claims = jwt.decode(t, config().jwt_segredo, algorithms=["HS256"])
+        claims = jwt.decode(t, config().jwt_segredo, algorithms=["HS256"], options={"require": ["exp", "sub", "tipo"]})
     except jwt.PyJWTError:
         raise HTTPException(401, "Sessão inválida ou expirada")
     if claims.get("tipo") != tipo:

@@ -2,8 +2,10 @@ from decimal import Decimal
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, Field
-from app.custos import TETO
+from urllib.parse import urlsplit
+
+from pydantic import BaseModel, Field, field_validator
+from app.custos import MINIMO, TETO
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -24,7 +26,7 @@ class ConfigEmpresa(BaseModel):
     kwh: Decimal = Field(ParamEmpresa.kwh, ge=0, le=TETO)
     reserva: Decimal = Field(ParamEmpresa.reserva, gt=0, le=TETO)
     margens: list[Annotated[Decimal, Field(ge=0, lt=100)]] = Field(
-        default_factory=lambda: [D(m) for m in ParamEmpresa.margens], min_length=1)
+        default_factory=lambda: [D(m) for m in ParamEmpresa.margens], min_length=1, max_length=10)
 
 
 def param_empresa(db: Session, empresa_id) -> ParamEmpresa:
@@ -48,22 +50,35 @@ def impressora_padrao(db: Session, empresa_id, impressora_id=None) -> Impressora
 
 
 class CanalEntrada(BaseModel):
-    nome: str | None = Field(None, min_length=1)
+    nome: str | None = Field(None, min_length=1, max_length=60)
     taxa_pct: Decimal | None = Field(None, ge=0, lt=100, le=TETO)
     taxa_fixa: Decimal | None = Field(None, ge=0, le=TETO)
 
 
 class ImpressoraEntrada(BaseModel):
-    nome: str | None = Field(None, min_length=1)
-    modelo: str | None = None
+    nome: str | None = Field(None, min_length=1, max_length=80)
+    modelo: str | None = Field(None, max_length=80)
     preco: Decimal | None = Field(None, ge=0, le=TETO)
     adicionais: Decimal | None = Field(None, ge=0, le=TETO)
     manutencao_pct_ano: Decimal | None = Field(None, ge=0, le=TETO)
-    vida_anos: Decimal | None = Field(None, gt=0, le=TETO)
-    uso_pct: Decimal | None = Field(None, gt=0, le=100)
+    vida_anos: Decimal | None = Field(None, ge=MINIMO, le=TETO)
+    uso_pct: Decimal | None = Field(None, ge=MINIMO, le=100)
     potencia_w: Decimal | None = Field(None, ge=0, le=TETO)
-    moonraker_url: str | None = None
-    api_key: str | None = None
+    moonraker_url: str | None = Field(None, max_length=255)
+    api_key: str | None = Field(None, max_length=128)
+
+    @field_validator("moonraker_url")
+    @classmethod
+    def _url_limpa(cls, v: str | None) -> str | None:
+        """Só o endereço da impressora (http/https, host e porta): sem caminho, query ou credencial, que
+        deixariam o servidor pedir outra coisa na rede."""
+        if not v:
+            return v
+        u = urlsplit(v.strip())
+        if u.scheme not in ("http", "https") or not u.hostname or u.username or u.password \
+                or u.query or u.fragment or u.path not in ("", "/"):
+            raise ValueError("Use só o endereço da impressora, ex.: http://192.168.1.110:7125")
+        return f"{u.scheme}://{u.netloc}"
 
 
 def saida_impressora(db: Session, imp: Impressora) -> dict:
@@ -136,10 +151,20 @@ def gravar_config(dados: ConfigEmpresa, c: Ctx = Depends(so_dono), db: Session =
 rotas_canais = rotas_crud(CanalVenda, CanalEntrada, lambda db, o: serializar(o), "/canais", nome="Canal")
 
 
+def _ao_salvar_impressora(db: Session, c: Ctx, imp: Impressora, criado: bool) -> None:
+    if imp.moonraker_url:
+        outra = db.scalar(select(Impressora.id).where(Impressora.moonraker_url == imp.moonraker_url,
+                                                      Impressora.empresa_id != c.empresa_id,
+                                                      Impressora.excluido.is_(False)).limit(1))
+        if outra is not None:
+            raise HTTPException(409, "Essa impressora já está cadastrada em outra empresa")
+    _reiniciar_monitor(db, c, imp)
+
+
 def _reiniciar_monitor(db: Session, c: Ctx, imp: Impressora, *_) -> None:
     from app.klipper.monitor import monitores  # import tardio: klipper depende de empresa
     monitores.reiniciar(imp)
 
 
 rotas_impressoras = rotas_crud(Impressora, ImpressoraEntrada, saida_impressora, "/impressoras", nome="Impressora",
-                               ao_salvar=_reiniciar_monitor, ao_excluir=_reiniciar_monitor)
+                               so_dono_escreve=True, ao_salvar=_ao_salvar_impressora, ao_excluir=_reiniciar_monitor)

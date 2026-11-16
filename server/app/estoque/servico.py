@@ -28,18 +28,28 @@ def meio_dia_local(d: date) -> datetime:
 
 
 def lancar(db: Session, c: Ctx, *, id: uuid.UUID, item_tipo: str, item_id: uuid.UUID, tipo: str,
-           quantidade, valor=None, impressao_id=None, pedido_id=None, data: datetime | None = None) -> Movimento:
+           quantidade, valor=None, impressao_id=None, pedido_id=None, data: datetime | None = None,
+           reativar: bool = False) -> Movimento:
+    """Mesmo id = mesmo lançamento (reenvio não duplica). [reativar]: um lançamento desfeito pela origem
+    (impressão reaberta, pedido reaberto) volta com os valores novos. O manual apagado nunca volta."""
     existente = db.get(Movimento, id)
     if existente is not None:
         if existente.empresa_id != c.empresa_id:
             raise HTTPException(404, "Movimento não encontrado")
-        return existente
+        if not (reativar and existente.excluido):
+            return existente
     if item_tipo not in ITENS or tipo not in TIPOS:
         raise HTTPException(422, "Tipo de item ou de movimento inválido")
     q = Decimal(quantidade)
     if (tipo in POSITIVOS and q <= 0) or (tipo in NEGATIVOS and q >= 0) or q == 0:
         raise HTTPException(422, f"Quantidade com sinal errado para '{tipo}'")
     obter(db, c, ITENS[item_tipo], item_id, "Item")
+    if existente is not None:  # reativar
+        existente.excluido, existente.item_tipo, existente.item_id, existente.tipo = False, item_tipo, item_id, tipo
+        existente.quantidade, existente.valor, existente.impressao_id, existente.pedido_id = q, valor, impressao_id, pedido_id
+        existente.data = data or datetime.now(ZoneInfo("UTC"))
+        db.flush()
+        return existente
     m = Movimento(id=id, empresa_id=c.empresa_id, item_tipo=item_tipo, item_id=item_id, tipo=tipo, quantidade=q,
                   valor=valor, impressao_id=impressao_id, pedido_id=pedido_id, usuario_id=c.usuario.id,
                   data=data or datetime.now(ZoneInfo("UTC")))

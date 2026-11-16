@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -46,29 +47,29 @@ class AjusteCapa(BaseModel):
 
 
 class ReceitaEntrada(BaseModel):
-    filamentos: list[ItemReceitaFilamento] = []
+    filamentos: list[ItemReceitaFilamento] = Field([], max_length=50)
     horas: Decimal = Field(Decimal(0), ge=0, le=TETO)
     mao_obra_min: Decimal = Field(Decimal(0), ge=0, le=TETO)
-    insumos: list[ItemReceitaInsumo] = []
+    insumos: list[ItemReceitaInsumo] = Field([], max_length=50)
     custo_envio: Decimal = Field(Decimal(0), ge=0, le=TETO)
     pecas_por_impressao: int = Field(1, ge=1, le=1000)  # 6 chaveiros na mesa: gramas e horas são das 6
 
 
 class Link(BaseModel):
-    titulo: str = ""
-    url: str
+    titulo: str = Field("", max_length=120)
+    url: str = Field(max_length=500, pattern=r"^https?://")
 
 
 class ModeloEntrada(BaseModel):
     nome: str | None = Field(None, min_length=1, max_length=120)
     descricao: str | None = Field(None, max_length=5000)
     categoria: str | None = Field(None, max_length=60)
-    tags: list[str] | None = None
-    links: list[Link] | None = None
+    tags: list[Annotated[str, Field(max_length=40)]] | None = Field(None, max_length=30)
+    links: list[Link] | None = Field(None, max_length=20)
     receita: ReceitaEntrada | None = None
     impressora_id: uuid.UUID | None = None
     preco_venda: Decimal | None = Field(None, ge=0, le=TETO)
-    nomes_arquivo: list[str] | None = None
+    nomes_arquivo: list[Annotated[str, Field(max_length=255)]] | None = Field(None, max_length=200)
     capa_id: uuid.UUID | None = None
     capa_ajuste: AjusteCapa | None = None
 

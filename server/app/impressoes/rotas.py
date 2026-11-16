@@ -10,7 +10,7 @@ from app.auth.deps import Ctx, ctx
 from app.catalogo.modelos import Modelo
 from app.config import config
 from app.crud import consulta_lista, obter, rotas_crud, serializar
-from app.db import get_db
+from app.db import Data, get_db
 from app.empresa.modelos import Impressora
 from app.impressoes import servico
 from app.impressoes.modelos import Impressao
@@ -19,10 +19,10 @@ from app.impressoes.modelos import Impressao
 class ImpressaoEntrada(BaseModel):
     impressora_id: uuid.UUID | None = None
     modelo_id: uuid.UUID | None = None
-    arquivo: str | None = None
-    inicio: datetime | None = None
-    fim: datetime | None = None
-    duracao_s: int | None = Field(None, ge=0)
+    arquivo: str | None = Field(None, max_length=255)
+    inicio: Data | None = None
+    fim: Data | None = None
+    duracao_s: int | None = Field(None, ge=0, le=30 * 86400)
     estimativa: dict | None = None
 
 
@@ -59,6 +59,13 @@ def listar(status: str | None = None, atualizado_desde: datetime | None = None, 
 @rotas.post("/impressoes/{id}/confirmar")
 def confirmar(id: uuid.UUID, dados: servico.Confirmacao, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     i = servico.confirmar(db, c, obter(db, c, Impressao, id, "Impressão"), dados)
+    db.commit()
+    return saida_impressao(db, i)
+
+
+@rotas.post("/impressoes/{id}/reabrir")
+def reabrir(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    i = servico.reabrir(db, c, obter(db, c, Impressao, id, "Impressão"))
     db.commit()
     return saida_impressao(db, i)
 

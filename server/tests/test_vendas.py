@@ -62,8 +62,9 @@ def test_cancelar_estorna(cliente, dono):
         r = cliente.post(f"/api/pedidos/{p['id']}/status", headers=dono, json={"status": "cancelado"})
         assert r.status_code == 200
         assert estoque(cliente, dono, m["id"]) == 1
+    # cancelado reabre (cancelou sem querer): entregar de novo baixa o estoque de novo
     r = cliente.post(f"/api/pedidos/{p['id']}/status", headers=dono, json={"status": "entregue"})
-    assert r.status_code == 409
+    assert r.status_code == 200 and estoque(cliente, dono, m["id"]) == -1  # 1 produzida, 2 vendidas de novo
 
 
 def test_fluxo_de_status_baixa_so_na_entrega(cliente, dono):

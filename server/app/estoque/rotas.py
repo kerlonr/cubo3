@@ -5,24 +5,24 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from app.custos import TETO
+from app.custos import MINIMO, TETO
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.deps import Ctx, ctx
 from app.crud import obter, rotas_crud, serializar
-from app.db import get_db
+from app.db import Data, get_db
 from app.estoque.modelos import Carretel, Filamento, Insumo, Movimento
 from app.estoque.servico import id_derivado, lancar, meio_dia_local, saldo, saldos
 
 
 class FilamentoEntrada(BaseModel):
-    marca: str | None = Field(None, min_length=1)
-    material: str | None = Field(None, min_length=1)
-    cor_nome: str | None = None
+    marca: str | None = Field(None, min_length=1, max_length=60)
+    material: str | None = Field(None, min_length=1, max_length=30)
+    cor_nome: str | None = Field(None, max_length=40)
     cor_hex: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
-    diametro: Decimal | None = Field(None, gt=0, le=TETO)
-    densidade: Decimal | None = Field(None, gt=0, le=TETO)
+    diametro: Decimal | None = Field(None, ge=MINIMO, le=TETO)
+    densidade: Decimal | None = Field(None, ge=MINIMO, le=TETO)
     preco_kg: Decimal | None = Field(None, ge=0, le=TETO)
     peso_carretel_vazio_g: Decimal | None = Field(None, ge=0, le=TETO)
     estoque_minimo_g: Decimal | None = Field(None, ge=0, le=TETO)
@@ -30,17 +30,17 @@ class FilamentoEntrada(BaseModel):
 
 class CarretelEntrada(BaseModel):
     filamento_id: uuid.UUID | None = None
-    peso_inicial_g: Decimal | None = Field(None, gt=0, le=TETO)
+    peso_inicial_g: Decimal | None = Field(None, ge=MINIMO, le=TETO)
     preco_pago: Decimal | None = Field(None, ge=0, le=TETO)
     data_compra: date | None = None
-    local: str | None = None
+    local: str | None = Field(None, max_length=60)
     aberto: bool | None = None
     arquivado: bool | None = None
 
 
 class InsumoEntrada(BaseModel):
     nome: str | None = Field(None, min_length=1, max_length=80)
-    unidade: str | None = None
+    unidade: str | None = Field(None, max_length=10)
     categoria: Literal["insumo", "embalagem"] | None = None
     custo_unitario: Decimal | None = Field(None, ge=0, le=TETO)
     estoque_minimo: Decimal | None = Field(None, ge=0, le=TETO)
@@ -52,7 +52,7 @@ class MovimentoEntrada(BaseModel):
     tipo: str
     quantidade: Decimal = Field(ge=-TETO, le=TETO)
     valor: Decimal | None = Field(None, ge=0, le=TETO)
-    data: datetime | None = None
+    data: Data | None = None
 
 
 class Pesagem(BaseModel):

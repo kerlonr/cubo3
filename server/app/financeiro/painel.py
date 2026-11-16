@@ -152,6 +152,11 @@ def extrato(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dict
     entrou = sum((D(p.receita or 0) for p in vendas), D(0))
     lucro = sum((D(p.lucro or 0) for p in vendas), D(0))
     saiu = sum((D(m.valor) for m in compras), D(0)) + sum((D(d.valor) for d in despesas), D(0))
+    from app.vendas.modelos import PedidoPagamento
+    recebido_mes = db.scalar(select(func.sum(PedidoPagamento.valor)).join(Pedido, Pedido.id == PedidoPagamento.pedido_id).where(
+        PedidoPagamento.empresa_id == empresa_id, PedidoPagamento.excluido.is_(False), Pedido.excluido.is_(False),
+        PedidoPagamento.data >= a, PedidoPagamento.data < b)) or 0
     return {"inicio": inicio.isoformat(), "fim": fim.isoformat(), "entrou": float(r2(entrou)), "saiu": float(r2(saiu)),
+            "recebido_parcelas": float(r2(D(recebido_mes))),
             "resultado": float(r2(entrou - saiu)), "lucro_vendas": float(r2(lucro)),
             "perdas_g": float(r2(perdas_g)), "perdas_valor": float(r2(perdas_valor)), "linhas": linhas}

@@ -9,6 +9,7 @@ from decimal import ROUND_HALF_UP, Decimal
 D = Decimal
 CENTAVO = D("0.01")
 TETO = D("99999999")  # maior valor de entrada (colunas Numeric(12,4))
+MINIMO = D("0.0001")  # menor valor que não vira 0 no banco (4 casas): divisor nunca zera
 
 
 def r2(v: Decimal) -> Decimal:
@@ -72,7 +73,7 @@ def custo_hora_impressora(imp: ParamImpressora, emp: ParamEmpresa) -> Decimal:
     preco, vida = D(imp.preco), D(imp.vida_anos)
     custo_vida = preco + D(imp.adicionais) + preco * D(imp.manutencao_pct_ano) / 100 * vida
     horas_ano = D(8760) * D(imp.uso_pct) / 100
-    capital = custo_vida / (horas_ano * vida)
+    capital = custo_vida / (horas_ano * vida) if horas_ano * vida > 0 else D(0)
     energia = D(imp.potencia_w) / 1000 * D(emp.kwh)
     return (capital + energia) * D(emp.reserva)
 

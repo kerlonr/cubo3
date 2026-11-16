@@ -35,7 +35,8 @@ class Carretel(DaEmpresa, Base):
 
     @property
     def preco_kg_real(self) -> Decimal:
-        return Decimal(self.preco_pago) / Decimal(self.peso_inicial_g) * 1000
+        peso = Decimal(self.peso_inicial_g or 0)
+        return Decimal(self.preco_pago) / peso * 1000 if peso > 0 else Decimal(0)
 
 
 class Insumo(DaEmpresa, Base):

@@ -13,7 +13,7 @@ from app.catalogo.arquivos import salvar_upload
 from app.catalogo.modelos import Modelo
 from app.config import config
 from app.crud import obter, rotas_crud, serializar
-from app.db import agora, get_db
+from app.db import Data, agora, get_db
 from app.vendas import servico
 from app.auth.modelos import Empresa
 from app.custos import r2
@@ -45,6 +45,7 @@ def saida_pedido(db: Session, p: Pedido, avisos: list[str] | None = None) -> dic
             "anexos": [saida_anexo(a) for a in anexos],
             "pagamentos": [serializar(x) for x in servico.pagamentos(db, p)],
             "total": float(r2(total)), "recebido": float(r2(pago)), "saldo": float(r2(max(total - pago, 0))),
+            "excedente": float(r2(max(pago - total, 0))),
             "avisos": avisos or []}
 
 
@@ -80,9 +81,16 @@ def listar(status: str | None = None, cliente_id: uuid.UUID | None = None, c: Ct
     return [saida_pedido(db, p) for p in db.scalars(q.order_by(Pedido.data.desc()))]
 
 
+def _pedido_ativo(db: Session, c: Ctx, id: uuid.UUID) -> Pedido:
+    p = obter(db, c, Pedido, id, "Pedido")
+    if p.excluido:
+        raise HTTPException(404, "Pedido não encontrado")
+    return p
+
+
 @rotas.get("/pedidos/{id}")
 def um(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
-    return saida_pedido(db, obter(db, c, Pedido, id, "Pedido"))
+    return saida_pedido(db, _pedido_ativo(db, c, id))
 
 
 @rotas.put("/pedidos/{id}")
@@ -101,7 +109,7 @@ def salvar(id: uuid.UUID, dados: servico.PedidoEntrada, c: Ctx = Depends(ctx), d
 
 @rotas.post("/pedidos/{id}/status")
 def status(id: uuid.UUID, dados: NovoStatus, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
-    p = obter(db, c, Pedido, id, "Pedido")
+    p = _pedido_ativo(db, c, id)
     avisos = servico.mudar_status(db, c, p, dados.status)
     db.commit()
     return saida_pedido(db, p, avisos)
@@ -154,7 +162,7 @@ def apagar_anexo(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get
 
 class PagamentoEntrada(BaseModel):
     valor: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
-    data: AwareDatetime | None = None
+    data: Data | None = None
     forma: str | None = Field(None, max_length=30)
     obs: str | None = Field(None, max_length=200)
     anexo_id: uuid.UUID | None = None
@@ -164,9 +172,11 @@ class PagamentoEntrada(BaseModel):
 def gravar_pagamento(pedido_id: uuid.UUID, id: uuid.UUID, dados: PagamentoEntrada, c: Ctx = Depends(ctx),
                      db: Session = Depends(get_db)):
     """Parcela recebida (sinal, parte, restante). Mesmo id = mesma parcela: reenvio da fila não duplica."""
-    p = obter(db, c, Pedido, pedido_id, "Pedido")
-    if p.excluido or p.status == "cancelado":
-        raise HTTPException(409, "Pedido cancelado ou excluído não recebe pagamento")
+    p = _pedido_ativo(db, c, pedido_id)
+    if p.status == "cancelado":
+        raise HTTPException(409, "Pedido cancelado não recebe pagamento")
+    # Trava o pedido (Postgres): duas parcelas ao mesmo tempo não passam juntas do total.
+    db.execute(select(Pedido.id).where(Pedido.id == p.id).with_for_update())
     x = db.get(PedidoPagamento, id)
     if x is not None and (x.empresa_id != c.empresa_id or x.pedido_id != p.id):
         raise HTTPException(404, "Pagamento não encontrado")
@@ -229,6 +239,8 @@ def cobranca(dados: CobrancaEntrada, resposta: Response, c: Ctx = Depends(ctx), 
             valor = r2(max(servico.total_pedido(db, p) - servico.recebido(db, p), Decimal(0)))
             if valor <= 0:
                 raise HTTPException(409, "Esse pedido já está pago")
+        elif valor > servico.total_pedido(db, p) + Decimal("0.005"):
+            raise HTTPException(422, "Valor maior que o total do pedido")
     if valor is None:
         raise HTTPException(422, "Informe o valor")
     codigo = copia_e_cola(pix["chave"], pix["nome"], pix["cidade"], valor, txid_de(dados.pedido_id))

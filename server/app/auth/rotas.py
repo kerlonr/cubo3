@@ -79,6 +79,9 @@ def login(dados: Login, request: Request, db: Session = Depends(get_db)):
     ip = request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
     chaves = ((email, ip), (email, "*"))
     with _TRAVA:
+        if len(falhas) > 10_000:  # limpa o que já venceu
+            for k in [k for k, v in falhas.items() if not v or agora_s - v[-1] >= JANELA_S]:
+                del falhas[k]
         for chave, limite in zip(chaves, (MAX_FALHAS, MAX_FALHAS_EMAIL)):
             falhas[chave] = [t for t in falhas.get(chave, []) if agora_s - t < JANELA_S]
             if len(falhas[chave]) >= limite:
