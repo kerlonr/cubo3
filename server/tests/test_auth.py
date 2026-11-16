@@ -21,6 +21,19 @@ def test_login_bloqueia_apos_5_falhas(cliente, empresas):
     assert _login(cliente, "dono@b.com").status_code == 429
 
 
+def test_atacante_de_outro_ip_nao_trava_o_dono(cliente, empresas):
+    def de(ip, senha=SENHA):
+        return cliente.post("/api/auth/login", json={"email": "dono@b.com", "senha": senha},
+                            headers={"CF-Connecting-IP": ip})
+    for _ in range(5):
+        assert de("6.6.6.6", "errada-errada").status_code == 401
+    assert de("6.6.6.6").status_code == 429
+    assert de("200.1.2.3").status_code == 200  # o dono, de casa, entra
+    for i in range(44):  # ataque espalhado: o teto por e-mail (50) ainda segura
+        de(f"10.0.{i}.1", "errada-errada")
+    assert de("10.9.9.9").status_code == 429
+
+
 def test_refresh(cliente, empresas):
     tokens = _login(cliente, "dono@a.com").json()
     r = cliente.post("/api/auth/refresh", json={"refresh": tokens["refresh"]})

@@ -20,6 +20,7 @@ rotas = APIRouter(prefix="/api", tags=["auth"])
 
 JANELA_S = 15 * 60
 MAX_FALHAS = 5
+MAX_FALHAS_EMAIL = 50  # por e-mail, somando todos os IPs
 _TRAVA = threading.Lock()
 
 
@@ -61,7 +62,7 @@ class Cadastro(BaseModel):
     empresa: str = Field(min_length=1)
 
 
-def _falhas(request: Request) -> dict[str, list[float]]:
+def _falhas(request: Request) -> dict[tuple[str, str], list[float]]:
     if not hasattr(request.app.state, "falhas_login"):
         request.app.state.falhas_login = {}
     return request.app.state.falhas_login
@@ -72,18 +73,24 @@ def login(dados: Login, request: Request, db: Session = Depends(get_db)):
     email = normaliza_email(dados.email)
     falhas = _falhas(request)
     agora_s = time.time()
+    # Limite por e-mail + IP: quem sabe o seu e-mail não trava o seu login de outro lugar. O teto por e-mail
+    # (maior) segura ataque espalhado por muitos IPs. A API só escuta no 127.0.0.1 atrás do túnel da
+    # Cloudflare, então o CF-Connecting-IP é o IP real (sem túnel, vale o da conexão).
+    ip = request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
+    chaves = ((email, ip), (email, "*"))
     with _TRAVA:
-        recentes = [t for t in falhas.get(email, []) if agora_s - t < JANELA_S]
-        falhas[email] = recentes
-        if len(recentes) >= MAX_FALHAS:
-            raise HTTPException(429, "Muitas tentativas. Espere 15 minutos.")
+        for chave, limite in zip(chaves, (MAX_FALHAS, MAX_FALHAS_EMAIL)):
+            falhas[chave] = [t for t in falhas.get(chave, []) if agora_s - t < JANELA_S]
+            if len(falhas[chave]) >= limite:
+                raise HTTPException(429, "Muitas tentativas. Espere 15 minutos.")
         # conta a tentativa antes de conferir a senha: tentativas em paralelo não escapam do limite
-        recentes.append(agora_s)
+        for chave in chaves:
+            falhas[chave].append(agora_s)
     u = db.scalar(select(Usuario).where(Usuario.email == email, Usuario.excluido.is_(False)))
     if u is None or not confere_senha(dados.senha, u.senha_hash):
         raise HTTPException(401, "E-mail ou senha incorretos")
     with _TRAVA:
-        falhas.pop(email, None)
+        falhas.pop((email, ip), None)
     return {**emitir_tokens(u), "trocar_senha": u.trocar_senha}
 
 
