@@ -1,7 +1,8 @@
 import uuid
+from decimal import Decimal
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import AwareDatetime, BaseModel, Field
 from sqlalchemy import select
@@ -12,9 +13,12 @@ from app.catalogo.arquivos import salvar_upload
 from app.catalogo.modelos import Modelo
 from app.config import config
 from app.crud import obter, rotas_crud, serializar
-from app.db import get_db
+from app.db import agora, get_db
 from app.vendas import servico
-from app.vendas.modelos import Cliente, Pedido, PedidoAnexo
+from app.auth.modelos import Empresa
+from app.custos import r2
+from app.pix import copia_e_cola, txid_de
+from app.vendas.modelos import Cliente, Pedido, PedidoAnexo, PedidoPagamento
 
 
 class ClienteEntrada(BaseModel):
@@ -36,8 +40,12 @@ def saida_pedido(db: Session, p: Pedido, avisos: list[str] | None = None) -> dic
     cl = db.get(Cliente, p.cliente_id) if p.cliente_id else None
     anexos = db.scalars(select(PedidoAnexo).where(PedidoAnexo.pedido_id == p.id, PedidoAnexo.excluido.is_(False))
                         .order_by(PedidoAnexo.criado_em))
+    total, pago = servico.total_pedido(db, p), servico.recebido(db, p)
     return {**serializar(p), "itens": itens, "cliente": {"id": str(cl.id), "nome": cl.nome, "telefone": cl.telefone} if cl else None,
-            "anexos": [saida_anexo(a) for a in anexos], "avisos": avisos or []}
+            "anexos": [saida_anexo(a) for a in anexos],
+            "pagamentos": [serializar(x) for x in servico.pagamentos(db, p)],
+            "total": float(r2(total)), "recebido": float(r2(pago)), "saldo": float(r2(max(total - pago, 0))),
+            "avisos": avisos or []}
 
 
 TIPOS_ANEXO = {".png": "foto", ".jpg": "foto", ".jpeg": "foto", ".webp": "foto", ".pdf": "pdf"}
@@ -142,3 +150,83 @@ def apagar_anexo(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get
     a.excluido = True
     db.commit()
     return {"ok": True}
+
+
+class PagamentoEntrada(BaseModel):
+    valor: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    data: AwareDatetime | None = None
+    forma: str | None = Field(None, max_length=30)
+    obs: str | None = Field(None, max_length=200)
+    anexo_id: uuid.UUID | None = None
+
+
+@rotas.put("/pedidos/{pedido_id}/pagamentos/{id}")
+def gravar_pagamento(pedido_id: uuid.UUID, id: uuid.UUID, dados: PagamentoEntrada, c: Ctx = Depends(ctx),
+                     db: Session = Depends(get_db)):
+    """Parcela recebida (sinal, parte, restante). Mesmo id = mesma parcela: reenvio da fila não duplica."""
+    p = obter(db, c, Pedido, pedido_id, "Pedido")
+    if p.excluido or p.status == "cancelado":
+        raise HTTPException(409, "Pedido cancelado ou excluído não recebe pagamento")
+    x = db.get(PedidoPagamento, id)
+    if x is not None and (x.empresa_id != c.empresa_id or x.pedido_id != p.id):
+        raise HTTPException(404, "Pagamento não encontrado")
+    if dados.anexo_id is not None:
+        a = obter(db, c, PedidoAnexo, dados.anexo_id, "Comprovante")
+        if a.pedido_id != p.id or a.excluido:
+            raise HTTPException(422, "O comprovante precisa ser deste pedido")
+    outros = sum((Decimal(y.valor) for y in servico.pagamentos(db, p) if y.id != id), Decimal(0))
+    falta = servico.total_pedido(db, p) - outros
+    if dados.valor > falta + Decimal("0.005"):
+        raise HTTPException(422, f"Passa do total do pedido: falta receber R$ {max(falta, Decimal(0)):.2f}".replace(".", ","))
+    if x is None:
+        x = PedidoPagamento(id=id, empresa_id=c.empresa_id, pedido_id=p.id)
+        db.add(x)
+    x.valor, x.forma, x.obs, x.anexo_id = dados.valor, dados.forma, dados.obs, dados.anexo_id
+    x.excluido = False
+    if dados.data is not None or x.data is None:
+        x.data = dados.data or agora()
+    db.flush()
+    servico.atualizar_pago(db, p)
+    db.commit()
+    return saida_pedido(db, p)
+
+
+@rotas.delete("/pagamentos/{id}")
+def apagar_pagamento(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    x = obter(db, c, PedidoPagamento, id, "Pagamento")
+    x.excluido = True
+    db.flush()
+    p = db.get(Pedido, x.pedido_id)
+    if not servico.pagamentos(db, p):
+        p.pago = False  # tirou a última parcela: volta a "a receber"
+    servico.atualizar_pago(db, p)
+    db.commit()
+    return saida_pedido(db, p)
+
+
+class CobrancaEntrada(BaseModel):
+    valor: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=2)
+    pedido_id: uuid.UUID | None = None
+
+
+@rotas.post("/pix/cobranca")
+def cobranca(dados: CobrancaEntrada, resposta: Response, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    """Pix copia e cola com o valor (o que falta do pedido, ou o valor informado). Gerado no servidor:
+    a chave inteira fica só aqui e no aparelho do dono."""
+    resposta.headers["Cache-Control"] = "no-store"
+    pix = db.get(Empresa, c.empresa_id).pix
+    if not pix:
+        raise HTTPException(409, "Cadastre o seu Pix em Empresa → Pix")
+    valor = dados.valor
+    if dados.pedido_id is not None:
+        p = obter(db, c, Pedido, dados.pedido_id, "Pedido")
+        if p.excluido or p.status == "cancelado":
+            raise HTTPException(409, "Pedido cancelado ou excluído")
+        if valor is None:
+            valor = r2(max(servico.total_pedido(db, p) - servico.recebido(db, p), Decimal(0)))
+            if valor <= 0:
+                raise HTTPException(409, "Esse pedido já está pago")
+    if valor is None:
+        raise HTTPException(422, "Informe o valor")
+    codigo = copia_e_cola(pix["chave"], pix["nome"], pix["cidade"], valor, txid_de(dados.pedido_id))
+    return {"valor": float(valor), "copia_e_cola": codigo, "recebedor": pix["nome"]}

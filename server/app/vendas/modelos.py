@@ -59,3 +59,14 @@ class PedidoAnexo(DaEmpresa, Base):
     tipo: Mapped[str] = mapped_column(String(10))
     tamanho: Mapped[int] = mapped_column(Integer)
     caminho: Mapped[str] = mapped_column(String(255))
+
+
+class PedidoPagamento(DaEmpresa, Base):
+    """Uma parte do que o cliente pagou (parcela, sinal, restante)."""
+    __tablename__ = "pedido_pagamentos"
+    pedido_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("pedidos.id"), index=True)
+    valor: Mapped[Decimal] = mapped_column(Num)
+    data: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
+    forma: Mapped[str | None] = mapped_column(String(30))
+    obs: Mapped[str | None] = mapped_column(String(200))
+    anexo_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)

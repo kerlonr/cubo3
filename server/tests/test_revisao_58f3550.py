@@ -53,18 +53,18 @@ def test_versao_base_conferida_no_pedido(cliente, dono):
     assert mesma.status_code == 200
 
 
-def test_canal_trocado_em_entregue_e_ignorado_sem_aviso(cliente, dono):
+def test_canal_trocado_em_entregue_aplica_as_taxas_do_canal(cliente, dono):
     canal = str(uuid.uuid4())
     cliente.put(f"/api/canais/{canal}", headers=dono, json={"nome": "ML", "taxa_pct": 20})
-    pid, iid, m = _pedido_entregue(cliente, dono)
+    pid, iid, m = _pedido_entregue(cliente, dono)  # 2 x 20 = 40
     r = cliente.put(f"/api/pedidos/{pid}", headers=dono, json={"canal_id": canal})
-    assert r.status_code == 200 and r.json()["canal_id"] is None
+    assert r.status_code == 200 and r.json()["canal_id"] == canal and r.json()["taxas"] == 8
 
 
-def test_item_repetido_em_entregue_passa_e_o_ultimo_preco_vence(cliente, dono):
+def test_item_repetido_em_entregue_e_recusado(cliente, dono):
     pid, iid, m = _pedido_entregue(cliente, dono)
     r = cliente.put(f"/api/pedidos/{pid}", headers=dono, json={"itens": [_item(iid, m, 99), _item(iid, m, 25)]})
-    assert r.status_code == 200 and r.json()["bruto"] == 50
+    assert r.status_code == 422
 
 
 def test_comprovante_apagado_nao_baixa(cliente, dono):

@@ -54,11 +54,12 @@ def test_venda_entregue_aceita_novo_preco_e_recalcula(cliente, dono):
     assert cliente.get("/api/painel?inicio=2026-11-01&fim=2026-11-30", headers=dono).json()["receita"] == 40
 
 
-def test_venda_entregue_nao_muda_quantidade_nem_itens(cliente, dono):
+def test_venda_entregue_muda_quantidade_com_o_mesmo_custo(cliente, dono):
     pid, iid, m = _pedido_entregue(cliente, dono)
     r = cliente.put(f"/api/pedidos/{pid}", headers=dono, json={
         "itens": [{"id": iid, "modelo_id": m["id"], "descricao": "Chaveiro", "quantidade": 3, "preco_unitario": 20}]})
-    assert r.status_code == 409
+    assert r.status_code == 200 and r.json()["bruto"] == 60
+    assert cliente.get(f"/api/modelos/{m['id']}", headers=dono).json()["estoque"] == -3
 
 
 def test_venda_cancelada_nao_muda_preco(cliente, dono):

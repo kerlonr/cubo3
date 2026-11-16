@@ -19,6 +19,8 @@ class Empresa(Registro, Base):
     __tablename__ = "empresas"
     nome: Mapped[str] = mapped_column(String(120))
     config: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Fora do config de propósito: o config vai para todo membro (e fica no cache do aparelho).
+    pix: Mapped[dict | None] = mapped_column(JSON)
 
 
 class Membro(Registro, Base):

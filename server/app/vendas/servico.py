@@ -15,8 +15,9 @@ from app.crud import faltando, obter
 from app.custos import r2
 from app.db import agora
 from app.empresa.modelos import CanalVenda
+from app.estoque.modelos import Movimento
 from app.estoque.servico import custo_medio_peca, id_derivado, lancar, saldo
-from app.vendas.modelos import Cliente, Pedido, PedidoItem
+from app.vendas.modelos import Cliente, Pedido, PedidoItem, PedidoPagamento
 
 D = Decimal
 Status = Literal["orcamento", "aprovado", "produzindo", "pronto", "entregue", "cancelado"]
@@ -62,19 +63,31 @@ def _custo_item(db: Session, empresa_id, modelo_id) -> Decimal:
     return medio if medio is not None else custo_do_modelo(db, empresa_id, db.get(Modelo, modelo_id)).total
 
 
-def _entregar(db: Session, c: Ctx, p: Pedido, quando: datetime | None) -> list[str]:
-    canal = db.get(CanalVenda, p.canal_id) if p.canal_id else None
-    p.taxa_pct, p.taxa_fixa = (canal.taxa_pct, canal.taxa_fixa) if canal else (D(0), D(0))
+def _entregar(db: Session, c: Ctx, p: Pedido, quando: datetime | None,
+              taxas: tuple | None = None, custos: dict | None = None) -> list[str]:
+    """Congela taxas e custos e baixa o estoque. Numa correção de venda entregue, [taxas] e [custos]
+    (por id de item) mantêm o que já estava congelado; item novo pega o custo de agora."""
+    if taxas is None:
+        canal = db.get(CanalVenda, p.canal_id) if p.canal_id else None
+        taxas = (canal.taxa_pct, canal.taxa_fixa) if canal else (D(0), D(0))
+    p.taxa_pct, p.taxa_fixa = taxas
     p.entregue_em = quando or agora()
-    bruto, custo_itens, avisos = D(0), D(0), []
+    avisos = []
     for it in _itens(db, p):
-        it.custo_unitario = _custo_item(db, c.empresa_id, it.modelo_id)
-        bruto += D(it.quantidade) * D(it.preco_unitario)
-        custo_itens += D(it.quantidade) * it.custo_unitario
+        congelado = (custos or {}).get(str(it.id))
+        it.custo_unitario = congelado if congelado is not None else _custo_item(db, c.empresa_id, it.modelo_id)
         if it.modelo_id:
-            lancar(db, c, id=id_derivado(it.id, "venda"), item_tipo="peca", item_id=it.modelo_id, tipo="venda",
-                   quantidade=-D(it.quantidade), valor=it.custo_unitario * D(it.quantidade), pedido_id=p.id,
-                   data=p.entregue_em)
+            mid = id_derivado(it.id, "venda")
+            antiga = db.get(Movimento, mid)
+            if antiga is not None and antiga.excluido:  # pedido reaberto ou corrigido: a mesma baixa volta, atualizada
+                antiga.excluido, antiga.item_id = False, it.modelo_id
+                antiga.quantidade, antiga.valor = -D(it.quantidade), it.custo_unitario * D(it.quantidade)
+                antiga.data = p.entregue_em
+                db.flush()
+            else:
+                lancar(db, c, id=mid, item_tipo="peca", item_id=it.modelo_id, tipo="venda",
+                       quantidade=-D(it.quantidade), valor=it.custo_unitario * D(it.quantidade), pedido_id=p.id,
+                       data=p.entregue_em)
             s = saldo(db, c.empresa_id, "peca", it.modelo_id)
             if s < 0:
                 avisos.append(f"Estoque de {db.get(Modelo, it.modelo_id).nome} ficou em {s.normalize()}")
@@ -93,6 +106,47 @@ def _recalcular(db: Session, p: Pedido) -> None:
     p.lucro = r2(receita - custo_itens - taxas - D(p.custo_envio or 0))
 
 
+def _desfazer_entrega(db: Session, p: Pedido) -> None:
+    """Volta o pedido para antes da entrega: as peças voltam ao estoque e os valores congelados saem."""
+    for m in db.scalars(select(Movimento).where(Movimento.pedido_id == p.id, Movimento.tipo == "venda",
+                                                Movimento.excluido.is_(False))):
+        m.excluido = True
+    p.bruto = p.receita = p.custo_itens = p.taxas = p.lucro = p.taxa_pct = p.taxa_fixa = None
+    p.entregue_em = None
+    db.flush()
+
+
+def total_pedido(db: Session, p: Pedido) -> Decimal:
+    if p.receita is not None:
+        return D(p.receita)
+    bruto = sum((D(i.quantidade) * D(i.preco_unitario) for i in _itens(db, p)), D(0))
+    return bruto - D(p.desconto or 0) + D(p.frete_cobrado or 0)
+
+
+def pagamentos(db: Session, p: Pedido) -> list[PedidoPagamento]:
+    return list(db.scalars(select(PedidoPagamento).where(PedidoPagamento.pedido_id == p.id,
+                                                         PedidoPagamento.excluido.is_(False))
+                           .order_by(PedidoPagamento.data, PedidoPagamento.criado_em)))
+
+
+def recebido(db: Session, p: Pedido) -> Decimal:
+    """Soma das parcelas; pedido antigo marcado como pago sem parcelas conta como pago inteiro."""
+    pags = pagamentos(db, p)
+    if pags:
+        return sum((D(x.valor) for x in pags), D(0))
+    return total_pedido(db, p) if p.pago else D(0)
+
+
+def atualizar_pago(db: Session, p: Pedido) -> None:
+    """Com parcelas lançadas, "pago" sai delas (quitou = pago); sem parcelas, vale o que foi marcado."""
+    pags = pagamentos(db, p)
+    if not pags:
+        return
+    p.pago = sum((D(x.valor) for x in pags), D(0)) >= total_pedido(db, p) - D("0.005")
+    p.forma_pagamento = pags[-1].forma or p.forma_pagamento
+    db.flush()
+
+
 def _estornar(db: Session, c: Ctx, p: Pedido) -> None:
     for it in _itens(db, p):
         if it.modelo_id:
@@ -105,11 +159,11 @@ def mudar_status(db: Session, c: Ctx, p: Pedido, status: str, quando: datetime |
         return []
     if p.status == "cancelado":
         raise HTTPException(409, "Pedido cancelado não muda mais de status")
-    if p.status == "entregue" and status != "cancelado":
-        raise HTTPException(409, "Pedido entregue só pode ser cancelado")
     avisos = _entregar(db, c, p, quando) if status == "entregue" else []
     if status == "cancelado" and p.status == "entregue":
         _estornar(db, c, p)
+    elif p.status == "entregue" and status != "cancelado":
+        _desfazer_entrega(db, p)  # reabrir: errou a entrega ou o cliente devolveu para refazer
     p.status = status
     db.flush()
     return avisos
@@ -123,6 +177,8 @@ def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> t
         obter(db, c, Cliente, dados.cliente_id, "Cliente")
     if dados.canal_id:
         obter(db, c, CanalVenda, dados.canal_id, "Canal")
+    if dados.itens is not None and len({it.id for it in dados.itens}) != len(dados.itens):
+        raise HTTPException(422, "Item repetido no pedido")
     for it in dados.itens or []:
         if it.modelo_id:
             obter(db, c, Modelo, it.modelo_id, "Modelo")
@@ -131,6 +187,7 @@ def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> t
             raise HTTPException(409, "Item pertence a outro pedido")
 
     campos = dados.model_dump(exclude_unset=True, exclude={"status", "itens", "entregue_em"})
+    avisos_correcao: list[str] = []
     if p is None:
         p = Pedido(id=id, empresa_id=c.empresa_id, status="orcamento")
         db.add(p)
@@ -139,21 +196,34 @@ def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> t
             raise HTTPException(409, "Não dá para mudar os itens de um pedido cancelado")
         campos = {k: v for k, v in campos.items() if k in ("pago", "forma_pagamento", "cliente_id", "obs")}
     elif p.status == "entregue":
-        # Entregue: preço, desconto e frete podem ser corrigidos (o estoque já baixou, então itens e
-        # quantidades ficam). Os valores congelados são recalculados com o mesmo custo e as mesmas taxas.
+        # Entregue: tudo pode ser corrigido. Item ou quantidade mudou → desfaz a baixa e baixa de novo, com
+        # a mesma data e as mesmas taxas; itens que já existiam mantêm o custo congelado.
         atuais = {str(i.id): i for i in _itens(db, p)}
-        if dados.itens is not None:
-            if _assinatura(dados.itens, False) != _assinatura(atuais.values(), False):
-                raise HTTPException(409, "Pedido entregue: só dá para mudar preço, desconto e frete (não os itens)")
-            for it in dados.itens:
-                atuais[str(it.id)].preco_unitario = it.preco_unitario
-        campos = {k: v for k, v in campos.items()
-                  if k in ("pago", "forma_pagamento", "cliente_id", "obs", "desconto", "frete_cobrado", "custo_envio")}
+        mudou_itens = dados.itens is not None and _assinatura(dados.itens, False) != _assinatura(atuais.values(), False)
+        mudou_canal = "canal_id" in campos and campos["canal_id"] != p.canal_id
         for k, v in campos.items():
             setattr(p, k, v)
+        if mudou_canal:  # venda lançada no canal errado: as taxas passam a ser as do canal certo
+            canal = db.get(CanalVenda, p.canal_id) if p.canal_id else None
+            p.taxa_pct, p.taxa_fixa = (canal.taxa_pct, canal.taxa_fixa) if canal else (D(0), D(0))
+        campos = {}
+        db.flush()
+        if mudou_itens:
+            custos = {k: i.custo_unitario for k, i in atuais.items()}
+            quando, taxas = p.entregue_em, (p.taxa_pct, p.taxa_fixa)
+            _desfazer_entrega(db, p)
+            for velho in atuais.values():
+                db.delete(velho)
+            db.flush()
+            for it in dados.itens:
+                db.add(PedidoItem(empresa_id=c.empresa_id, pedido_id=id, **it.model_dump()))
+            db.flush()
+            avisos_correcao = _entregar(db, c, p, quando, taxas, custos)
+        elif dados.itens is not None:
+            for it in dados.itens:
+                atuais[str(it.id)].preco_unitario = it.preco_unitario
         db.flush()
         _recalcular(db, p)
-        campos = {}
     for k, v in campos.items():
         setattr(p, k, v)
     if dados.itens is not None and p.status not in FECHADOS:
@@ -169,7 +239,8 @@ def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> t
     if D(p.desconto or 0) > bruto + D(p.frete_cobrado or 0):
         raise HTTPException(422, "Desconto maior que o total do pedido")
     avisos = mudar_status(db, c, p, dados.status, dados.entregue_em) if dados.status else []
-    return p, avisos
+    atualizar_pago(db, p)
+    return p, avisos_correcao + avisos
 
 
 def ja_aplicado(db: Session, p: Pedido, dados: PedidoEntrada) -> bool:

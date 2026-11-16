@@ -1,7 +1,7 @@
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,6 +12,7 @@ from app.crud import rotas_crud, serializar
 from app.custos import ParamEmpresa, ParamImpressora, custo_hora_impressora
 from app.db import get_db
 from app.empresa.modelos import CanalVenda, Impressora
+from app.pix import mascarar, normalizar_chave
 
 D = Decimal
 
@@ -72,6 +73,49 @@ def saida_impressora(db: Session, imp: Impressora) -> dict:
 
 
 rotas = APIRouter(prefix="/api/empresa", tags=["empresa"])
+
+
+class PixEntrada(BaseModel):
+    tipo: Literal["cpf", "cnpj", "email", "telefone", "aleatoria"]
+    chave: str = Field(min_length=1, max_length=100)
+    nome: str = Field(min_length=1, max_length=60)
+    cidade: str = Field(min_length=1, max_length=60)
+
+
+def _sem_cache(resposta: Response) -> None:
+    resposta.headers["Cache-Control"] = "no-store"
+
+
+@rotas.get("/pix")
+def ler_pix(resposta: Response, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    _sem_cache(resposta)
+    pix = db.get(Empresa, c.empresa_id).pix
+    if not pix:
+        return {"configurado": False}
+    saida = {"configurado": True, "tipo": pix["tipo"], "nome": pix["nome"], "cidade": pix["cidade"],
+             "chave_mascarada": mascarar(pix["tipo"], pix["chave"])}
+    if c.papel == "dono":
+        saida["chave"] = pix["chave"]
+    return saida
+
+
+@rotas.put("/pix")
+def gravar_pix(dados: PixEntrada, resposta: Response, c: Ctx = Depends(so_dono), db: Session = Depends(get_db)):
+    try:
+        chave = normalizar_chave(dados.tipo, dados.chave)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from None
+    db.get(Empresa, c.empresa_id).pix = {"tipo": dados.tipo, "chave": chave, "nome": dados.nome.strip(),
+                                          "cidade": dados.cidade.strip()}
+    db.commit()
+    return ler_pix(resposta, c, db)
+
+
+@rotas.delete("/pix")
+def apagar_pix(c: Ctx = Depends(so_dono), db: Session = Depends(get_db)):
+    db.get(Empresa, c.empresa_id).pix = None
+    db.commit()
+    return {"ok": True}
 
 
 @rotas.get("/config")

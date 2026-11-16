@@ -89,11 +89,12 @@ def test_taxa_do_canal_congelada(cliente, dono):
     assert cliente.get(f"/api/pedidos/{p['id']}", headers=dono).json()["lucro"] == -1.42
 
 
-def test_itens_de_pedido_entregue_409(cliente, dono):
+def test_itens_de_pedido_entregue_podem_ser_corrigidos(cliente, dono):
     m = criar_modelo(cliente, dono)
     i = uuid.uuid4()
     venda(cliente, dono, [item(m["id"])], id=i)
-    assert venda(cliente, dono, [item(m["id"], qtd=5)], id=i).status_code == 409
+    assert venda(cliente, dono, [item(m["id"], qtd=5)], id=i).status_code == 200
+    assert cliente.get(f"/api/modelos/{m['id']}", headers=dono).json()["estoque"] == -5
 
 
 def test_modelo_excluido_no_pedido(cliente, dono):
