@@ -5,6 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from app.custos import TETO
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,17 +21,17 @@ class FilamentoEntrada(BaseModel):
     material: str | None = Field(None, min_length=1)
     cor_nome: str | None = None
     cor_hex: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
-    diametro: Decimal | None = Field(None, gt=0)
-    densidade: Decimal | None = Field(None, gt=0)
-    preco_kg: Decimal | None = Field(None, ge=0)
-    peso_carretel_vazio_g: Decimal | None = Field(None, ge=0)
-    estoque_minimo_g: Decimal | None = Field(None, ge=0)
+    diametro: Decimal | None = Field(None, gt=0, le=TETO)
+    densidade: Decimal | None = Field(None, gt=0, le=TETO)
+    preco_kg: Decimal | None = Field(None, ge=0, le=TETO)
+    peso_carretel_vazio_g: Decimal | None = Field(None, ge=0, le=TETO)
+    estoque_minimo_g: Decimal | None = Field(None, ge=0, le=TETO)
 
 
 class CarretelEntrada(BaseModel):
     filamento_id: uuid.UUID | None = None
-    peso_inicial_g: Decimal | None = Field(None, gt=0)
-    preco_pago: Decimal | None = Field(None, ge=0)
+    peso_inicial_g: Decimal | None = Field(None, gt=0, le=TETO)
+    preco_pago: Decimal | None = Field(None, ge=0, le=TETO)
     data_compra: date | None = None
     local: str | None = None
     aberto: bool | None = None
@@ -41,24 +42,22 @@ class InsumoEntrada(BaseModel):
     nome: str | None = Field(None, min_length=1, max_length=80)
     unidade: str | None = None
     categoria: Literal["insumo", "embalagem"] | None = None
-    custo_unitario: Decimal | None = Field(None, ge=0)
-    estoque_minimo: Decimal | None = Field(None, ge=0)
+    custo_unitario: Decimal | None = Field(None, ge=0, le=TETO)
+    estoque_minimo: Decimal | None = Field(None, ge=0, le=TETO)
 
 
 class MovimentoEntrada(BaseModel):
     item_tipo: str
     item_id: uuid.UUID
     tipo: str
-    quantidade: Decimal
-    valor: Decimal | None = None
-    impressao_id: uuid.UUID | None = None
-    pedido_id: uuid.UUID | None = None
+    quantidade: Decimal = Field(ge=-TETO, le=TETO)
+    valor: Decimal | None = Field(None, ge=0, le=TETO)
     data: datetime | None = None
 
 
 class Pesagem(BaseModel):
     movimento_id: uuid.UUID
-    peso_balanca_g: Decimal = Field(ge=0)
+    peso_balanca_g: Decimal = Field(ge=0, le=TETO)
 
 
 def resumo_filamento(f: Filamento) -> dict:

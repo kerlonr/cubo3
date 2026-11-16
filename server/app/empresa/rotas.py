@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
+from app.custos import TETO
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,10 +19,10 @@ D = Decimal
 
 
 class ConfigEmpresa(BaseModel):
-    eficiencia: Decimal = Field(ParamEmpresa.eficiencia, gt=0)
-    mao_obra_hora: Decimal = Field(ParamEmpresa.mao_obra_hora, ge=0)
-    kwh: Decimal = Field(ParamEmpresa.kwh, ge=0)
-    reserva: Decimal = Field(ParamEmpresa.reserva, gt=0)
+    eficiencia: Decimal = Field(ParamEmpresa.eficiencia, gt=0, le=TETO)
+    mao_obra_hora: Decimal = Field(ParamEmpresa.mao_obra_hora, ge=0, le=TETO)
+    kwh: Decimal = Field(ParamEmpresa.kwh, ge=0, le=TETO)
+    reserva: Decimal = Field(ParamEmpresa.reserva, gt=0, le=TETO)
     margens: list[Annotated[Decimal, Field(ge=0, lt=100)]] = Field(
         default_factory=lambda: [D(m) for m in ParamEmpresa.margens], min_length=1)
 
@@ -48,19 +49,19 @@ def impressora_padrao(db: Session, empresa_id, impressora_id=None) -> Impressora
 
 class CanalEntrada(BaseModel):
     nome: str | None = Field(None, min_length=1)
-    taxa_pct: Decimal | None = Field(None, ge=0, lt=100)
-    taxa_fixa: Decimal | None = Field(None, ge=0)
+    taxa_pct: Decimal | None = Field(None, ge=0, lt=100, le=TETO)
+    taxa_fixa: Decimal | None = Field(None, ge=0, le=TETO)
 
 
 class ImpressoraEntrada(BaseModel):
     nome: str | None = Field(None, min_length=1)
     modelo: str | None = None
-    preco: Decimal | None = Field(None, ge=0)
-    adicionais: Decimal | None = Field(None, ge=0)
-    manutencao_pct_ano: Decimal | None = Field(None, ge=0)
-    vida_anos: Decimal | None = Field(None, gt=0)
+    preco: Decimal | None = Field(None, ge=0, le=TETO)
+    adicionais: Decimal | None = Field(None, ge=0, le=TETO)
+    manutencao_pct_ano: Decimal | None = Field(None, ge=0, le=TETO)
+    vida_anos: Decimal | None = Field(None, gt=0, le=TETO)
     uso_pct: Decimal | None = Field(None, gt=0, le=100)
-    potencia_w: Decimal | None = Field(None, ge=0)
+    potencia_w: Decimal | None = Field(None, ge=0, le=TETO)
     moonraker_url: str | None = None
     api_key: str | None = None
 

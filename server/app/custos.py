@@ -8,6 +8,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 D = Decimal
 CENTAVO = D("0.01")
+TETO = D("99999999")  # maior valor de entrada (colunas Numeric(12,4))
 
 
 def r2(v: Decimal) -> Decimal:

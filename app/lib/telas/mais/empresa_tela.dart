@@ -9,8 +9,9 @@ import '../../util/formatos.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/campos.dart';
 import '../../widgets/estado_tela.dart';
+import '../vendas/pix.dart';
 
-/// Empresa: quem tem acesso (só o dono adiciona e remove).
+/// Empresa: o Pix e quem tem acesso (só o dono cadastra, adiciona e remove).
 class EmpresaTela extends StatefulWidget {
   const EmpresaTela({super.key});
 
@@ -102,6 +103,7 @@ class _EmpresaTelaState extends State<EmpresaTela> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 640),
               child: ListView(padding: const EdgeInsets.all(16), children: [
+                const SecaoPix(),
                 Secao('Usuários',
                     acao: dono ? TextButton(onPressed: _adicionar, child: const Text('Adicionar usuário')) : null),
                 for (final m in lista(d['membros']))

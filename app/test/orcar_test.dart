@@ -1,6 +1,7 @@
 import 'package:cubo3/telas/orcar/historico.dart';
 import 'package:cubo3/telas/orcar/orcar_tela.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'apoio.dart';
@@ -144,5 +145,32 @@ void main() {
     await tester.enterText(find.byKey(const Key('cliente')), 'Ana');
     await tester.pumpAndSettle();
     expect(find.text('Para Ana'), findsOneWidget);
+  });
+
+  testWidgets('prévia com Pix: cobrança avulsa com o valor do orçamento e o código no texto', (tester) async {
+    String? compartilhado;
+    const canal = MethodChannel('dev.fluttercommunity.plus/share');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(canal, (c) async {
+      compartilhado = (c.arguments as Map)['text'] as String?;
+      return 'dev.fluttercommunity.plus/share/unavailable';
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(canal, null));
+    final amb = _amb();
+    amb.rotas['POST /api/pix/cobranca'] = (_) => {'valor': 12.9, 'copia_e_cola': '000201ORC', 'recebedor': 'Kerlon'};
+    await amb.preparar();
+    await tamanhoTela(tester, 360, 1400);
+    await tester.pumpWidget(amb.tela(const OrcarTela()));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('gramas0')), '33');
+    await tester.enterText(find.byKey(const Key('tempo0')), '3h');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enviar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Incluir Pix'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Texto'));
+    await tester.pumpAndSettle();
+    expect(amb.corpo('POST /api/pix/cobranca'), {'valor': 12.9});
+    expect(compartilhado, endsWith('Pix copia e cola:\n000201ORC'));
   });
 }

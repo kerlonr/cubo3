@@ -5,6 +5,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from app.custos import TETO
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,18 +23,18 @@ from app.estoque.servico import saldo
 class ItemReceitaFilamento(BaseModel):
     """Uma peça impressa do modelo (ex.: keycap, case): filamento, gramas e, opcional, nome e tempo."""
     filamento_id: uuid.UUID | None = None
-    preco_kg: Decimal | None = Field(None, ge=0)  # filamento avulso (sem cadastro), como no orçamento
-    gramas: Decimal = Field(ge=0)
+    preco_kg: Decimal | None = Field(None, ge=0, le=TETO)  # filamento avulso (sem cadastro), como no orçamento
+    gramas: Decimal = Field(ge=0, le=TETO)
     nome: str | None = Field(None, max_length=80)
-    horas: Decimal | None = Field(None, ge=0)  # tempo desta peça; receita.horas é a soma
+    horas: Decimal | None = Field(None, ge=0, le=TETO)  # tempo desta peça; receita.horas é a soma
 
 
 class ItemReceitaInsumo(BaseModel):
     """Insumo do cadastro (insumo_id) ou avulso (nome + custo_unitario), ex.: switch, argola."""
     insumo_id: uuid.UUID | None = None
-    qtd: Decimal = Field(ge=0)
+    qtd: Decimal = Field(ge=0, le=TETO)
     nome: str | None = Field(None, max_length=80)
-    custo_unitario: Decimal | None = Field(None, ge=0)  # cópia do preço: vale se o cadastro sumir
+    custo_unitario: Decimal | None = Field(None, ge=0, le=TETO)  # cópia do preço: vale se o cadastro sumir
     embalagem: bool = False
 
 
@@ -46,10 +47,10 @@ class AjusteCapa(BaseModel):
 
 class ReceitaEntrada(BaseModel):
     filamentos: list[ItemReceitaFilamento] = []
-    horas: Decimal = Field(Decimal(0), ge=0)
-    mao_obra_min: Decimal = Field(Decimal(0), ge=0)
+    horas: Decimal = Field(Decimal(0), ge=0, le=TETO)
+    mao_obra_min: Decimal = Field(Decimal(0), ge=0, le=TETO)
     insumos: list[ItemReceitaInsumo] = []
-    custo_envio: Decimal = Field(Decimal(0), ge=0)
+    custo_envio: Decimal = Field(Decimal(0), ge=0, le=TETO)
     pecas_por_impressao: int = Field(1, ge=1, le=1000)  # 6 chaveiros na mesa: gramas e horas são das 6
 
 
@@ -59,14 +60,14 @@ class Link(BaseModel):
 
 
 class ModeloEntrada(BaseModel):
-    nome: str | None = Field(None, min_length=1)
-    descricao: str | None = None
-    categoria: str | None = None
+    nome: str | None = Field(None, min_length=1, max_length=120)
+    descricao: str | None = Field(None, max_length=5000)
+    categoria: str | None = Field(None, max_length=60)
     tags: list[str] | None = None
     links: list[Link] | None = None
     receita: ReceitaEntrada | None = None
     impressora_id: uuid.UUID | None = None
-    preco_venda: Decimal | None = Field(None, ge=0)
+    preco_venda: Decimal | None = Field(None, ge=0, le=TETO)
     nomes_arquivo: list[str] | None = None
     capa_id: uuid.UUID | None = None
     capa_ajuste: AjusteCapa | None = None

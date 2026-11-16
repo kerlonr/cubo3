@@ -5,6 +5,7 @@ from typing import Literal
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
+from app.custos import TETO
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -27,21 +28,21 @@ FECHADOS = {"entregue", "cancelado"}
 class ItemEntrada(BaseModel):
     id: uuid.UUID
     modelo_id: uuid.UUID | None = None
-    descricao: str = Field(min_length=1)
-    quantidade: Decimal = Field(gt=0)
-    preco_unitario: Decimal = Field(ge=0)
+    descricao: str = Field(min_length=1, max_length=160)
+    quantidade: Decimal = Field(gt=0, le=TETO)
+    preco_unitario: Decimal = Field(ge=0, le=TETO)
 
 
 class PedidoEntrada(BaseModel):
     cliente_id: uuid.UUID | None = None
     canal_id: uuid.UUID | None = None
     status: Status | None = None
-    desconto: Decimal | None = Field(None, ge=0)
-    frete_cobrado: Decimal | None = Field(None, ge=0)
-    custo_envio: Decimal | None = Field(None, ge=0)
+    desconto: Decimal | None = Field(None, ge=0, le=TETO)
+    frete_cobrado: Decimal | None = Field(None, ge=0, le=TETO)
+    custo_envio: Decimal | None = Field(None, ge=0, le=TETO)
     pago: bool | None = None
-    forma_pagamento: str | None = None
-    obs: str | None = None
+    forma_pagamento: str | None = Field(None, max_length=30)
+    obs: str | None = Field(None, max_length=2000)
     data: datetime | None = None
     entregue_em: datetime | None = None  # o app manda o momento real da entrega (fila offline)
     itens: list[ItemEntrada] | None = None
@@ -60,7 +61,11 @@ def _custo_item(db: Session, empresa_id, modelo_id) -> Decimal:
     if modelo_id is None:
         return D(0)
     medio = custo_medio_peca(db, empresa_id, modelo_id)
-    return medio if medio is not None else custo_do_modelo(db, empresa_id, db.get(Modelo, modelo_id)).total
+    if medio is not None:
+        return medio
+    # Sem produção: custo do catálogo sem o envio médio da receita (o pedido desconta o próprio envio).
+    m = db.get(Modelo, modelo_id)
+    return custo_do_modelo(db, empresa_id, m).total - D(str((m.receita or {}).get("custo_envio") or 0))
 
 
 def _entregar(db: Session, c: Ctx, p: Pedido, quando: datetime | None,
@@ -74,8 +79,9 @@ def _entregar(db: Session, c: Ctx, p: Pedido, quando: datetime | None,
     p.entregue_em = quando or agora()
     avisos = []
     for it in _itens(db, p):
-        congelado = (custos or {}).get(str(it.id))
-        it.custo_unitario = congelado if congelado is not None else _custo_item(db, c.empresa_id, it.modelo_id)
+        modelo_antes, congelado = (custos or {}).get(str(it.id), (None, None))
+        mesmo = congelado is not None and modelo_antes == it.modelo_id  # trocou o modelo: custo do novo
+        it.custo_unitario = congelado if mesmo else _custo_item(db, c.empresa_id, it.modelo_id)
         if it.modelo_id:
             mid = id_derivado(it.id, "venda")
             antiga = db.get(Movimento, mid)
@@ -137,6 +143,17 @@ def recebido(db: Session, p: Pedido) -> Decimal:
     return total_pedido(db, p) if p.pago else D(0)
 
 
+def converter_pago_antigo(db: Session, p: Pedido, valor: Decimal) -> None:
+    """Pedido marcado como pago antes de existirem parcelas: o que foi pago vira uma parcela, para não
+    sumir ao lançar outra parcela nem crescer junto se o preço for corrigido depois."""
+    if not p.pago or pagamentos(db, p) or valor <= 0:
+        return
+    db.add(PedidoPagamento(id=id_derivado(p.id, "pago-antigo"), empresa_id=p.empresa_id, pedido_id=p.id,
+                           valor=r2(valor), forma=p.forma_pagamento, obs="Pago antes das parcelas",
+                           data=p.entregue_em or p.data or agora()))
+    db.flush()
+
+
 def atualizar_pago(db: Session, p: Pedido) -> None:
     """Com parcelas lançadas, "pago" sai delas (quitou = pago); sem parcelas, vale o que foi marcado."""
     pags = pagamentos(db, p)
@@ -188,6 +205,7 @@ def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> t
 
     campos = dados.model_dump(exclude_unset=True, exclude={"status", "itens", "entregue_em"})
     avisos_correcao: list[str] = []
+    total_antes = total_pedido(db, p) if p is not None and p.pago and not pagamentos(db, p) else None
     if p is None:
         p = Pedido(id=id, empresa_id=c.empresa_id, status="orcamento")
         db.add(p)
@@ -209,7 +227,7 @@ def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> t
         campos = {}
         db.flush()
         if mudou_itens:
-            custos = {k: i.custo_unitario for k, i in atuais.items()}
+            custos = {k: (i.modelo_id, i.custo_unitario) for k, i in atuais.items()}
             quando, taxas = p.entregue_em, (p.taxa_pct, p.taxa_fixa)
             _desfazer_entrega(db, p)
             for velho in atuais.values():
@@ -239,6 +257,8 @@ def salvar_pedido(db: Session, c: Ctx, id: uuid.UUID, dados: PedidoEntrada) -> t
     if D(p.desconto or 0) > bruto + D(p.frete_cobrado or 0):
         raise HTTPException(422, "Desconto maior que o total do pedido")
     avisos = mudar_status(db, c, p, dados.status, dados.entregue_em) if dados.status else []
+    if total_antes is not None and total_pedido(db, p) != total_antes:
+        converter_pago_antigo(db, p, total_antes)
     atualizar_pago(db, p)
     return p, avisos_correcao + avisos
 

@@ -66,7 +66,7 @@ def saldos(db: Session, empresa_id, item_tipo: str) -> dict[uuid.UUID, Decimal]:
 def custo_medio_peca(db: Session, empresa_id, modelo_id) -> Decimal | None:
     valor, qtd = db.execute(select(func.sum(Movimento.valor), func.sum(Movimento.quantidade))
                             .where(*_base(empresa_id, "peca"), Movimento.item_id == modelo_id,
-                                   Movimento.tipo == "producao")).one()
+                                   Movimento.tipo == "producao", Movimento.valor.is_not(None))).one()
     if not qtd:
         return None
     return Decimal(valor or 0) / Decimal(qtd)

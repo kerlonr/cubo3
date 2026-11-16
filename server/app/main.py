@@ -33,7 +33,9 @@ async def ciclo(app: FastAPI):
 
 
 def criar_app() -> FastAPI:
-    app = FastAPI(title="Cubo³", docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=ciclo)
+    docs = os.environ.get("API_DOCS") == "1"
+    app = FastAPI(title="Cubo³", docs_url="/api/docs" if docs else None,
+                  openapi_url="/api/openapi.json" if docs else None, lifespan=ciclo)
 
     @app.exception_handler(RequestValidationError)
     async def erro_de_validacao(request: Request, exc: RequestValidationError):

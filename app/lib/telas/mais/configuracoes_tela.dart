@@ -107,7 +107,7 @@ class _ConfiguracoesTelaState extends State<ConfiguracoesTela> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
           child: ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
-        _item(Icons.business_outlined, 'Empresa', 'Quem tem acesso e o papel de cada um', () => _abrir(const EmpresaTela())),
+        _item(Icons.business_outlined, 'Empresa', 'Seu Pix e quem tem acesso', () => _abrir(const EmpresaTela())),
         if (dono)
           _item(Icons.calculate_outlined, 'Custos', 'Mão de obra, energia e margens, com exemplo ao vivo', _custos),
         _item(Icons.storefront_outlined, 'Canais de venda', 'Onde você vende e quanto cada um cobra',

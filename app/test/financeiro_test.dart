@@ -149,27 +149,48 @@ void main() {
     expect(amb.ultimo('DELETE /api/carreteis/car1'), isNotNull);
   });
 
-  testWidgets('pedido: marcar como pago pergunta a forma; pago pode ser desfeito', (tester) async {
-    var pago = false;
+  testWidgets('pedido antigo pago sem parcelas: desfazer pago volta para a receber', (tester) async {
+    var pago = true;
     final amb = Ambiente({
       'GET /api/pedidos/p1': (_) => {'id': 'p1', 'status': 'entregue', 'pago': pago, 'itens': [], 'receita': 50},
     });
     amb.rotasPrefixo['PUT /api/pedidos/p1'] = (r) {
-      pago = !pago;
+      pago = false;
       return {'ok': true};
     };
     await amb.preparar();
     await tamanhoTela(tester, 360, 1400);
     await tester.pumpWidget(amb.tela(const PedidoTela(id: 'p1')));
     await tester.pumpAndSettle();
-    expect(find.text('A receber'), findsOneWidget);
-    await tester.tap(find.text('Marcar como pago'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Pix'));
-    await tester.pumpAndSettle();
-    expect(amb.corpo('PUT /api/pedidos/p1'), {'pago': true, 'forma_pagamento': 'Pix'});
+    expect(find.text('Pago'), findsOneWidget);
     await tester.tap(find.text('Desfazer pago'));
     await tester.pumpAndSettle();
     expect(amb.corpo('PUT /api/pedidos/p1'), {'pago': false, 'forma_pagamento': null});
+    expect(find.text('A receber'), findsOneWidget);
+    expect(find.text('Receber'), findsOneWidget);
+  });
+
+  testWidgets('pedido com parcelas: desfazer pago apaga a última parcela', (tester) async {
+    final amb = Ambiente({
+      'GET /api/pedidos/p1': (_) => {
+            'id': 'p1', 'status': 'entregue', 'pago': true, 'itens': [], 'receita': 50, 'total': 50, 'recebido': 50,
+            'saldo': 0,
+            'pagamentos': [
+              {'id': 'g1', 'valor': 20, 'forma': 'Pix', 'data': '2026-11-10T12:00:00+00:00'},
+              {'id': 'g2', 'valor': 30, 'forma': 'Dinheiro', 'data': '2026-11-12T12:00:00+00:00', 'anexo_id': 'a1'},
+            ],
+          },
+    });
+    await amb.preparar();
+    await tamanhoTela(tester, 360, 1400);
+    await tester.pumpWidget(amb.tela(const PedidoTela(id: 'p1')));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Com comprovante'), findsOneWidget);
+    await tester.tap(find.text('Desfazer pago'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apagar'));
+    await tester.pumpAndSettle();
+    expect(amb.ultimo('DELETE /api/pagamentos/g2'), isNotNull);
+    expect(amb.ultimo('DELETE /api/pagamentos/g1'), isNull);
   });
 }

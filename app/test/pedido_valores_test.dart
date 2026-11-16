@@ -99,6 +99,43 @@ void main() {
     expect([for (final i in itens) i['quantidade']], [1, 2]);
   });
 
+  testWidgets('entregue: mais uma unidade, tirar item e item avulso vão no PUT (mesmos ids)', (tester) async {
+    final amb = await abrir(tester, pedido());
+    await tester.tap(find.byTooltip('Editar valores'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byKey(const Key('qtd0')), matching: find.byTooltip('Mais')));
+    await tester.pump();
+    expect(tester.widget<TextField>(campo('total-pedido')).controller!.text, '64,80');
+    await tester.tap(find.byTooltip('Tirar item').last);
+    await tester.pump();
+    await tester.tap(find.text('Item'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Modelo ou descrição'), 'Suporte avulso');
+    await tester.enterText(campo('preco1'), '1000');
+    await tester.pump();
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    final itens = amb.corpo('PUT /api/pedidos/p1')['itens'] as List;
+    expect(itens.first, {'id': 'i1', 'modelo_id': 'm1', 'descricao': 'Vaso', 'quantidade': 2, 'preco_unitario': 19.9});
+    expect(itens.length, 2);
+    expect(itens[1]['id'], isNot('i2'));
+    expect(itens[1], containsPair('descricao', 'Suporte avulso'));
+    expect(itens[1], containsPair('modelo_id', null));
+    expect(itens[1], containsPair('preco_unitario', 10.0));
+  });
+
+  testWidgets('reabrir entregue confirma e volta para Produzindo', (tester) async {
+    final amb = await abrir(tester, pedido());
+    await tester.tap(find.byTooltip('Mais opções'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reabrir pedido'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('voltam ao estoque'), findsOneWidget);
+    await tester.tap(find.text('Reabrir'));
+    await tester.pumpAndSettle();
+    expect(amb.corpo('POST /api/pedidos/p1/status'), {'status': 'produzindo'});
+  });
+
   testWidgets('pedido cancelado não mostra editar valores', (tester) async {
     await abrir(tester, {...pedido(), 'status': 'cancelado'});
     expect(find.byTooltip('Editar valores'), findsNothing);

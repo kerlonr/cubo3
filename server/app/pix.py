@@ -42,6 +42,8 @@ def _digitos_ok(d: str, pesos_1: list[int], pesos_2: list[int]) -> bool:
 def normalizar_chave(tipo: str, chave: str) -> str:
     """Chave no formato que o Pix espera; ValueError com o motivo se não for válida."""
     c = chave.strip()
+    if tipo in ("cpf", "cnpj") and re.search(r"[^\d.\-/ ]", c):
+        raise ValueError(f"{tipo.upper()} só tem números")
     if tipo == "cpf":
         d = re.sub(r"\D", "", c)
         if len(d) != 11 or d == d[0] * 11 or not _digitos_ok(d, list(range(10, 1, -1)), list(range(11, 1, -1))):
@@ -55,7 +57,7 @@ def normalizar_chave(tipo: str, chave: str) -> str:
         return d
     if tipo == "email":
         e = c.lower()
-        if len(e) > 77 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", e):
+        if len(e) > 77 or not e.isascii() or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", e):
             raise ValueError("E-mail inválido")
         return e
     if tipo == "telefone":

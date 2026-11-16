@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from app.custos import TETO
 from sqlalchemy.orm import Session
 
 from app.auth.deps import Ctx, ctx
@@ -20,8 +21,8 @@ class DespesaEntrada(BaseModel):
     data: date | None = None
     categoria: Literal["filamento", "insumo", "desperdicio", "embalagem", "equipamento", "manutencao", "energia",
                        "ferramenta", "outros"] | None = None
-    valor: Decimal | None = Field(None, gt=0)
-    descricao: str | None = None
+    valor: Decimal | None = Field(None, gt=0, le=TETO)
+    descricao: str | None = Field(None, max_length=200)
 
 
 rotas_despesas = rotas_crud(Despesa, DespesaEntrada, lambda db, o: serializar(o), "/despesas", nome="Despesa")

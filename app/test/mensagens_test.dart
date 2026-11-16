@@ -20,6 +20,12 @@ void main() {
     expect(mensagemCliente(' Ana Souza'), 'Olá, Ana! Tudo bem? Aqui é da Cubo³.');
   });
 
+  test('cobrança no Pix: oi, itens, valor e o copia e cola por último', () {
+    expect(mensagemCobranca(nome: 'Ana Souza', itens: ['Vaso (2 un.)'], valor: 45.9, codigo: '000201abc'),
+        'Olá, Ana! Segue o Pix do seu pedido:\n• Vaso (2 un.)\n\nValor: R\$ 45,90\n\nPix copia e cola:\n000201abc');
+    expect(mensagemCobranca(nome: '', itens: [], valor: 10, codigo: 'x'), startsWith('Olá! Segue o Pix'));
+  });
+
   test('link do WhatsApp leva o DDI e a mensagem pronta', () {
     final u = linkWhatsapp('(54) 99999-8888', texto: 'Olá, Ana!');
     expect(u.toString(), 'https://wa.me/5554999998888?text=Ol%C3%A1%2C+Ana%21');

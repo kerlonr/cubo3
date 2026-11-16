@@ -10,17 +10,18 @@ import 'clientes_tela.dart';
 import 'pedido_tela.dart';
 import 'venda_rapida_tela.dart';
 
-/// Filtros da aba Vendas. "Pago" anda à parte do status do pedido.
+/// Filtros da aba Vendas. "Pago" anda à parte do status do pedido; parcial continua a receber.
 final filtrosPedido = <String, bool Function(Map p)>{
   'Em andamento': (p) => const {'aprovado', 'produzindo', 'pronto'}.contains(p['status']),
   'Entregues': (p) => p['status'] == 'entregue',
-  'Pagos': (p) => p['pago'] == true && p['status'] != 'cancelado',
-  'A receber': (p) => p['pago'] != true && !const {'orcamento', 'cancelado'}.contains(p['status']),
+  'Pagos': (p) => seloPagamento(p) == 'Pago',
+  'A receber': (p) => !const {'orcamento', 'cancelado'}.contains(p['status']) && seloPagamento(p) != 'Pago',
   'Orçamentos': (p) => p['status'] == 'orcamento',
   'Todos': (_) => true,
 };
 
 double totalDe(Iterable<Map> pedidos) => pedidos.fold(0, (s, p) => s + totalPedido(p));
+double totalAReceber(Iterable<Map> pedidos) => pedidos.fold(0, (s, p) => s + saldoPedido(p));
 
 /// Filtro pedido de fora (Início → "Pedidos em aberto"). A aba aplica e limpa.
 final filtroVendasPedido = ValueNotifier<String?>(null);
@@ -105,7 +106,7 @@ class _VendasAbaState extends State<VendasAba> {
                           child: Text('${pedidos.length} ${pedidos.length == 1 ? 'pedido' : 'pedidos'}',
                               style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         ),
-                        Text(moeda(totalDe(pedidos)),
+                        Text(moeda(_filtro == 'A receber' ? totalAReceber(pedidos) : totalDe(pedidos)),
                             style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),
                       ]),
                     ),

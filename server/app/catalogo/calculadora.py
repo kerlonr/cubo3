@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from app.custos import TETO
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,23 +21,23 @@ D = Decimal
 
 class FilamentoCalc(BaseModel):
     filamento_id: uuid.UUID | None = None
-    preco_kg: Decimal = Field(D(0), ge=0)
-    gramas: Decimal = Field(ge=0)
+    preco_kg: Decimal = Field(D(0), ge=0, le=TETO)
+    gramas: Decimal = Field(ge=0, le=TETO)
 
 
 class InsumoCalc(BaseModel):
     insumo_id: uuid.UUID | None = None
-    custo_unitario: Decimal = Field(D(0), ge=0)
-    qtd: Decimal = Field(ge=0)
+    custo_unitario: Decimal = Field(D(0), ge=0, le=TETO)
+    qtd: Decimal = Field(ge=0, le=TETO)
     embalagem: bool = False
 
 
 class Calculo(BaseModel):
     filamentos: list[FilamentoCalc] = []
-    horas: Decimal = Field(D(0), ge=0)
-    mao_obra_min: Decimal = Field(D(0), ge=0)
+    horas: Decimal = Field(D(0), ge=0, le=TETO)
+    mao_obra_min: Decimal = Field(D(0), ge=0, le=TETO)
     insumos: list[InsumoCalc] = []
-    custo_envio: Decimal = Field(D(0), ge=0)
+    custo_envio: Decimal = Field(D(0), ge=0, le=TETO)
     pecas_por_impressao: int = Field(1, ge=1, le=1000)
     impressora_id: uuid.UUID | None = None
 

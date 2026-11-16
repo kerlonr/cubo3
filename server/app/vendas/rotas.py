@@ -22,10 +22,10 @@ from app.vendas.modelos import Cliente, Pedido, PedidoAnexo, PedidoPagamento
 
 
 class ClienteEntrada(BaseModel):
-    nome: str | None = Field(None, min_length=1)
-    telefone: str | None = None
-    email: str | None = None
-    obs: str | None = None
+    nome: str | None = Field(None, min_length=1, max_length=120)
+    telefone: str | None = Field(None, max_length=30)
+    email: str | None = Field(None, max_length=254)
+    obs: str | None = Field(None, max_length=2000)
 
 
 class NovoStatus(BaseModel):
@@ -170,6 +170,9 @@ def gravar_pagamento(pedido_id: uuid.UUID, id: uuid.UUID, dados: PagamentoEntrad
     x = db.get(PedidoPagamento, id)
     if x is not None and (x.empresa_id != c.empresa_id or x.pedido_id != p.id):
         raise HTTPException(404, "Pagamento não encontrado")
+    if x is not None and x.excluido:
+        return saida_pedido(db, p)  # reenvio de parcela que já foi apagada: não ressuscita
+    servico.converter_pago_antigo(db, p, servico.total_pedido(db, p))
     if dados.anexo_id is not None:
         a = obter(db, c, PedidoAnexo, dados.anexo_id, "Comprovante")
         if a.pedido_id != p.id or a.excluido:
@@ -182,7 +185,6 @@ def gravar_pagamento(pedido_id: uuid.UUID, id: uuid.UUID, dados: PagamentoEntrad
         x = PedidoPagamento(id=id, empresa_id=c.empresa_id, pedido_id=p.id)
         db.add(x)
     x.valor, x.forma, x.obs, x.anexo_id = dados.valor, dados.forma, dados.obs, dados.anexo_id
-    x.excluido = False
     if dados.data is not None or x.data is None:
         x.data = dados.data or agora()
     db.flush()
@@ -211,8 +213,9 @@ class CobrancaEntrada(BaseModel):
 
 @rotas.post("/pix/cobranca")
 def cobranca(dados: CobrancaEntrada, resposta: Response, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
-    """Pix copia e cola com o valor (o que falta do pedido, ou o valor informado). Gerado no servidor:
-    a chave inteira fica só aqui e no aparelho do dono."""
+    """Pix copia e cola com o valor (o que falta do pedido, ou o valor informado). O código leva a chave
+    (é o que o banco do cliente lê), então qualquer membro que cobra recebe a chave dentro dele; fora do
+    código, a chave inteira só sai para o dono em /api/empresa/pix."""
     resposta.headers["Cache-Control"] = "no-store"
     pix = db.get(Empresa, c.empresa_id).pix
     if not pix:

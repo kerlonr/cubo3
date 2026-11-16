@@ -26,36 +26,36 @@ String? validarComprovante(String nome, int tamanho) {
   return null;
 }
 
-/// Envia um comprovante (só online, como os arquivos do modelo). true = anexou.
-Future<bool> enviarComprovante(
+/// Envia um comprovante (só online, como os arquivos do modelo). Devolve o id do anexo (null = não anexou).
+Future<String?> enviarComprovante(
     BuildContext context, String pedidoId, String nome, int tamanho, Stream<List<int>> bytes) async {
   final recusa = validarComprovante(nome, tamanho);
   if (recusa != null) {
     avisar(context, '$nome: $recusa', erro: true);
-    return false;
+    return null;
   }
   final api = context.read<ApiCliente>();
   avisar(context, 'Enviando $nome…');
   try {
-    await api.enviarArquivo('/api/pedidos/$pedidoId/anexos', nome: nome, bytes: bytes, tamanho: tamanho);
+    final r = await api.enviarArquivo('/api/pedidos/$pedidoId/anexos', nome: nome, bytes: bytes, tamanho: tamanho);
     if (context.mounted) avisar(context, 'Comprovante anexado');
-    return true;
+    return '${mapa(r)['id']}';
   } catch (e) {
     if (context.mounted) avisarErro(context, e);
-    return false;
+    return null;
   }
 }
 
-/// Seletor de arquivos (galeria/arquivos no celular). true = anexou algum.
-Future<bool> escolherComprovante(BuildContext context, String pedidoId) async {
+/// Seletor de arquivos (galeria/arquivos no celular). Devolve o id do último anexado (null = nenhum).
+Future<String?> escolherComprovante(BuildContext context, String pedidoId) async {
   final arquivos = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: extensoesComprovante);
-  var algum = false;
+  String? ultimo;
   for (final f in arquivos) {
     final tamanho = await f.length() ?? 0;
     if (!context.mounted) break;
-    algum = await enviarComprovante(context, pedidoId, f.name, tamanho, f.readAsByteStream()) || algum;
+    ultimo = await enviarComprovante(context, pedidoId, f.name, tamanho, f.readAsByteStream()) ?? ultimo;
   }
-  return algum;
+  return ultimo;
 }
 
 /// O GET do comprovante pede o token (não há link de 10 minutos como nos arquivos do modelo):
@@ -163,7 +163,7 @@ class Comprovantes extends StatelessWidget {
             tooltip: 'Anexar comprovante (foto ou PDF)',
             icon: const Icon(Icons.attach_file),
             onPressed: () async {
-              if (await escolherComprovante(context, pedidoId)) aoMudar();
+              if (await escolherComprovante(context, pedidoId) != null) aoMudar();
             },
           )),
       if (anexos.isEmpty)
@@ -179,7 +179,7 @@ class Comprovantes extends StatelessWidget {
         for (final f in d.files) {
           final tamanho = await f.length();
           if (!context.mounted) return;
-          algum = await enviarComprovante(context, pedidoId, f.name, tamanho, f.openRead()) || algum;
+          algum = await enviarComprovante(context, pedidoId, f.name, tamanho, f.openRead()) != null || algum;
         }
         if (algum) aoMudar();
       },

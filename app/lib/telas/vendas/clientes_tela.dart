@@ -253,11 +253,7 @@ class LinhaPedido extends StatelessWidget {
         title: Text(mapa(p['cliente'])['nome'] as String? ?? resumoItens(p), maxLines: 2, overflow: TextOverflow.ellipsis),
         subtitle: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
           Text([if (data != null) dataCurta(data), nomesStatusPedido[p['status']] ?? '${p['status']}'].join(' · ')),
-          // Orçamento e cancelado não têm o que receber.
-          if (p['pago'] == true && p['status'] != 'cancelado')
-            const Selo('Pago', cor: verde)
-          else if (!const {'orcamento', 'cancelado'}.contains(p['status']))
-            const Selo('A receber', cor: amarelo),
+          if (seloPagamento(p) case final selo?) Selo(selo, cor: coresSeloPagamento[selo]),
         ]),
         trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text(moeda(totalPedido(p)), style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),

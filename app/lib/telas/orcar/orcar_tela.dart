@@ -21,6 +21,7 @@ import '../../widgets/logo.dart';
 import '../../widgets/seletores.dart';
 import '../catalogo/insumos_receita.dart';
 import '../catalogo/modelo_form.dart' show caminhosCusto, ModeloForm, QuebraCusto;
+import '../vendas/pix.dart' show gerarCobranca;
 import 'historico.dart';
 import 'importar.dart';
 
@@ -89,6 +90,7 @@ class _OrcarTelaState extends State<OrcarTela> {
   final _meuPreco = TextEditingController();
   final _insumos = <LinhaInsumo>[];
   final _imagem = GlobalKey();
+  bool _comPix = false;
   String? _filamento;
   String? _impressora;
   bool _escolheuFilamento = false;
@@ -295,9 +297,18 @@ class _OrcarTelaState extends State<OrcarTela> {
     );
   }
 
+  /// "Pix copia e cola" com o valor do orçamento (cobrança avulsa, online). '' sem Pix; null = falhou (já avisou).
+  Future<String?> _pix(PrecoSugerido p) async {
+    if (!_comPix) return '';
+    final r = await gerarCobranca(context, {'valor': arred2(p.preco)});
+    return r == null ? null : 'Pix copia e cola:\n${r['copia_e_cola']}';
+  }
+
   Future<void> _compartilharTexto(PrecoSugerido p) async {
+    final pix = await _pix(p);
+    if (pix == null) return;
     await salvarOrcamento(_registro(p));
-    await SharePlus.instance.share(ShareParams(text: textoOrcamento(_dados(p))));
+    await SharePlus.instance.share(ShareParams(text: [textoOrcamento(_dados(p)), if (pix.isNotEmpty) pix].join('\n\n')));
   }
 
   Future<void> _compartilharImagem(PrecoSugerido p) async {
@@ -306,10 +317,13 @@ class _OrcarTelaState extends State<OrcarTela> {
     final img = await caixa.toImage(pixelRatio: 3);
     final png = await img.toByteData(format: ui.ImageByteFormat.png);
     if (png == null) return;
+    final pix = await _pix(p);
+    if (pix == null) return;
     await salvarOrcamento(_registro(p));
     await SharePlus.instance.share(ShareParams(
       files: [XFile.fromData(png.buffer.asUint8List(), mimeType: 'image/png', name: 'orcamento-cubo3.png')],
       fileNameOverrides: ['orcamento-cubo3.png'],
+      text: pix.isEmpty ? null : pix,
     ));
   }
 
@@ -344,7 +358,14 @@ class _OrcarTelaState extends State<OrcarTela> {
                   onChanged: (_) => atualizar(() {}),
                   decoration: const InputDecoration(labelText: 'Observação (opcional)', hintText: 'Ex.: pronto em 3 dias'),
                 ),
-                const SizedBox(height: 16),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.pix),
+                  title: Text('Incluir Pix de ${moeda(p.preco)}'),
+                  value: _comPix,
+                  onChanged: (v) => atualizar(() => _comPix = v),
+                ),
+                const SizedBox(height: 8),
                 Row(children: [
                   Expanded(
                     child: OutlinedButton.icon(

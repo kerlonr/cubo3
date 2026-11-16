@@ -17,6 +17,13 @@ String formatarTelefone(String telefone) {
 /// Abertura de conversa com o cliente.
 String mensagemCliente(String nome) => 'Olá, ${primeiroNome(nome)}! Tudo bem? Aqui é da Cubo³.';
 
+/// Cobrança no Pix: o código vai por último, sozinho na linha, para o cliente copiar fácil.
+String mensagemCobranca({required String nome, required List<String> itens, required double valor, required String codigo}) {
+  final oi = nome.trim().isEmpty ? 'Olá!' : 'Olá, ${primeiroNome(nome)}!';
+  final lista = itens.isEmpty ? '' : '${itens.map((i) => '• $i').join('\n')}\n\n';
+  return '$oi Segue o Pix do seu pedido:\n${lista}Valor: ${moeda(valor)}\n\nPix copia e cola:\n$codigo';
+}
+
 /// Mensagem do pedido conforme a etapa: orçamento com itens e total, produção, pronto ou agradecimento.
 String mensagemPedido({required String nome, required String status, required List<String> itens, required double total}) {
   final oi = 'Olá, ${primeiroNome(nome)}!';
