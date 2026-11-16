@@ -22,6 +22,7 @@ import '../../widgets/seletores.dart';
 import '../catalogo/insumos_receita.dart';
 import '../catalogo/modelo_form.dart' show caminhosCusto, ModeloForm, QuebraCusto;
 import '../vendas/pix.dart' show gerarCobranca;
+import '../vendas/venda_rapida_tela.dart';
 import 'historico.dart';
 import 'importar.dart';
 
@@ -207,6 +208,18 @@ class _OrcarTelaState extends State<OrcarTela> {
 
   /// O orçamento inteiro vira um modelo: cada peça é uma parte impressa (gramas e tempo × quantidade),
   /// com os insumos, a embalagem e o preço escolhido. Abre o cadastro já preenchido para conferir e salvar.
+  /// O orçamento vira pedido numa linha só com o preço escolhido: dividir entre as peças erraria centavos
+  /// e o preço foi pensado para o conjunto.
+  List<Json> _itensPedido(PrecoSugerido p) {
+    final nomes = [
+      for (final (n, it) in _comDados.indexed)
+        [it.nome.text.trim().isEmpty ? 'Peça ${n + 1}' : it.nome.text.trim(), if (it.qtd > 1) '(${it.qtd}x)'].join(' ')
+    ];
+    return [
+      {'descricao': nomes.join(' + '), 'preco_unitario': p.preco}
+    ];
+  }
+
   void _paraCatalogo(PrecoSugerido p) {
     final itens = _comDados;
     // Uma peça em quantidade (ex.: 10 chaveiros): o catálogo guarda UMA unidade, com custo e preço divididos.
@@ -516,15 +529,23 @@ class _OrcarTelaState extends State<OrcarTela> {
                     aoMudar: _mudou,
                     ajuda: _precoManual == null ? null : 'Lucro ${moeda(destaque.lucro)} (${numero(destaque.lucroPct)}%)'),
                 MaisDetalhes(titulo: 'Detalhe do custo', children: [QuebraCusto(custo)]),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  OutlinedButton.icon(
                     key: const Key('para_catalogo'),
                     onPressed: () => _paraCatalogo(destaque),
                     icon: const Icon(Icons.bookmark_add_outlined),
                     label: const Text('Salvar no catálogo'),
                   ),
-                ),
+                  OutlinedButton.icon(
+                    key: const Key('criar_pedido'),
+                    onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => VendaRapidaTela(orcamento: true, itensIniciais: _itensPedido(destaque)))),
+                    icon: const Icon(Icons.receipt_long_outlined),
+                    label: const Text('Criar pedido'),
+                  ),
+                ]),
               ],
             ]),
           ),

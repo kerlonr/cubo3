@@ -163,7 +163,7 @@ void main() {
     await tester.pumpWidget(amb.tela(const PedidoTela(id: 'p1')));
     await tester.pumpAndSettle();
     expect(find.text('Pago'), findsOneWidget);
-    await tester.tap(find.text('Desfazer pago'));
+    await tester.tap(find.byTooltip('Desfazer pago'));
     await tester.pumpAndSettle();
     expect(amb.corpo('PUT /api/pedidos/p1'), {'pago': false, 'forma_pagamento': null});
     expect(find.text('A receber'), findsOneWidget);
@@ -186,7 +186,7 @@ void main() {
     await tester.pumpWidget(amb.tela(const PedidoTela(id: 'p1')));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Com comprovante'), findsOneWidget);
-    await tester.tap(find.text('Desfazer pago'));
+    await tester.tap(find.byTooltip('Desfazer pago'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Apagar'));
     await tester.pumpAndSettle();

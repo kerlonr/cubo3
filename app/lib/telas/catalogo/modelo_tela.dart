@@ -11,6 +11,7 @@ import '../../util/formatos.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/estado_tela.dart';
 import '../../widgets/seletores.dart';
+import '../impressoes/confirmar_tela.dart';
 import '../impressora/envio.dart';
 import 'arquivos.dart';
 import 'capa_tela.dart';
@@ -296,6 +297,14 @@ class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
               title: Text('${lerData(i['fim']) == null ? '' : dataCurta(lerData(i['fim'])!)} · ${i['pecas_boas'] ?? 0} peça(s)'),
               subtitle: Text('${i['status']}'.replaceAll('_', ' ')),
               trailing: i['custo_total'] == null ? null : Text(moeda(num0(i['custo_total']))),
+              onTap: i['status'] != 'confirmada' && i['status'] != 'descartada'
+                  ? null
+                  : () async {
+                      if (!await reabrirImpressao(context, i) || !mounted) return;
+                      await Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => ConfirmarTela(impressao: {...i, 'status': 'a_confirmar'})));
+                      _recarregar();
+                    },
             ),
           const Secao('Vendas'),
           if (vendas.isEmpty) const Text('Nenhuma venda ainda.'),

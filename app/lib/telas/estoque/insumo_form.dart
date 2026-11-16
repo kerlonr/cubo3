@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../api/modelos.dart';
+import '../../tema.dart';
 import '../../util/formatos.dart';
 import '../../widgets/campos.dart';
 import '../../widgets/estado_tela.dart';
@@ -37,7 +38,13 @@ class _InsumoFormState extends State<InsumoForm> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.dados == null ? 'Novo insumo' : 'Editar insumo')),
+      appBar: AppBar(title: Text(widget.dados == null ? 'Novo insumo' : 'Editar insumo'), actions: [
+        if (widget.dados != null)
+          IconButton(
+              tooltip: 'Excluir',
+              onPressed: () => excluirCadastro(context, 'Excluir insumo?', '/api/insumos/${d['id']}'),
+              icon: const Icon(Icons.delete_outline, color: vermelho)),
+      ]),
       body: CorpoFormulario(chave: _form, children: [
         CampoTexto(_nome, 'Nome (ímã, parafuso, caixa...)', obrigatorio: true),
         CampoDinheiro(_custo, 'Custo por unidade'),

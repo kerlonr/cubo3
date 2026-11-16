@@ -30,7 +30,9 @@ class _ClientesTelaState extends State<ClientesTela> {
   int _versao = 0;
 
   Future<void> _abrir(Widget tela) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => tela));
+    final r = await Navigator.push(context, MaterialPageRoute(builder: (_) => tela));
+    if (!mounted) return;
+    if (r is Map && r['excluido'] == true) return Navigator.pop(context, true); // excluiu na edição
     setState(() => _versao++);
   }
 
@@ -159,10 +161,24 @@ class _ClienteFormState extends State<ClienteForm> {
     }
   }
 
+  Future<void> _excluir() async {
+    if (!await confirmar(context, 'Excluir cliente?', 'Os pedidos dele continuam, mostrando o nome.',
+            sim: 'Excluir', cor: vermelho) ||
+        !mounted) {
+      return;
+    }
+    if (await salvar(context, 'DELETE', '/api/clientes/${d['id']}', {}, feito: 'Cliente excluído') && mounted) {
+      Navigator.pop(context, {'excluido': true});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.dados == null ? 'Novo cliente' : 'Editar cliente')),
+      appBar: AppBar(title: Text(widget.dados == null ? 'Novo cliente' : 'Editar cliente'), actions: [
+        if (widget.dados != null)
+          IconButton(tooltip: 'Excluir', onPressed: _excluir, icon: const Icon(Icons.delete_outline, color: vermelho)),
+      ]),
       bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
       body: CorpoFormulario(chave: _form, children: [
         CampoTexto(_nome, 'Nome', obrigatorio: true),

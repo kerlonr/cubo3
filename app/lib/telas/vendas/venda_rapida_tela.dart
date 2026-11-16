@@ -56,6 +56,18 @@ class _VendaRapidaTelaState extends State<VendaRapidaTela> {
   final _novosClientes = <Json>[];
   bool _enviando = false;
 
+  /// Dia da venda (null = hoje); a hora é a do momento de salvar.
+  DateTime? _dia;
+
+  Future<void> _escolherDia() async {
+    final d = await showDatePicker(
+        context: context,
+        initialDate: _dia ?? DateTime.now(),
+        firstDate: DateTime(2020),
+        lastDate: DateTime.now().add(const Duration(days: 1)));
+    if (d != null) setState(() => _dia = DateUtils.isSameDay(d, DateTime.now()) ? null : d);
+  }
+
   double get _total =>
       _itens.fold<double>(0, (s, i) => s + i.qtd * (lerNumero(i.preco.text) ?? 0)) -
       (lerNumero(_desconto.text) ?? 0) +
@@ -65,13 +77,18 @@ class _VendaRapidaTelaState extends State<VendaRapidaTela> {
     final itens = [for (final i in _itens) if (i.modelo != null || i.descricao.isNotEmpty) i];
     if (itens.isEmpty) return avisar(context, 'Escolha o modelo');
     final fila = context.read<FilaOffline>();
+    final agora = DateTime.now();
+    final quando = (_dia == null ? agora : DateTime(_dia!.year, _dia!.month, _dia!.day, agora.hour, agora.minute))
+        .toUtc()
+        .toIso8601String();
     setState(() => _enviando = true);
     try {
       final r = await fila.enviarOuGuardar(Operacao.nova('PUT', '/api/pedidos/${novoId()}', {
         'cliente_id': _cliente,
         'canal_id': _canal,
         'status': widget.orcamento ? 'orcamento' : 'entregue',
-        if (!widget.orcamento) 'entregue_em': DateTime.now().toUtc().toIso8601String(),
+        'data': quando,
+        if (!widget.orcamento) 'entregue_em': quando,
         'pago': _pago,
         'custo_envio': lerNumero(_envio.text) ?? 0,
         'frete_cobrado': lerNumero(_frete.text) ?? 0,
@@ -162,12 +179,23 @@ class _VendaRapidaTelaState extends State<VendaRapidaTela> {
         ),
         IconButton(tooltip: 'Novo cliente', onPressed: _novoCliente, icon: const Icon(Icons.person_add_alt)),
       ]),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        title: const Text('Pago'),
-        value: _pago,
-        onChanged: (v) => setState(() => _pago = v),
-      ),
+      Row(children: [
+        TextButton.icon(
+          key: const Key('dia-venda'),
+          onPressed: _escolherDia,
+          icon: const Icon(Icons.event_outlined),
+          label: Text(_dia == null ? 'Hoje' : dataCurta(_dia!)),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Pago', textAlign: TextAlign.end),
+            value: _pago,
+            onChanged: (v) => setState(() => _pago = v),
+          ),
+        ),
+      ]),
       MaisDetalhes(children: [
         CampoDinheiro(_envio, 'Custo de envio (você paga)'),
         CampoDinheiro(_frete, 'Frete cobrado do cliente', aoMudar: (_) => setState(() {})),

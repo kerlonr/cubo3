@@ -29,6 +29,9 @@ const iconesForma = {'Pix': Icons.pix, 'Dinheiro': Icons.payments_outlined, 'Car
 const fluxoPedido = ['orcamento', 'produzindo', 'entregue'];
 const _etapaEquivalente = {'aprovado': 'orcamento', 'pronto': 'produzindo'};
 
+/// Etapa anterior para "Voltar etapa" (entregue e cancelado usam "Reabrir").
+const etapaAnterior = {'aprovado': 'orcamento', 'produzindo': 'orcamento', 'pronto': 'produzindo'};
+
 /// Próximas etapas a partir do status atual (vazio para entregue/cancelado).
 List<String> proximasEtapas(String status) {
   final i = fluxoPedido.indexOf(_etapaEquivalente[status] ?? status);
@@ -128,12 +131,42 @@ class _PedidoTelaState extends State<PedidoTela> {
     }
   }
 
-  /// Reabrir um entregue (errou a entrega, o cliente devolveu): volta para Produzindo.
-  Future<void> _reabrir() async {
-    if (await confirmar(context, 'Reabrir pedido?', 'Volta para Produzindo e as peças voltam ao estoque.', sim: 'Reabrir') &&
-        mounted) {
+  /// Reabrir um entregue (errou a entrega, o cliente devolveu) ou um cancelado: volta para Produzindo.
+  Future<void> _reabrir(String status) async {
+    final texto = status == 'entregue' ? 'Volta para Produzindo e as peças voltam ao estoque.' : 'Volta para Produzindo.';
+    if (await confirmar(context, 'Reabrir pedido?', texto, sim: 'Reabrir') && mounted) {
       await _status('produzindo');
     }
+  }
+
+  Future<void> _excluir() async {
+    if (!await confirmar(context, 'Excluir pedido?',
+            'Some da lista, das vendas e do financeiro, com os pagamentos. Peças de um pedido entregue voltam ao estoque.',
+            sim: 'Excluir', cor: vermelho) ||
+        !mounted) {
+      return;
+    }
+    if (await salvar(context, 'DELETE', '/api/pedidos/${widget.id}', {}, feito: 'Pedido excluído') && mounted) {
+      Navigator.maybePop(context, true);
+    }
+  }
+
+  Widget _menu(String status) {
+    final anterior = etapaAnterior[status];
+    PopupMenuItem<void> item(IconData icone, String texto, VoidCallback acao, {Color? cor}) => PopupMenuItem(
+          onTap: acao,
+          child: ListTile(
+              leading: Icon(icone, color: cor), title: Text(texto, style: cor == null ? null : TextStyle(color: cor))),
+        );
+    return PopupMenuButton<void>(
+      tooltip: 'Mais opções',
+      itemBuilder: (_) => [
+        if (status == 'entregue' || status == 'cancelado') item(Icons.undo, 'Reabrir pedido', () => _reabrir(status)),
+        if (anterior != null) item(Icons.undo, 'Voltar para ${nomesStatusPedido[anterior]}', () => _status(anterior)),
+        if (status != 'cancelado') item(Icons.block, 'Cancelar pedido', () => _status('cancelado'), cor: vermelho),
+        item(Icons.delete_outline, 'Excluir pedido', _excluir, cor: vermelho),
+      ],
+    );
   }
 
   /// Nova parcela (padrão: o saldo) ou corrige uma ([pag]). Vai pela fila: o id nasce aqui.
@@ -190,10 +223,16 @@ class _PedidoTelaState extends State<PedidoTela> {
     final corpo = await showModalBottomSheet<Map>(
         context: context, isScrollControlled: true, showDragHandle: true, builder: (_) => EditarValores(pedido: p));
     if (corpo == null || !mounted) return;
-    if (await salvar(context, 'PUT', '/api/pedidos/${widget.id}', corpo,
-            feito: 'Valores salvos', versaoBase: p['atualizado_em'] as String?) &&
-        mounted) {
-      setState(() => _versao++);
+    try {
+      final r = await context.read<FilaOffline>().enviarOuGuardar(
+          Operacao.nova('PUT', '/api/pedidos/${widget.id}', corpo, p['atualizado_em'] as String?));
+      if (!mounted) return;
+      avisarEnvio(context, r, 'Pedido salvo');
+      if (r.recusada != null) return;
+      await mostrarAvisos(context, r.resposta); // ex.: "sobram R$ X" quando baixou o preço do que já recebeu
+      if (mounted) setState(() => _versao++);
+    } catch (e) {
+      if (mounted) avisarErro(context, e);
     }
   }
 
@@ -231,6 +270,17 @@ class _PedidoTelaState extends State<PedidoTela> {
         if (selo != null) Selo(selo, cor: coresSeloPagamento[selo]),
       ]),
       const SizedBox(height: 8),
+      if (num0(p['excedente']) >= 0.005)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(children: [
+            const Icon(Icons.warning_amber_rounded, color: amarelo, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+                child: Text('Recebeu ${moeda(num0(p['excedente']))} a mais',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular))),
+          ]),
+        ),
       ClipRRect(
         borderRadius: BorderRadius.circular(4),
         child: LinearProgressIndicator(
@@ -259,7 +309,8 @@ class _PedidoTelaState extends State<PedidoTela> {
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Row(children: [
-            if (selo == 'Pago') TextButton(onPressed: () => _desfazerPago(p), child: const Text('Desfazer pago')),
+            if (selo == 'Pago')
+              IconButton(tooltip: 'Desfazer pago', icon: const Icon(Icons.undo), onPressed: () => _desfazerPago(p)),
             const Spacer(),
             if (saldo >= 0.005)
               FilledButton.tonalIcon(
@@ -293,16 +344,7 @@ class _PedidoTelaState extends State<PedidoTela> {
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
             ),
             Selo(nomesStatusPedido[status] ?? status, cor: status == 'cancelado' ? vermelho : null),
-            if (status == 'entregue')
-              PopupMenuButton<void>(
-                tooltip: 'Mais opções',
-                itemBuilder: (_) => [
-                  PopupMenuItem(
-                    onTap: _reabrir,
-                    child: const ListTile(leading: Icon(Icons.undo), title: Text('Reabrir pedido')),
-                  ),
-                ],
-              ),
+            _menu(status),
           ]),
           if (lerData(p['entregue_em'] ?? p['data']) != null)
             Text(dataHora(lerData(p['entregue_em'] ?? p['data'])!)),
@@ -361,15 +403,6 @@ class _PedidoTelaState extends State<PedidoTela> {
                     : OutlinedButton(onPressed: () => _status(s), child: Text(nomesStatusPedido[s]!)),
             ]),
           ],
-          if (status != 'cancelado')
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: TextButton(
-                onPressed: () => _status('cancelado'),
-                style: TextButton.styleFrom(foregroundColor: vermelho),
-                child: const Text('Cancelar pedido'),
-              ),
-            ),
         ]),
       ),
     );
@@ -414,20 +447,43 @@ class _EditarValoresState extends State<EditarValores> {
   late final _desconto = ctrlDinheiro(num0(widget.pedido['desconto']));
   late final _frete = ctrlDinheiro(num0(widget.pedido['frete_cobrado']));
   late final _total = ctrlDinheiro(_somaTotal());
-  List<Json> _modelos = const [];
+  late final _envio = ctrlDinheiro(num0(widget.pedido['custo_envio']));
+  late final _obs = TextEditingController(text: widget.pedido['obs'] as String?);
+  late final String? _clienteAntes = widget.pedido['cliente_id'] as String? ?? mapa(widget.pedido['cliente'])['id'] as String?;
+  late String? _cliente = _clienteAntes;
+  late String? _canal = widget.pedido['canal_id'] as String?;
+
+  /// Entregue: a data da venda é a da entrega (é ela que conta no mês); antes disso, a data do pedido.
+  late final _campoData = widget.pedido['status'] == 'entregue' ? 'entregue_em' : 'data';
+  late final DateTime? _dataAntes = lerData(widget.pedido[_campoData] ?? widget.pedido['data'])?.toLocal();
+  late DateTime? _data = _dataAntes;
+  List<Json> _modelos = const [], _clientes = const [], _canais = const [];
 
   @override
   void initState() {
     super.initState();
-    _carregarModelos();
+    _carregar();
   }
 
-  /// Catálogo para adicionar item; sem ele (erro), ainda dá para lançar item avulso.
-  Future<void> _carregarModelos() async {
+  /// Catálogo, clientes e canais; sem eles (erro), ainda dá para lançar item avulso e mexer nos valores.
+  Future<void> _carregar() async {
     try {
-      final r = await buscar(context, '/api/modelos');
-      if (mounted) setState(() => _modelos = [for (final m in lista(r.dados)) if (m['excluido'] != true) m]);
+      final r = await buscarVarios(context, {'modelos': '/api/modelos', 'clientes': '/api/clientes', 'canais': '/api/canais'});
+      final d = r.dados as Map;
+      if (!mounted) return;
+      setState(() {
+        _modelos = [for (final m in lista(d['modelos'])) if (m['excluido'] != true) m];
+        _clientes = [for (final c in lista(d['clientes'])) if (c['excluido'] != true || c['id'] == _cliente) c];
+        _canais = lista(d['canais']);
+      });
     } catch (_) {}
+  }
+
+  Future<void> _escolherData() async {
+    final atual = _data ?? DateTime.now();
+    final d = await showDatePicker(
+        context: context, initialDate: atual, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 1)));
+    if (d != null) setState(() => _data = DateTime(d.year, d.month, d.day, atual.hour, atual.minute));
   }
 
   double _v(TextEditingController c) => lerNumero(c.text) ?? 0;
@@ -463,7 +519,7 @@ class _EditarValoresState extends State<EditarValores> {
       l.preco.dispose();
       l.nome.dispose();
     }
-    for (final c in [_desconto, _frete, _total]) {
+    for (final c in [_desconto, _frete, _total, _envio, _obs]) {
       c.dispose();
     }
     super.dispose();
@@ -547,6 +603,42 @@ class _EditarValoresState extends State<EditarValores> {
             Expanded(child: CampoDinheiro(_frete, 'Frete cobrado', aoMudar: (_) => _recalcular())),
           ]),
           const SizedBox(height: 12),
+          Row(children: [
+            TextButton.icon(
+              key: const Key('data-venda'),
+              onPressed: _escolherData,
+              icon: const Icon(Icons.event_outlined),
+              label: Text(_data == null ? 'Data' : dataCurta(_data!)),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: DropdownButtonFormField<String?>(
+                key: ValueKey('cliente-${_clientes.length}'), // a lista chega depois: remonta com o cliente marcado
+                initialValue: _clientes.any((c) => c['id'] == _cliente) ? _cliente : null,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Cliente'),
+                items: [
+                  const DropdownMenuItem<String?>(value: null, child: Text('Sem cliente')),
+                  for (final c in _clientes) DropdownMenuItem<String?>(value: c['id'] as String, child: Text('${c['nome']}')),
+                ],
+                onChanged: (v) => setState(() => _cliente = v),
+              ),
+            ),
+          ]),
+          if (_canais.length > 1)
+            CampoComAjuda(
+              rotulo: 'Canal de venda',
+              child: SeletorChips<String>(
+                opcoes: {for (final c in _canais) c['id'] as String: '${c['nome']}'},
+                valor: _canal,
+                aoMudar: (v) => setState(() => _canal = v),
+              ),
+            ),
+          MaisDetalhes(children: [
+            CampoDinheiro(_envio, 'Custo de envio (você paga)'),
+            CampoTexto(_obs, 'Observação', linhas: 2),
+          ]),
+          const SizedBox(height: 12),
           FilledButton(
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
             onPressed: _somaTotal() < 0 || itens.isEmpty
@@ -564,6 +656,12 @@ class _EditarValoresState extends State<EditarValores> {
                       ],
                       'desconto': arred2(_v(_desconto)),
                       'frete_cobrado': arred2(_v(_frete)),
+                      if (_cliente != _clienteAntes) 'cliente_id': _cliente,
+                      if (_canal != widget.pedido['canal_id']) 'canal_id': _canal,
+                      if (_data != null && _data != _dataAntes) _campoData: _data!.toUtc().toIso8601String(),
+                      if (arred2(_v(_envio)) != arred2(num0(widget.pedido['custo_envio'])))
+                        'custo_envio': arred2(_v(_envio)),
+                      if (_obs.text.trim() != '${widget.pedido['obs'] ?? ''}') 'obs': _obs.text.trim().isEmpty ? null : _obs.text.trim(),
                     }),
             child: const Text('Salvar'),
           ),

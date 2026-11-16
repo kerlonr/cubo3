@@ -23,6 +23,17 @@ import '../../widgets/seletores.dart';
   return (gramas: [for (var i = 0; i < fils.length; i++) (base + (i < sobra ? 1 : 0)) / 100], aviso: fils.length > 1);
 }
 
+/// Confirmada errada ou descartada sem querer: volta para "a confirmar" (o que lançou no estoque sai)
+/// para confirmar de novo. true = reabriu (quem chama abre a [ConfirmarTela]).
+Future<bool> reabrirImpressao(BuildContext context, Json i) async {
+  if (!await confirmar(context, 'Reabrir impressão?', 'O que ela lançou no estoque sai; em seguida confirme de novo.',
+          sim: 'Reabrir') ||
+      !context.mounted) {
+    return false;
+  }
+  return salvar(context, 'POST', '/api/impressoes/${i['id']}/reabrir', {}, feito: 'Reaberta');
+}
+
 class _Linha {
   _Linha({this.material, this.cor, double? gramas, this.carretel}) : gramas = ctrlNumero(gramas);
   final String? material, cor;

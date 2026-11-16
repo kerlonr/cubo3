@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../api/modelos.dart';
+import '../../tema.dart';
 import '../../util/formatos.dart';
 import '../../widgets/cartoes.dart';
 import '../../widgets/campos.dart';
@@ -77,7 +78,13 @@ class _FilamentoFormState extends State<FilamentoForm> {
   Widget build(BuildContext context) {
     final material = _outroMaterial ? 'Outro' : _material.text.toUpperCase();
     return Scaffold(
-      appBar: AppBar(title: Text(widget.dados == null ? 'Novo filamento' : 'Editar filamento')),
+      appBar: AppBar(title: Text(widget.dados == null ? 'Novo filamento' : 'Editar filamento'), actions: [
+        if (widget.dados != null)
+          IconButton(
+              tooltip: 'Excluir',
+              onPressed: () => excluirCadastro(context, 'Excluir filamento?', '/api/filamentos/${d['id']}'),
+              icon: const Icon(Icons.delete_outline, color: vermelho)),
+      ]),
       bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
       body: CorpoFormulario(chave: _form, children: [
         CampoComAjuda(

@@ -192,6 +192,11 @@ class _FinanceiroTelaState extends State<FinanceiroTela> {
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
             child: Text('Lucro das vendas ${m(num0(e['lucro_vendas']))}', style: fraco),
           ),
+          if (e['recebido_parcelas'] != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
+              child: Text('Recebido (parcelas) ${m(num0(e['recebido_parcelas']))}', style: fraco),
+            ),
           if (num0(e['perdas_g']) > 0)
             Card(
               margin: const EdgeInsets.only(top: 8),

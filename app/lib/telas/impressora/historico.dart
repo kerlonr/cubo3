@@ -15,7 +15,8 @@ const nomesStatus = {
   'descartada': 'Descartada',
 };
 
-/// Impressões registradas: "A confirmar" (padrão) e "Todas"; tocar numa pendente abre a confirmação.
+/// Impressões registradas: "A confirmar" (padrão) e "Todas"; tocar numa pendente abre a confirmação, numa
+/// confirmada/descartada oferece reabrir.
 class HistoricoImpressoes extends StatefulWidget {
   const HistoricoImpressoes({super.key, required this.impressoes, required this.abrir, this.impressora, this.topo});
 
@@ -92,7 +93,13 @@ class _HistoricoImpressoesState extends State<HistoricoImpressoes> {
             style: const TextStyle(fontFeatures: tabular)),
         trailing: Selo(nomesStatus[i['status']] ?? '${i['status']}',
             cor: i['status'] == 'a_confirmar' ? amarelo : (i['status'] == 'descartada' ? Colors.grey : null)),
-        onTap: pendente ? () => widget.abrir(ConfirmarTela(impressao: i)) : null,
+        onTap: pendente
+            ? () => widget.abrir(ConfirmarTela(impressao: i))
+            : () async {
+                if (await reabrirImpressao(context, i) && mounted) {
+                  widget.abrir(ConfirmarTela(impressao: {...i, 'status': 'a_confirmar'}));
+                }
+              },
       ),
     );
   }

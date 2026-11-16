@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../api/api.dart';
 import '../../api/fila.dart';
 import '../../api/modelos.dart';
+import '../../api/sessao.dart';
 import '../../util/formatos.dart';
 import '../../widgets/campos.dart';
 import '../../widgets/estado_tela.dart';
@@ -29,9 +30,11 @@ class _ImpressorasTelaState extends State<ImpressorasTela> {
 
   @override
   Widget build(BuildContext context) {
+    final dono = context.watch<Sessao>().dono; // só o dono grava impressora (o servidor recusa o membro)
     return Scaffold(
       appBar: AppBar(title: const Text('Impressoras'), actions: [
-        IconButton(icon: const Icon(Icons.add), tooltip: 'Nova impressora', onPressed: () => _abrir(const ImpressoraForm())),
+        if (dono)
+          IconButton(icon: const Icon(Icons.add), tooltip: 'Nova impressora', onPressed: () => _abrir(const ImpressoraForm())),
       ]),
       body: EstadoTela<List>(
         key: ValueKey(_versao),
@@ -42,8 +45,8 @@ class _ImpressorasTelaState extends State<ImpressorasTela> {
           titulo: 'Nenhuma impressora',
           explicacao: 'Cadastre sua impressora: ela entra no custo de cada peça (energia e desgaste) e, com o Klipper, '
               'você acompanha a impressão ao vivo.',
-          acao: 'Cadastrar impressora',
-          aoTocar: () => _abrir(const ImpressoraForm()),
+          acao: dono ? 'Cadastrar impressora' : null,
+          aoTocar: dono ? () => _abrir(const ImpressoraForm()) : null,
         ),
         construir: (context, l) => ListView(padding: const EdgeInsets.all(16), children: [
           for (final i in lista(l))
@@ -53,7 +56,7 @@ class _ImpressorasTelaState extends State<ImpressorasTela> {
                 title: Text('${i['nome']}'),
                 subtitle: Text([custoHora(num0(i['custo_hora'])), if ((i['moonraker_url'] ?? '') != '') '${i['moonraker_url']}']
                     .join(' · ')),
-                onTap: () => _abrir(ImpressoraForm(dados: i)),
+                onTap: dono ? () => _abrir(ImpressoraForm(dados: i)) : null,
                 trailing: (i['moonraker_url'] ?? '') == ''
                     ? null
                     : IconButton(

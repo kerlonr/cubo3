@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../api/api.dart';
 import '../api/cache.dart';
 import '../api/fila.dart';
+import '../tema.dart';
 import '../util/formatos.dart';
 
 /// Lê um GET pela fila e pelo cache: envia as pendências antes (para a lista já vir com elas)
@@ -201,3 +202,12 @@ Future<bool> confirmar(BuildContext context, String titulo, String texto,
       ),
     ) ==
     true;
+
+/// Excluir um cadastro (filamento, insumo) do formulário de edição: confirma, manda o DELETE e fecha.
+Future<void> excluirCadastro(BuildContext context, String titulo, String caminho) async {
+  if (!await confirmar(context, titulo, 'O que já foi lançado continua mostrando o nome.', sim: 'Excluir', cor: vermelho) ||
+      !context.mounted) {
+    return;
+  }
+  if (await salvar(context, 'DELETE', caminho, {}, feito: 'Excluído') && context.mounted) Navigator.pop(context, true);
+}
