@@ -11,6 +11,7 @@ import '../../api/cache.dart';
 import '../../api/modelos.dart';
 import '../../dominio/custos.dart';
 import '../../dominio/orcamento.dart';
+import '../../dominio/mensagens.dart' show linhasChavePix;
 import '../../tema.dart';
 import '../../util/formatos.dart';
 import '../../widgets/animacoes.dart';
@@ -314,7 +315,7 @@ class _OrcarTelaState extends State<OrcarTela> {
   Future<String?> _pix(PrecoSugerido p) async {
     if (!_comPix) return '';
     final r = await gerarCobranca(context, {'valor': arred2(p.preco)});
-    return r == null ? null : 'Pix copia e cola:\n${r['copia_e_cola']}';
+    return r == null ? null : '${linhasChavePix(r)}\nSe preferir, Pix copia e cola (copie só o código abaixo):\n${r['copia_e_cola']}';
   }
 
   Future<void> _compartilharTexto(PrecoSugerido p) async {

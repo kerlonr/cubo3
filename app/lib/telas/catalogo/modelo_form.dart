@@ -282,6 +282,12 @@ class _ModeloFormState extends State<ModeloForm> {
                   valor: _porImpressao,
                   aoMudar: (v) => setState(() => _porImpressao = v)),
             ]),
+            if (_porImpressao > 1)
+              Text(
+                  'Gramas e tempo acima são da mesa com $_porImpressao. Cada unidade: '
+                  '${gramas(gramasTotal / _porImpressao)} · ${duracao(_horas / _porImpressao * 3600)} · custo ${moeda(custo.total)}',
+                  key: const Key('por_unidade'),
+                  style: fraco.copyWith(fontFeatures: tabular)),
             const Secao('Insumos'),
             Text('O que vai junto e entra no preço: switch, argola, ímã, embalagem.', style: fraco),
             const SizedBox(height: 8),

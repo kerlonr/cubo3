@@ -20,9 +20,17 @@ void main() {
     expect(mensagemCliente(' Ana Souza'), 'Olá, Ana! Tudo bem? Aqui é da Cubo³.');
   });
 
-  test('cobrança no Pix: oi, itens, valor e o copia e cola por último', () {
-    expect(mensagemCobranca(nome: 'Ana Souza', itens: ['Vaso (2 un.)'], valor: 45.9, codigo: '000201abc'),
-        'Olá, Ana! Segue o Pix do seu pedido:\n• Vaso (2 un.)\n\nValor: R\$ 45,90\n\nPix copia e cola:\n000201abc');
+  test('cobrança no Pix: valor e chave (CPF) em destaque, copia e cola por último', () {
+    expect(
+        mensagemCobranca(
+            nome: 'Ana Souza',
+            itens: ['Vaso (2 un.)'],
+            valor: 45.9,
+            codigo: '000201abc',
+            pix: {'tipo': 'cpf', 'chave': '529.982.247-25', 'recebedor': 'Kerlon Ribeiro'}),
+        'Olá, Ana! Segue o Pix do seu pedido:\n• Vaso (2 un.)\n\n*Valor: R\$ 45,90*\n'
+        'Chave Pix (CPF): *529.982.247-25*\nNome: Kerlon Ribeiro\n'
+        '\nSe preferir, Pix copia e cola (copie só o código abaixo):\n000201abc');
     expect(mensagemCobranca(nome: '', itens: [], valor: 10, codigo: 'x'), startsWith('Olá! Segue o Pix'));
   });
 

@@ -18,7 +18,8 @@ from app.catalogo.modelos import Arquivo, Modelo
 from app.config import config
 from app.crud import consulta_lista, obter, rotas_crud, serializar
 from app.db import get_db
-from app.estoque.servico import saldo
+from app.custos import r2
+from app.estoque.servico import custo_medio_peca, saldo
 
 
 class ItemReceitaFilamento(BaseModel):
@@ -96,6 +97,7 @@ def saida_modelo(db: Session, m: Modelo, vendidos: Decimal | None = None) -> dic
     return {**serializar(m), "custo": custo_json(custo),
             "lucro_unitario": float(m.preco_venda - custo.total) if m.preco_venda is not None else None,
             "estoque": float(saldo(db, m.empresa_id, "peca", m.id)), "vendidos": float(vendidos),
+            "custo_real": float(r2(real)) if (real := custo_medio_peca(db, m.empresa_id, m.id)) is not None else None,
             "arquivos": [saida_arquivo(a) for a in arquivos],
             "capa_url": f"/api/arquivos/{m.capa_id}" if m.capa_id else None}
 

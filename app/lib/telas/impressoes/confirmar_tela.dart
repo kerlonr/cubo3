@@ -63,6 +63,23 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
   String? _finalidade;
   String? _impressora;
   int _pecas = 1;
+
+  /// Peça da receita que esta impressão fez (null = o item inteiro). Só para itens de várias peças.
+  int? _parte;
+
+  List<String> _partesDo(List modelos, String? id) => [
+        for (final (i, f) in lista(mapa(modelos.where((m) => m['id'] == id).firstOrNull?['receita'])['filamentos']).indexed)
+          '${f['nome'] ?? ''}'.isEmpty ? 'Peça ${i + 1}' : '${f['nome']}'
+      ];
+
+  /// Arquivo "keycap.gcode" de um modelo com a peça "Keycap": já sugere a peça.
+  int? _adivinharParte(List modelos, String? id) {
+    final partes = _partesDo(modelos, id);
+    final arquivo = '${_imp?['arquivo'] ?? ''}'.toLowerCase();
+    if (partes.length < 2 || arquivo.isEmpty) return null;
+    final i = partes.indexWhere((p) => arquivo.contains(p.toLowerCase()));
+    return i < 0 ? null : i;
+  }
   final _linhas = <_Linha>[];
   final _perdas = <_Linha>[];
   final _horas = TextEditingController();
@@ -83,6 +100,7 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
     _modelo = _imp?['modelo_id'] as String?;
     if (_modelo != null) _finalidade = 'venda';
     _pecas = _porImpressao(lista(cad['modelos']), _modelo);
+    _parte = _adivinharParte(lista(cad['modelos']), _modelo);
     // Lançamento manual: com uma impressora só (sem seletor) ou sem escolha, usa a primeira — sem ela o custo/hora sai do padrão.
     final impressoras = lista(cad['impressoras']);
     if (impressoras.isNotEmpty) _impressora = impressoras.first['id'] as String;
@@ -139,6 +157,7 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
         'consumos': consumos,
         'perdas': perdas,
         'modelo_id': ?_modelo,
+        'parte': ?_parte,
         if (lerNumero(_maoObra.text) != null) 'mao_obra_min': lerNumero(_maoObra.text),
       }));
       if (!mounted) return;
@@ -247,8 +266,29 @@ class _ConfirmarTelaState extends State<ConfirmarTela> {
         onChanged: (v) => setState(() {
           _modelo = v;
           if (_finalidade != 'falhou') _pecas = _porImpressao(modelos, v);
+          _parte = _adivinharParte(modelos, v);
         }),
       ),
+      if (_partesDo(modelos, _modelo).length > 1) ...[
+        const SizedBox(height: 8),
+        const Text('O que saiu nesta impressão?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          ChoiceChip(
+              key: const Key('parte-inteiro'),
+              label: const Text('O item inteiro'),
+              selected: _parte == null,
+              onSelected: (_) => setState(() => _parte = null)),
+          for (final (i, nome) in _partesDo(modelos, _modelo).indexed)
+            ChoiceChip(
+                key: Key('parte$i'), label: Text('Só $nome'), selected: _parte == i, onSelected: (_) => setState(() => _parte = i)),
+        ]),
+        if (_parte != null)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('O item entra no estoque quando houver uma de cada peça.', style: TextStyle(fontSize: 12)),
+          ),
+      ],
       const SizedBox(height: 12),
       SegmentedButton<String>(
         emptySelectionAllowed: true,

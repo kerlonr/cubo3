@@ -171,6 +171,6 @@ void main() {
     await tester.tap(find.text('Texto'));
     await tester.pumpAndSettle();
     expect(amb.corpo('POST /api/pix/cobranca'), {'valor': 12.9});
-    expect(compartilhado, endsWith('Pix copia e cola:\n000201ORC'));
+    expect(compartilhado, endsWith('(copie só o código abaixo):\n000201ORC'));
   });
 }

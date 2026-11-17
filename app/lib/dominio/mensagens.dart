@@ -18,10 +18,21 @@ String formatarTelefone(String telefone) {
 String mensagemCliente(String nome) => 'Olá, ${primeiroNome(nome)}! Tudo bem? Aqui é da Cubo³.';
 
 /// Cobrança no Pix: o código vai por último, sozinho na linha, para o cliente copiar fácil.
-String mensagemCobranca({required String nome, required List<String> itens, required double valor, required String codigo}) {
+String mensagemCobranca(
+    {required String nome, required List<String> itens, required double valor, required String codigo, Map pix = const {}}) {
   final oi = nome.trim().isEmpty ? 'Olá!' : 'Olá, ${primeiroNome(nome)}!';
   final lista = itens.isEmpty ? '' : '${itens.map((i) => '• $i').join('\n')}\n\n';
-  return '$oi Segue o Pix do seu pedido:\n${lista}Valor: ${moeda(valor)}\n\nPix copia e cola:\n$codigo';
+  return '$oi Segue o Pix do seu pedido:\n$lista*Valor: ${moeda(valor)}*\n${linhasChavePix(pix)}'
+      '\nSe preferir, Pix copia e cola (copie só o código abaixo):\n$codigo';
+}
+
+/// "Chave Pix (CPF): 529.982.247-25" + nome do recebedor, para o cliente digitar no banco.
+String linhasChavePix(Map pix) {
+  final chave = '${pix['chave'] ?? ''}';
+  if (chave.isEmpty) return '';
+  const tipos = {'cpf': 'CPF', 'cnpj': 'CNPJ', 'email': 'e-mail', 'telefone': 'telefone', 'aleatoria': 'aleatória'};
+  return 'Chave Pix (${tipos[pix['tipo']] ?? 'chave'}): *$chave*\n'
+      '${'${pix['recebedor'] ?? ''}'.isEmpty ? '' : 'Nome: ${pix['recebedor']}\n'}';
 }
 
 /// Mensagem do pedido conforme a etapa: orçamento com itens e total, produção, pronto ou agradecimento.

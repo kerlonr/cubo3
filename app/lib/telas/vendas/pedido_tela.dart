@@ -217,8 +217,8 @@ class _PedidoTelaState extends State<PedidoTela> {
     return cobrarPedido(context,
         pedidoId: widget.id,
         telefone: cliente['telefone'] as String?,
-        mensagem: (valor, codigo) =>
-            mensagemCobranca(nome: '${cliente['nome'] ?? ''}', itens: itensMensagem(p), valor: valor, codigo: codigo));
+        mensagem: (valor, codigo, pix) => mensagemCobranca(
+            nome: '${cliente['nome'] ?? ''}', itens: itensMensagem(p), valor: valor, codigo: codigo, pix: pix));
   }
 
   /// Itens, quantidades, preços, desconto e frete (também em pedido entregue: o servidor refaz a baixa do estoque,

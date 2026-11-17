@@ -17,7 +17,7 @@ from app.db import Data, agora, get_db
 from app.vendas import servico
 from app.auth.modelos import Empresa
 from app.custos import r2
-from app.pix import copia_e_cola, txid_de
+from app.pix import copia_e_cola, exibir, txid_de
 from app.vendas.modelos import Cliente, Pedido, PedidoAnexo, PedidoPagamento
 
 
@@ -244,4 +244,5 @@ def cobranca(dados: CobrancaEntrada, resposta: Response, c: Ctx = Depends(ctx), 
     if valor is None:
         raise HTTPException(422, "Informe o valor")
     codigo = copia_e_cola(pix["chave"], pix["nome"], pix["cidade"], valor, txid_de(dados.pedido_id))
-    return {"valor": float(valor), "copia_e_cola": codigo, "recebedor": pix["nome"]}
+    return {"valor": float(valor), "copia_e_cola": codigo, "recebedor": pix["nome"], "tipo": pix["tipo"],
+            "chave": exibir(pix["tipo"], pix["chave"])}

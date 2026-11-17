@@ -251,6 +251,16 @@ class _ModeloTelaState extends State<ModeloTela> with EnvioComando {
           ]),
           _ficha(m, custo.total, lista(dados['filamentos']), lista(dados['insumos'])),
           const Secao('Custo'),
+          if (numOu(m['custo_real']) case final real?)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Real (impressões confirmadas) ${moeda(real)} · catálogo ${moeda(custo.total)}'
+                '${custo.total > 0 ? ' (${real >= custo.total ? '+' : ''}${numero((real - custo.total) / custo.total * 100)}%)' : ''}',
+                key: const Key('custo-real'),
+                style: TextStyle(fontWeight: FontWeight.w600, color: real > custo.total * 1.05 ? vermelho : null),
+              ),
+            ),
           QuebraCusto(custo),
           if (lista(m['links']).isNotEmpty) ...[
             const Secao('Links'),

@@ -223,7 +223,7 @@ Future<Json?> gerarCobranca(BuildContext context, Map corpo) async {
 
 /// Cobrar um pedido no Pix: gera a cobrança do saldo e abre a folha.
 Future<void> cobrarPedido(BuildContext context,
-    {required String pedidoId, String? telefone, required String Function(double valor, String codigo) mensagem}) async {
+    {required String pedidoId, String? telefone, required String Function(double valor, String codigo, Map pix) mensagem}) async {
   final r = await gerarCobranca(context, {'pedido_id': pedidoId});
   if (r == null || !context.mounted) return;
   await showModalBottomSheet<void>(
@@ -240,7 +240,7 @@ class FolhaCobranca extends StatefulWidget {
   final String? pedidoId;
   final Json inicial;
   final String? telefone;
-  final String Function(double valor, String codigo) mensagem;
+  final String Function(double valor, String codigo, Map pix) mensagem;
 
   @override
   State<FolhaCobranca> createState() => _FolhaCobrancaState();
@@ -289,7 +289,7 @@ class _FolhaCobrancaState extends State<FolhaCobranca> {
   Future<void> _enviar() async {
     final c = await _garantir();
     if (c == null) return;
-    final texto = widget.mensagem(_valorCodigo, c);
+    final texto = widget.mensagem(_valorCodigo, c, widget.inicial);
     final tel = widget.telefone ?? '';
     if (tel.isNotEmpty) {
       await launchUrl(linkWhatsapp(tel, texto: texto), mode: LaunchMode.externalApplication);
@@ -317,6 +317,19 @@ class _FolhaCobrancaState extends State<FolhaCobranca> {
             ),
           ]),
           CampoDinheiro(_valor, 'Valor', key: const Key('valor-cobranca'), aoMudar: (_) => setState(() => _copiado = false)),
+          if ('${widget.inicial['chave'] ?? ''}'.isNotEmpty)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.key),
+              title: Text('${widget.inicial['chave']}', key: const Key('chave-pix'),
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),
+              subtitle: const Text('Chave Pix (vai na mensagem)'),
+              trailing: IconButton(
+                tooltip: 'Copiar chave',
+                icon: const Icon(Icons.copy),
+                onPressed: () => Clipboard.setData(ClipboardData(text: '${widget.inicial['chave']}')),
+              ),
+            ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(12),

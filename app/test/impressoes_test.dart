@@ -93,6 +93,32 @@ void main() {
     expect(amb.ultimo('POST /api/impressoes/i1/confirmar'), isNull);
   });
 
+  testWidgets('item de várias peças: escolher "Só Keycap" manda a parte', (tester) async {
+    final amb = ambiente()
+      ..rotas['GET /api/modelos'] = (_) => [
+            {
+              'id': 'm2',
+              'nome': 'Fidget',
+              'excluido': false,
+              'receita': {
+                'filamentos': [
+                  {'nome': 'Case', 'gramas': 20},
+                  {'nome': 'Keycap', 'gramas': 13}
+                ]
+              }
+            }
+          ];
+    await abrir(tester, amb, impressao(estimativa: umaCor, modeloId: 'm2'));
+    await tester.tap(find.text('Venda'));
+    await tester.pump();
+    expect(find.byKey(const Key('parte-inteiro')), findsOneWidget);
+    await tester.tap(find.text('Só Keycap'));
+    await tester.pump();
+    await tester.tap(find.text('Confirmar'));
+    await tester.pumpAndSettle();
+    expect(amb.corpo('POST /api/impressoes/i1/confirmar')['parte'], 1);
+  });
+
   testWidgets('confirmar manda finalidade e consumo por carretel', (tester) async {
     final amb = ambiente();
     await abrir(tester, amb, impressao(estimativa: umaCor, modeloId: 'm1'));

@@ -83,6 +83,18 @@ def mascarar(tipo: str, chave: str) -> str:
     return chave[:3] + "•" * max(len(chave) - 5, 3) + chave[-2:]
 
 
+def exibir(tipo: str, chave: str) -> str:
+    """Chave como a pessoa digita no app do banco: 529.982.247-25, (54) 99999-8888..."""
+    if tipo == "cpf" and len(chave) == 11:
+        return f"{chave[:3]}.{chave[3:6]}.{chave[6:9]}-{chave[9:]}"
+    if tipo == "cnpj" and len(chave) == 14:
+        return f"{chave[:2]}.{chave[2:5]}.{chave[5:8]}/{chave[8:12]}-{chave[12:]}"
+    if tipo == "telefone" and len(chave) in (13, 14):
+        d = chave[3:]
+        return f"({d[:2]}) {d[2:-4]}-{d[-4:]}"
+    return chave
+
+
 def txid_de(id_: uuid.UUID | None) -> str:
     """Identificador que aparece no extrato do banco (até 25 letras e números)."""
     return ("CUBO3" + id_.hex[:20]).upper() if id_ else "***"

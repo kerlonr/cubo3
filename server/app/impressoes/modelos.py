@@ -23,6 +23,7 @@ class Impressao(DaEmpresa, Base):
     situacao_klipper: Mapped[str | None] = mapped_column(String(20))
     finalidade: Mapped[str | None] = mapped_column(String(10))
     pecas_boas: Mapped[int] = mapped_column(Integer, default=0)
+    parte: Mapped[int | None] = mapped_column(Integer)  # qual peça impressa da receita (None = o item inteiro)
     estimativa: Mapped[dict] = mapped_column(JSON, default=dict)
     miniatura: Mapped[str | None] = mapped_column(String(255))
     custo_total: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
