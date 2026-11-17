@@ -262,14 +262,22 @@ class LinhaPedido extends StatelessWidget {
   Widget build(BuildContext context) {
     final lucro = numOu(p['lucro']);
     final data = lerData(p['entregue_em']) ?? lerData(p['data']);
+    final cliente = mapa(p['cliente'])['nome'] as String?;
+    final itens = itensComQuantidade(p);
+    final recebido = num0(p['recebido']), saldo = num0(p['saldo']);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         onTap: aoTocar,
-        title: Text(mapa(p['cliente'])['nome'] as String? ?? resumoItens(p), maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-          Text([if (data != null) dataCurta(data), nomesStatusPedido[p['status']] ?? '${p['status']}'].join(' · ')),
-          if (seloPagamento(p) case final selo?) Selo(selo, cor: coresSeloPagamento[selo]),
+        title: Text(cliente ?? (itens.isEmpty ? 'Pedido' : itens), maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (cliente != null && itens.isNotEmpty) Text(itens, maxLines: 2, overflow: TextOverflow.ellipsis),
+          Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            Text([if (data != null) dataCurta(data), nomesStatusPedido[p['status']] ?? '${p['status']}'].join(' · ')),
+            if (seloPagamento(p) case final selo?) Selo(selo, cor: coresSeloPagamento[selo]),
+            if (recebido > 0 && saldo > 0)
+              Text('recebeu ${moeda(recebido)}', style: const TextStyle(fontSize: 12, fontFeatures: tabular)),
+          ]),
         ]),
         trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text(moeda(totalPedido(p)), style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),

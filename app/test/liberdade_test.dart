@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cubo3/telas/estoque/insumo_form.dart';
 import 'package:cubo3/telas/impressoes/confirmar_tela.dart';
 import 'package:cubo3/telas/impressora/historico.dart';
@@ -92,6 +94,24 @@ void main() {
     expect(corpo['cliente_id'], 'k2');
     expect(DateTime.parse(corpo['entregue_em'] as String).toLocal().day, 10);
     expect(corpo.containsKey('data'), isFalse, reason: 'entregue: a data da venda é a da entrega');
+  });
+
+  testWidgets('tocar no nome da venda: cria cliente novo na hora e ele vai no pedido', (tester) async {
+    final amb = await _abrirPedido(tester);
+    await tester.tap(find.byKey(const Key('nome-pedido')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ana').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('+ Novo cliente').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('novo-cliente-nome')), 'Renan');
+    await tester.tap(find.text('Criar'));
+    await tester.pumpAndSettle();
+    final novo = amb.recebidos.lastWhere((r) => r.method == 'PUT' && r.url.path.startsWith('/api/clientes/'));
+    expect((jsonDecode(novo.body) as Map)['nome'], 'Renan');
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    expect(amb.corpo('PUT /api/pedidos/p1')['cliente_id'], novo.url.pathSegments.last);
   });
 
   testWidgets('excluir pedido confirma e manda o DELETE', (tester) async {

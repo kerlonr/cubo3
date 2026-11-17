@@ -45,6 +45,10 @@ String nomeItem(Map it) {
   return '${it['descricao']}';
 }
 
+String itensComQuantidade(Map p) => [
+      for (final it in lista(p['itens'])) '${numero(num0(it['quantidade']))}× ${nomeItem(it)}',
+    ].join(' · ');
+
 String resumoItens(Map p) {
   final itens = lista(p['itens']);
   if (itens.isEmpty) return 'Pedido';
@@ -340,8 +344,12 @@ class _PedidoTelaState extends State<PedidoTela> {
         child: ListView(padding: const EdgeInsets.all(16), children: [
           Row(children: [
             Expanded(
-              child: Text(mapa(p['cliente'])['nome'] as String? ?? 'Sem cliente',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+              child: InkWell(
+                key: const Key('nome-pedido'),
+                onTap: status == 'cancelado' ? null : () => _editarValores(p),
+                child: Text(mapa(p['cliente'])['nome'] as String? ?? 'Sem cliente (toque para pôr)',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+              ),
             ),
             Selo(nomesStatusPedido[status] ?? status, cor: status == 'cancelado' ? vermelho : null),
             _menu(status),
@@ -458,6 +466,37 @@ class _EditarValoresState extends State<EditarValores> {
   late final DateTime? _dataAntes = lerData(widget.pedido[_campoData] ?? widget.pedido['data'])?.toLocal();
   late DateTime? _data = _dataAntes;
   List<Json> _modelos = const [], _clientes = const [], _canais = const [];
+  static const _novoCliente = '__novo__';
+
+  /// Cliente que ainda não está cadastrado (ex.: a venda do Renan): cria aqui mesmo e já escolhe.
+  Future<void> _criarCliente() async {
+    final nome = TextEditingController(), telefone = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Novo cliente'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(key: const Key('novo-cliente-nome'), controller: nome, autofocus: true,
+              textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Nome')),
+          TextField(controller: telefone, keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'WhatsApp (opcional)')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Criar')),
+        ],
+      ),
+    );
+    if (ok != true || nome.text.trim().isEmpty || !mounted) return setState(() {});
+    final id = novoId();
+    final dados = {'nome': nome.text.trim(), if (telefone.text.trim().isNotEmpty) 'telefone': telefone.text.trim()};
+    if (await salvar(context, 'PUT', '/api/clientes/$id', dados, feito: 'Cliente criado') && mounted) {
+      setState(() {
+        _clientes = [..._clientes, {'id': id, ...dados}];
+        _cliente = id;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -620,8 +659,9 @@ class _EditarValoresState extends State<EditarValores> {
                 items: [
                   const DropdownMenuItem<String?>(value: null, child: Text('Sem cliente')),
                   for (final c in _clientes) DropdownMenuItem<String?>(value: c['id'] as String, child: Text('${c['nome']}')),
+                  const DropdownMenuItem<String?>(value: _novoCliente, child: Text('+ Novo cliente')),
                 ],
-                onChanged: (v) => setState(() => _cliente = v),
+                onChanged: (v) => v == _novoCliente ? _criarCliente() : setState(() => _cliente = v),
               ),
             ),
           ]),
