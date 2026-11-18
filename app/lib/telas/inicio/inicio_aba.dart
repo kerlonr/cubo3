@@ -257,9 +257,12 @@ class CartaoInvestimento extends StatelessWidget {
 }
 
 class GraficoMeses extends StatelessWidget {
-  const GraficoMeses(this.meses, {super.key, this.oculto = false});
+  const GraficoMeses(this.meses, {super.key, this.oculto = false, this.aoTocar});
   final List<Json> meses;
   final bool oculto;
+
+  /// Índice do mês tocado (o Financeiro usa para filtrar aquele mês).
+  final void Function(int)? aoTocar;
 
   @override
   Widget build(BuildContext context) {
@@ -287,6 +290,11 @@ class GraficoMeses extends StatelessWidget {
       ),
       barTouchData: BarTouchData(
         enabled: !oculto,
+        touchCallback: (evento, resposta) {
+          if (aoTocar != null && evento is FlTapUpEvent && resposta?.spot != null) {
+            aoTocar!(resposta!.spot!.touchedBarGroupIndex);
+          }
+        },
         touchTooltipData: BarTouchTooltipData(
           getTooltipItem: (g, _, rod, i) =>
               BarTooltipItem('${i == 0 ? 'Receita' : 'Gastos'}\n${moeda(rod.toY)}', const TextStyle(color: Colors.white, fontSize: 12)),

@@ -30,8 +30,11 @@ rotas = APIRouter(prefix="/api", tags=["painel"])
 
 
 def _periodo(inicio: date | None, fim: date | None) -> tuple[date, date]:
+    """Sem início nem fim: desde sempre até hoje (o geral). Só com início: o mês dele."""
     hoje = datetime.now(ZoneInfo(config().fuso)).date()
-    inicio = inicio or hoje.replace(day=1)
+    if inicio is None and fim is None:
+        return painel.DESDE_SEMPRE, hoje
+    inicio = inicio or painel.DESDE_SEMPRE
     fim = fim or (inicio.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
     if fim < inicio:
         raise HTTPException(422, "Fim antes do início")
@@ -41,7 +44,7 @@ def _periodo(inicio: date | None, fim: date | None) -> tuple[date, date]:
 @rotas.get("/extrato")
 def ver_extrato(inicio: date | None = None, fim: date | None = None, c: Ctx = Depends(ctx),
                 db: Session = Depends(get_db)):
-    """Tudo que entrou e saiu no período (padrão: mês atual), linha a linha, para conferir e corrigir."""
+    """Tudo que entrou e saiu no período (padrão: desde sempre), linha a linha, para conferir e corrigir."""
     inicio, fim = _periodo(inicio, fim)
     return painel.extrato(db, c.empresa_id, inicio, fim, config().fuso)
 

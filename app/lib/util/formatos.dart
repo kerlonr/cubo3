@@ -33,6 +33,9 @@ String hora(DateTime d) => _hora.format(d.toLocal());
 /// Data do servidor (ISO) ou null.
 DateTime? lerData(Object? v) => v is String ? DateTime.tryParse(v) : null;
 
+/// "novembro 2026" → "Novembro 2026" (o intl devolve o mês em minúscula).
+String capitalizar(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
 /// "AAAA-MM-DD" do dia local (campos `date` do servidor).
 String diaIso(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
 

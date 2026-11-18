@@ -9,6 +9,7 @@ import '../../widgets/cartoes.dart';
 import '../../widgets/campos.dart';
 import '../../widgets/estado_tela.dart';
 import '../casca.dart';
+import '../inicio/inicio_aba.dart' show GraficoMeses;
 import '../estoque/carretel_form.dart';
 import '../vendas/pedido_tela.dart';
 
@@ -41,8 +42,11 @@ const _icones = {
 /// null = tudo; true = só entradas (vendas); false = só saídas.
 const _filtros = {'Tudo': null, 'Entradas': true, 'Saídas': false};
 
-/// Extrato do mês: o que entrou (vendas entregues) e o que saiu (compras do Estoque e gastos lançados).
-/// Tocar numa linha abre onde ela se corrige.
+/// Período em análise. "Geral" é o padrão: sem início nem fim o servidor soma desde sempre.
+enum Escopo { geral, mes, ano }
+
+/// Extrato: o que entrou (vendas entregues) e o que saiu (compras do Estoque e gastos lançados),
+/// com resumo por mês e por categoria. Tocar numa linha abre onde ela se corrige.
 class FinanceiroTela extends StatefulWidget {
   const FinanceiroTela({super.key});
 
@@ -52,7 +56,31 @@ class FinanceiroTela extends StatefulWidget {
 
 class _FinanceiroTelaState extends State<FinanceiroTela> {
   DateTime _mes = DateTime(DateTime.now().year, DateTime.now().month);
+  Escopo _escopo = Escopo.geral;
   String _filtro = 'Tudo';
+
+  /// Geral: sem datas (o servidor soma desde sempre). Mês e ano mandam o intervalo.
+  Map<String, String> get _periodo => switch (_escopo) {
+        Escopo.geral => const {},
+        Escopo.mes => {'inicio': diaIso(_mes), 'fim': diaIso(DateTime(_mes.year, _mes.month + 1, 0))},
+        Escopo.ano => {'inicio': diaIso(DateTime(_mes.year)), 'fim': diaIso(DateTime(_mes.year, 12, 31))},
+      };
+
+  String get _titulo => switch (_escopo) {
+        Escopo.geral => 'Desde o começo',
+        Escopo.mes => capitalizar(DateFormat('MMMM yyyy', 'pt_BR').format(_mes)),
+        Escopo.ano => '${_mes.year}',
+      };
+
+  void _andar(int passo) => setState(() => _mes = _escopo == Escopo.ano
+      ? DateTime(_mes.year + passo, _mes.month)
+      : DateTime(_mes.year, _mes.month + passo));
+
+  void _verMes(String mes) => setState(() {
+        final partes = mes.split('-');
+        _mes = DateTime(int.parse(partes.first), int.parse(partes.last));
+        _escopo = Escopo.mes;
+      });
 
   /// Compra de insumo: lançamentos de estoque não se editam (são a soma do saldo), então corrigir =
   /// excluir o errado e lançar o certo, na mesma data, pela fila (em ordem, funciona sem internet).
@@ -127,7 +155,6 @@ class _FinanceiroTelaState extends State<FinanceiroTela> {
 
   @override
   Widget build(BuildContext context) {
-    final nome = DateFormat('MMMM yyyy', 'pt_BR').format(_mes);
     return Scaffold(
       appBar: AppBar(title: const Text('Financeiro'), actions: [
         const BotaoOlho(),
@@ -135,25 +162,29 @@ class _FinanceiroTelaState extends State<FinanceiroTela> {
             tooltip: 'Lançar gasto', icon: const Icon(Icons.add), onPressed: () => abrirTela(context, const DespesaForm())),
       ]),
       body: Column(children: [
-        Row(children: [
-          IconButton(
-              tooltip: 'Mês anterior',
-              onPressed: () => setState(() => _mes = DateTime(_mes.year, _mes.month - 1)),
-              icon: const Icon(Icons.chevron_left)),
-          Expanded(
-            child: Text(nome[0].toUpperCase() + nome.substring(1),
-                textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
-          ),
-          IconButton(
-              tooltip: 'Próximo mês',
-              onPressed: () => setState(() => _mes = DateTime(_mes.year, _mes.month + 1)),
-              icon: const Icon(Icons.chevron_right)),
-        ]),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Row(children: [
+            for (final (e, rotulo) in const [(Escopo.geral, 'Geral'), (Escopo.mes, 'Mês'), (Escopo.ano, 'Ano')])
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                    label: Text(rotulo), selected: _escopo == e, onSelected: (_) => setState(() => _escopo = e)),
+              ),
+          ]),
+        ),
+        if (_escopo != Escopo.geral)
+          Row(children: [
+            IconButton(tooltip: 'Anterior', onPressed: () => _andar(-1), icon: const Icon(Icons.chevron_left)),
+            Expanded(
+              child: Text(_titulo, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
+            ),
+            IconButton(tooltip: 'Próximo', onPressed: () => _andar(1), icon: const Icon(Icons.chevron_right)),
+          ]),
         Expanded(
           child: EstadoTela<Map>(
-            key: ValueKey(_mes),
-            carregar: () => buscar(context, '/api/extrato',
-                query: {'inicio': diaIso(_mes), 'fim': diaIso(DateTime(_mes.year, _mes.month + 1, 0))}),
+            key: ValueKey('$_escopo|$_mes'),
+            carregar: () => buscar(context, '/api/extrato', query: _periodo),
             construir: (context, e) => ValueListenableBuilder<bool>(
               valueListenable: valoresOcultos,
               builder: (_, oculto, _) => _corpo(e, oculto),
@@ -187,7 +218,8 @@ class _FinanceiroTelaState extends State<FinanceiroTela> {
                     icone: Icons.north_east, aoTocar: () => setState(() => _filtro = _filtro == 'Saídas' ? 'Tudo' : 'Saídas'))),
           ]),
           const SizedBox(height: 8),
-          CartaoValor('Resultado do mês', m(resultado), cor: oculto ? null : corResultado(resultado)),
+          CartaoValor(_escopo == Escopo.geral ? 'Resultado geral' : 'Resultado · $_titulo', m(resultado),
+              cor: oculto ? null : corResultado(resultado)),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
             child: Text('Lucro das vendas ${m(num0(e['lucro_vendas']))}', style: fraco),
@@ -206,16 +238,26 @@ class _FinanceiroTelaState extends State<FinanceiroTela> {
                 subtitle: const Text('Já no custo do carretel: não soma no "Saiu"'),
               ),
             ),
-          const SizedBox(height: 12),
+          ..._porMes(lista(e['por_mes']), oculto, fraco),
+          ..._porCategoria(lista(e['por_categoria']), num0(e['saiu']), m, fraco),
+          const Secao('Lançamentos'),
           Wrap(spacing: 8, children: [
             for (final f in _filtros.keys)
               ChoiceChip(label: Text(f), selected: _filtro == f, onSelected: (_) => setState(() => _filtro = f)),
           ]),
           const SizedBox(height: 8),
+          if (num0(e['total_linhas']) > lista(e['linhas']).length)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                  'Mostrando os ${lista(e['linhas']).length} mais recentes de ${numero(num0(e['total_linhas']))}. '
+                  'Os totais acima contam tudo.',
+                  style: fraco),
+            ),
           if (linhas.isEmpty)
             EstadoVazio(
               icone: Icons.receipt_outlined,
-              titulo: 'Nada neste mês',
+              titulo: _escopo == Escopo.geral ? 'Nada lançado ainda' : 'Nada em $_titulo',
               explicacao: 'Vendas entregues, compras do Estoque e gastos.',
               acao: 'Lançar gasto',
               aoTocar: () => abrirTela(context, const DespesaForm()),
@@ -224,6 +266,73 @@ class _FinanceiroTelaState extends State<FinanceiroTela> {
         ]),
       ),
     );
+  }
+
+  /// Gráfico dos últimos 12 meses do período e a média mensal; tocar numa barra abre aquele mês.
+  List<Widget> _porMes(List meses, bool oculto, TextStyle fraco) {
+    if (meses.length < 2) return const [];
+    final ultimos = meses.length > 12 ? meses.sublist(meses.length - 12) : meses;
+    final receita = meses.fold(0.0, (t, x) => t + num0(x['receita'])) / meses.length;
+    final gastos = meses.fold(0.0, (t, x) => t + num0(x['gastos'])) / meses.length;
+    return [
+      Secao(ultimos.length < meses.length ? 'Por mês (últimos 12)' : 'Por mês'),
+      SizedBox(
+        height: 180,
+        child: GraficoMeses(
+          [for (final x in ultimos) mapa(x)],
+          oculto: oculto,
+          aoTocar: (i) => _verMes('${ultimos[i]['mes']}'),
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(
+          oculto
+              ? 'Média por mês: $mascaraValor'
+              : 'Média por mês: entrou ${moeda(receita)} · saiu ${moeda(gastos)} · sobra ${moeda(receita - gastos)}',
+          key: const Key('media_mes'),
+          style: fraco),
+    ];
+  }
+
+  /// Para onde o dinheiro foi: cada categoria com a fatia que ocupa do que saiu.
+  List<Widget> _porCategoria(List categorias, double saiu, String Function(num) m, TextStyle fraco) {
+    if (categorias.isEmpty) return const [];
+    final t = Theme.of(context);
+    return [
+      const Secao('Para onde foi o dinheiro'),
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Column(children: [
+            for (final c in categorias)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Row(children: [
+                    Icon(_icones['${c['categoria']}'] ?? Icons.receipt_outlined, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(categoriasDespesa['${c['categoria']}'] ?? '${c['categoria']}')),
+                    Text(
+                        saiu > 0
+                            ? '${m(num0(c['valor']))} · ${numero(num0(c['valor']) / saiu * 100)}%'
+                            : m(num0(c['valor'])),
+                        style: const TextStyle(fontFeatures: tabular)),
+                  ]),
+                  const SizedBox(height: 4),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: saiu > 0 ? (num0(c['valor']) / saiu).clamp(0, 1) : 0,
+                      minHeight: 6,
+                      backgroundColor: t.colorScheme.surfaceContainerHighest,
+                    ),
+                  ),
+                ]),
+              ),
+          ]),
+        ),
+      ),
+    ];
   }
 
   Widget _linha(Map l, String Function(num) m, bool oculto, TextStyle fraco) {

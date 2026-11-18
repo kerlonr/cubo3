@@ -16,6 +16,17 @@ const extrato = {
   'lucro_vendas': 60,
   'perdas_g': 35,
   'perdas_valor': 3.5,
+  'total_linhas': 4,
+  'por_mes': [
+    {'mes': '2026-09', 'receita': 200, 'gastos': 100, 'lucro': 80},
+    {'mes': '2026-10', 'receita': 0, 'gastos': 40, 'lucro': 0},
+    {'mes': '2026-11', 'receita': 100, 'gastos': 140, 'lucro': 60},
+  ],
+  'por_categoria': [
+    {'categoria': 'filamento', 'valor': 90},
+    {'categoria': 'insumo', 'valor': 30},
+    {'categoria': 'desperdicio', 'valor': 20},
+  ],
   'linhas': [
     {'tipo': 'venda', 'id': 'p1', 'data': '2026-11-10', 'descricao': 'Vaso · Ana', 'valor': 100, 'lucro': 60, 'pago': false},
     {'tipo': 'despesa', 'id': 'd1', 'data': '2026-11-09', 'descricao': null, 'valor': 20, 'categoria': 'desperdicio'},
@@ -48,23 +59,22 @@ Future<Ambiente> abrirFinanceiro(WidgetTester tester) async {
   });
   await amb.preparar();
   valoresOcultos.value = false;
-  await tamanhoTela(tester, 360, 1600);
+  await tamanhoTela(tester, 360, 2600); // extrato + análise: a lista só constrói o que cabe na tela
   await tester.pumpWidget(amb.tela(const FinanceiroTela()));
   await tester.pumpAndSettle();
   return amb;
 }
 
 void main() {
-  testWidgets('Financeiro: extrato do mês pedido ao servidor, cartões, perdas e filtro de saídas', (tester) async {
+  testWidgets('Financeiro: abre no geral (sem datas), cartões, perdas e filtro de saídas', (tester) async {
     final amb = await abrirFinanceiro(tester);
-    final q = amb.ultimo('GET /api/extrato')!.url.queryParameters;
-    final hoje = DateTime.now();
-    expect(q['inicio'], '${hoje.year}-${hoje.month.toString().padLeft(2, '0')}-01');
-    expect(DateTime.parse(q['fim']!).add(const Duration(days: 1)).day, 1); // último dia do mês
+    expect(amb.ultimo('GET /api/extrato')!.url.queryParameters, isEmpty, reason: 'sem datas = desde sempre');
+    expect(find.text('Resultado geral'), findsOneWidget);
     expect(find.text('R\$ 100,00'), findsOneWidget); // Entrou
     expect(find.text('-R\$ 40,00'), findsOneWidget); // Resultado
     expect(find.textContaining('Perdas: 35 g'), findsOneWidget);
-    expect(find.text('Desperdício'), findsOneWidget); // despesa sem descrição mostra a categoria
+    // Despesa sem descrição mostra a categoria (a outra "Desperdício" é a do resumo por categoria).
+    expect(find.descendant(of: find.byType(ListTile), matching: find.text('Desperdício')), findsOneWidget);
     await tester.tap(find.widgetWithText(ChoiceChip, 'Saídas'));
     await tester.pumpAndSettle();
     expect(find.text('Vaso · Ana'), findsNothing);
@@ -192,5 +202,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(amb.ultimo('DELETE /api/pagamentos/g2'), isNotNull);
     expect(amb.ultimo('DELETE /api/pagamentos/g1'), isNull);
+  });
+
+  testWidgets('Financeiro: por mês, média e gastos por categoria; tocar em Mês pede o intervalo', (tester) async {
+    final amb = await abrirFinanceiro(tester);
+    expect(find.text('Para onde foi o dinheiro'), findsOneWidget);
+    expect(find.text('Filamento'), findsOneWidget);
+    expect(find.text('R\$ 90,00 · 64,29%'), findsOneWidget, reason: '90 de 140 que saíram');
+    expect(tester.widget<Text>(find.byKey(const Key('media_mes'))).data,
+        'Média por mês: entrou R\$ 100,00 · saiu R\$ 93,33 · sobra R\$ 6,67');
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Mês'));
+    await tester.pumpAndSettle();
+    final q = amb.ultimo('GET /api/extrato')!.url.queryParameters;
+    final hoje = DateTime.now();
+    expect(q['inicio'], '${hoje.year}-${hoje.month.toString().padLeft(2, '0')}-01');
+    expect(DateTime.parse(q['fim']!).add(const Duration(days: 1)).day, 1); // último dia do mês
+    expect(find.textContaining('Resultado · '), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Ano'));
+    await tester.pumpAndSettle();
+    final a = amb.ultimo('GET /api/extrato')!.url.queryParameters;
+    expect([a['inicio'], a['fim']], ['${hoje.year}-01-01', '${hoje.year}-12-31']);
+    expect(find.text('Resultado · ${hoje.year}'), findsOneWidget);
+  });
+
+  testWidgets('Financeiro: aviso quando o extrato vem cortado', (tester) async {
+    final amb = Ambiente({
+      'GET /api/extrato': (_) => {...extrato, 'total_linhas': 530},
+    });
+    await amb.preparar();
+    valoresOcultos.value = false;
+    await tamanhoTela(tester, 360, 1600);
+    await tester.pumpWidget(amb.tela(const FinanceiroTela()));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Mostrando os 4 mais recentes de 530'), findsOneWidget);
   });
 }

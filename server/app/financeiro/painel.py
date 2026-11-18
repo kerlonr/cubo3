@@ -14,6 +14,12 @@ from app.vendas.modelos import Pedido, PedidoItem
 
 D = Decimal
 
+#: Antes disto nada existia: serve de início para "desde sempre".
+DESDE_SEMPRE = date(2000, 1, 1)
+
+#: O extrato devolve no máximo estas linhas (as mais recentes); os totais continuam de tudo.
+LIMITE_LINHAS = 200
+
 
 def _limites(inicio: date, fim: date, tz: ZoneInfo) -> tuple[datetime, datetime]:
     return datetime.combine(inicio, time.min, tz), datetime.combine(fim + timedelta(days=1), time.min, tz)
@@ -57,7 +63,7 @@ def calcular(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dic
         Pedido.entregue_em >= a, Pedido.entregue_em < b)) or 0
 
     # Desde sempre até o fim do período: quanto já foi investido e quanto voltou.
-    tudo = _entradas_saidas(db, empresa_id, date(2000, 1, 1), fim, tz)
+    tudo = _entradas_saidas(db, empresa_id, DESDE_SEMPRE, fim, tz)
     investido = sum((g for _, _, g in tudo), D(0))
     recebido = sum((r for _, r, _ in tudo), D(0))
 
@@ -104,6 +110,18 @@ def extrato(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dict
     tz = ZoneInfo(fuso)
     a, b = _limites(inicio, fim, tz)
     linhas = []
+    # Resumos para análise, somados dos valores exatos (não das linhas já arredondadas).
+    por_categoria: dict[str, Decimal] = {}
+    por_mes: dict[str, list[Decimal]] = {}
+
+    def somar(dia: date, receita: Decimal, gasto: Decimal, lucro: Decimal, categoria: str | None = None) -> None:
+        m = por_mes.setdefault(_mes(dia), [D(0), D(0), D(0)])
+        m[0] += receita
+        m[1] += gasto
+        m[2] += lucro
+        if categoria:
+            por_categoria[categoria] = por_categoria.get(categoria, D(0)) + gasto
+
     vendas = list(db.scalars(select(Pedido).where(
         Pedido.empresa_id == empresa_id, Pedido.status == "entregue", Pedido.excluido.is_(False),
         Pedido.entregue_em >= a, Pedido.entregue_em < b)))
@@ -119,6 +137,7 @@ def extrato(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dict
             m = db.get(Modelo, i.modelo_id) if i.modelo_id else None
             nomes.append(m.nome if m else i.descricao)
         resumo = (nomes[0] + (f" +{len(nomes) - 1}" if len(nomes) > 1 else "")) if nomes else "Venda"
+        somar(p.entregue_em.astimezone(tz).date(), D(p.receita or 0), D(0), D(p.lucro or 0))
         linhas.append({"tipo": "venda", "id": str(p.id), "data": p.entregue_em.astimezone(tz).date().isoformat(),
                        "descricao": f"{resumo} · {cl.nome}" if cl else resumo, "valor": float(r2(D(p.receita or 0))),
                        "lucro": float(r2(D(p.lucro or 0))), "pago": p.pago})
@@ -132,14 +151,18 @@ def extrato(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dict
             ins = db.get(Insumo, m.item_id) if m.item_tipo == "insumo" else None
             descricao = f"{ins.nome if ins else 'Insumo'} · {D(m.quantidade).normalize():f} un"
             categoria = "embalagem" if ins and ins.categoria == "embalagem" else "insumo"
+        somar(m.data.astimezone(tz).date(), D(0), D(m.valor), D(0), categoria)
         linhas.append({"tipo": "compra", "id": str(m.id), "data": m.data.astimezone(tz).date().isoformat(),
                        "descricao": descricao, "valor": float(r2(D(m.valor))), "categoria": categoria,
                        "quantidade": float(m.quantidade),
                        "item_tipo": m.item_tipo, "item_id": str(m.item_id)})
     for d in despesas:
+        somar(d.data, D(0), D(d.valor), D(0), d.categoria or "outros")
         linhas.append({"tipo": "despesa", "id": str(d.id), "data": d.data.isoformat(), "descricao": d.descricao,
                        "valor": float(r2(D(d.valor))), "categoria": d.categoria})
     linhas.sort(key=lambda l: l["data"], reverse=True)
+    total_linhas = len(linhas)
+    linhas = linhas[:LIMITE_LINHAS]
 
     # Filamento perdido em falhas (informativo: o dinheiro já saiu na compra do carretel).
     perdas_g, perdas_valor = D(0), D(0)
@@ -159,4 +182,9 @@ def extrato(db: Session, empresa_id, inicio: date, fim: date, fuso: str) -> dict
     return {"inicio": inicio.isoformat(), "fim": fim.isoformat(), "entrou": float(r2(entrou)), "saiu": float(r2(saiu)),
             "recebido_parcelas": float(r2(D(recebido_mes))),
             "resultado": float(r2(entrou - saiu)), "lucro_vendas": float(r2(lucro)),
-            "perdas_g": float(r2(perdas_g)), "perdas_valor": float(r2(perdas_valor)), "linhas": linhas}
+            "perdas_g": float(r2(perdas_g)), "perdas_valor": float(r2(perdas_valor)),
+            "por_categoria": [{"categoria": c, "valor": float(r2(v))}
+                              for c, v in sorted(por_categoria.items(), key=lambda x: -x[1]) if v > 0],
+            "por_mes": [{"mes": m, "receita": float(r2(r)), "gastos": float(r2(g)), "lucro": float(r2(lu))}
+                        for m, (r, g, lu) in sorted(por_mes.items())][-24:],
+            "total_linhas": total_linhas, "linhas": linhas}

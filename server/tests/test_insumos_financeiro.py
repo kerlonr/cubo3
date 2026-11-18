@@ -151,3 +151,29 @@ def test_compra_do_carretel_so_muda_pelo_carretel(cliente, dono):
     criar_carretel(cliente, dono, f["id"])
     compra = cliente.get("/api/extrato?inicio=2026-11-01&fim=2026-11-30", headers=dono).json()["linhas"][0]
     assert cliente.delete(f"/api/movimentos/{compra['id']}", headers=dono).status_code == 409
+
+
+def test_extrato_sem_periodo_pega_tudo_e_resume_por_mes_e_categoria(cliente, dono):
+    """Sem inicio/fim o extrato é o geral: soma meses diferentes e separa os gastos por categoria."""
+    import uuid
+    from test_catalogo import criar_modelo
+    from test_vendas import item, venda
+
+    m = criar_modelo(cliente, dono)
+    venda(cliente, dono, [item(m["id"], qtd=1, preco=100)], custo_envio=0, entregue_em="2026-09-10T15:00:00Z")
+    venda(cliente, dono, [item(m["id"], qtd=1, preco=50)], custo_envio=0, entregue_em="2026-11-10T15:00:00Z")
+    for data, categoria, valor in (("2026-09-05", "energia", 30), ("2026-11-05", "energia", 20),
+                                   ("2026-11-06", "ferramenta", 70)):
+        assert cliente.put(f"/api/despesas/{uuid.uuid4()}", headers=dono,
+                           json={"data": data, "categoria": categoria, "valor": valor}).status_code == 200
+
+    e = cliente.get("/api/extrato", headers=dono).json()
+    assert (e["entrou"], e["saiu"], e["resultado"]) == (150, 120, 30)
+    assert e["inicio"] == "2000-01-01"
+    assert [(x["mes"], x["receita"], x["gastos"]) for x in e["por_mes"]] == [("2026-09", 100, 30), ("2026-11", 50, 90)]
+    assert e["por_categoria"] == [{"categoria": "ferramenta", "valor": 70}, {"categoria": "energia", "valor": 50}]
+    assert e["total_linhas"] == len(e["linhas"]) == 5
+
+    setembro = cliente.get("/api/extrato?inicio=2026-09-01&fim=2026-09-30", headers=dono).json()
+    assert (setembro["entrou"], setembro["saiu"]) == (100, 30)
+    assert [x["mes"] for x in setembro["por_mes"]] == ["2026-09"]

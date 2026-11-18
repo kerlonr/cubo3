@@ -11,6 +11,7 @@ import 'package:cubo3/telas/estoque/filamento_form.dart';
 import 'package:cubo3/telas/impressoes/confirmar_tela.dart';
 import 'package:cubo3/telas/mais/configuracoes_tela.dart';
 import 'package:cubo3/telas/mais/empresa_tela.dart';
+import 'package:cubo3/telas/mais/financeiro_tela.dart';
 import 'package:cubo3/telas/mais/impressoras_tela.dart';
 import 'package:cubo3/telas/estoque/estoque_aba.dart';
 import 'package:cubo3/telas/orcar/orcar_tela.dart';
@@ -199,6 +200,28 @@ Ambiente cheio() => Ambiente({
           ],
       'GET /api/empresa/config': (_) =>
           {'eficiencia': 1.1, 'mao_obra_hora': 10, 'kwh': 0.656, 'reserva': 1.3, 'margens': [20, 30, 50]},
+      'GET /api/extrato': (_) => {
+            'entrou': grande,
+            'saiu': grande,
+            'resultado': -grande,
+            'lucro_vendas': grande,
+            'recebido_parcelas': grande,
+            'perdas_g': 123456.7,
+            'perdas_valor': grande,
+            'total_linhas': 530,
+            'por_mes': [
+              for (var m = 1; m <= 12; m++)
+                {'mes': '2026-${m.toString().padLeft(2, '0')}', 'receita': grande, 'gastos': grande / 2, 'lucro': grande / 3}
+            ],
+            'por_categoria': [
+              for (final c in ['filamento', 'insumo', 'equipamento', 'energia'])
+                {'categoria': c, 'valor': grande / 4}
+            ],
+            'linhas': [
+              {'tipo': 'venda', 'id': 'p1', 'data': '2026-11-10', 'descricao': longo, 'valor': grande, 'lucro': grande, 'pago': false},
+              {'tipo': 'despesa', 'id': 'd1', 'data': '2026-11-09', 'descricao': longo, 'valor': grande, 'categoria': 'equipamento'},
+            ],
+          },
     });
 
 /// Abas abrem dentro da casca (com a navegação); o resto, sozinho.
@@ -227,6 +250,7 @@ final telas = <String, Widget Function()>{
       ]),
   'confirmar': () => ConfirmarTela(impressao: Map<String, dynamic>.from(impressao)),
   'configuracoes': () => const ConfiguracoesTela(),
+  'financeiro': () => const FinanceiroTela(),
   'filamento_form': () => const FilamentoForm(),
   'carretel_form': () => const CarretelForm(),
   'modelo_form': () => ModeloForm(dados: modelo('m1')),
