@@ -77,10 +77,14 @@ Future<void> _baixar(BuildContext context, Map a) async {
 
 /// Comprovantes de pagamento do pedido: miniaturas, abrir, apagar e anexar (clipe; arrastar no navegador).
 class Comprovantes extends StatelessWidget {
-  const Comprovantes({super.key, required this.pedidoId, required this.anexos, required this.aoMudar});
+  const Comprovantes(
+      {super.key, required this.pedidoId, required this.anexos, required this.aoMudar, this.somenteLeitura = false});
   final String pedidoId;
   final List<Json> anexos;
   final VoidCallback aoMudar;
+
+  /// Venda bloqueada: dá para ver e baixar, não para anexar nem apagar.
+  final bool somenteLeitura;
 
   Future<void> _apagar(BuildContext context, Map a) async {
     if (!await confirmar(context, 'Apagar comprovante?', '${a['nome_original']} sai do pedido.',
@@ -139,18 +143,19 @@ class Comprovantes extends StatelessWidget {
             ),
           ),
         ),
-        Positioned(
-          top: 2,
-          right: 2,
-          child: IconButton(
-            tooltip: 'Apagar comprovante',
-            iconSize: 16,
-            visualDensity: VisualDensity.compact,
-            style: IconButton.styleFrom(backgroundColor: t.colorScheme.surface.withValues(alpha: 0.85)),
-            onPressed: () => _apagar(context, a),
-            icon: const Icon(Icons.close),
+        if (!somenteLeitura)
+          Positioned(
+            top: 2,
+            right: 2,
+            child: IconButton(
+              tooltip: 'Apagar comprovante',
+              iconSize: 16,
+              visualDensity: VisualDensity.compact,
+              style: IconButton.styleFrom(backgroundColor: t.colorScheme.surface.withValues(alpha: 0.85)),
+              onPressed: () => _apagar(context, a),
+              icon: const Icon(Icons.close),
+            ),
           ),
-        ),
       ]),
     );
   }
@@ -159,20 +164,27 @@ class Comprovantes extends StatelessWidget {
   Widget build(BuildContext context) {
     final conteudo = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Secao('Comprovantes',
-          acao: IconButton(
-            tooltip: 'Anexar comprovante (foto ou PDF)',
-            icon: const Icon(Icons.attach_file),
-            onPressed: () async {
-              if (await escolherComprovante(context, pedidoId) != null) aoMudar();
-            },
-          )),
+          acao: somenteLeitura
+              ? null
+              : IconButton(
+                  tooltip: 'Anexar comprovante (foto ou PDF)',
+                  icon: const Icon(Icons.attach_file),
+                  onPressed: () async {
+                    if (await escolherComprovante(context, pedidoId) != null) aoMudar();
+                  },
+                )),
       if (anexos.isEmpty)
-        Text(kIsWeb ? 'Nenhum. Toque no clipe ou arraste a foto/PDF aqui.' : 'Nenhum. Toque no clipe para anexar.',
+        Text(
+            somenteLeitura
+                ? 'Nenhum comprovante.'
+                : kIsWeb
+                    ? 'Nenhum. Toque no clipe ou arraste a foto/PDF aqui.'
+                    : 'Nenhum. Toque no clipe para anexar.',
             style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant))
       else
         Wrap(spacing: 8, runSpacing: 8, children: [for (final a in anexos) _miniatura(context, a)]),
     ]);
-    if (!kIsWeb) return conteudo;
+    if (!kIsWeb || somenteLeitura) return conteudo;
     return DropTarget(
       onDragDone: (d) async {
         var algum = false;

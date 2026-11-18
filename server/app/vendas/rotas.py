@@ -88,6 +88,28 @@ def _pedido_ativo(db: Session, c: Ctx, id: uuid.UUID) -> Pedido:
     return p
 
 
+def _editavel(p: Pedido) -> Pedido:
+    """Venda bloqueada é final: nada nela muda mais (valores, status, pagamentos, comprovantes, excluir)."""
+    if p.bloqueado:
+        raise HTTPException(409, "Venda bloqueada. Desbloqueie para alterar.")
+    return p
+
+
+class Bloqueio(BaseModel):
+    bloqueado: bool
+
+
+@rotas.post("/pedidos/{id}/bloqueio")
+def bloquear(id: uuid.UUID, dados: Bloqueio, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
+    """Fecha a venda contra qualquer alteração. Desbloquear é só do dono: o resto da equipe não desfaz."""
+    p = _pedido_ativo(db, c, id)
+    if not dados.bloqueado and c.papel != "dono":
+        raise HTTPException(403, "Só o dono da empresa pode desbloquear uma venda")
+    p.bloqueado = dados.bloqueado
+    db.commit()
+    return saida_pedido(db, p)
+
+
 @rotas.get("/pedidos/{id}")
 def um(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     return saida_pedido(db, _pedido_ativo(db, c, id))
@@ -97,6 +119,8 @@ def um(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
 def salvar(id: uuid.UUID, dados: servico.PedidoEntrada, c: Ctx = Depends(ctx), db: Session = Depends(get_db),
            x_versao_base: AwareDatetime | None = Header(None)):
     existente = db.get(Pedido, id)
+    if existente is not None and existente.empresa_id == c.empresa_id:
+        _editavel(existente)
     if existente is not None and existente.empresa_id == c.empresa_id and x_versao_base is not None \
             and existente.atualizado_em > x_versao_base:
         if servico.ja_aplicado(db, existente, dados):
@@ -109,7 +133,7 @@ def salvar(id: uuid.UUID, dados: servico.PedidoEntrada, c: Ctx = Depends(ctx), d
 
 @rotas.post("/pedidos/{id}/status")
 def status(id: uuid.UUID, dados: NovoStatus, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
-    p = _pedido_ativo(db, c, id)
+    p = _editavel(_pedido_ativo(db, c, id))
     avisos = servico.mudar_status(db, c, p, dados.status)
     db.commit()
     return saida_pedido(db, p, avisos)
@@ -117,7 +141,7 @@ def status(id: uuid.UUID, dados: NovoStatus, c: Ctx = Depends(ctx), db: Session 
 
 @rotas.delete("/pedidos/{id}")
 def excluir(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
-    p = obter(db, c, Pedido, id, "Pedido")
+    p = _editavel(obter(db, c, Pedido, id, "Pedido"))
     if p.status == "entregue":
         servico.mudar_status(db, c, p, "cancelado")  # devolve as peças ao estoque antes de sumir
     p.excluido = True
@@ -128,9 +152,7 @@ def excluir(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db))
 @rotas.post("/pedidos/{id}/anexos")
 async def anexar(id: uuid.UUID, arquivo: UploadFile, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     """Comprovante de pagamento (foto ou PDF), em qualquer etapa do pedido."""
-    p = obter(db, c, Pedido, id, "Pedido")
-    if p.excluido:
-        raise HTTPException(404, "Pedido não encontrado")
+    p = _editavel(_pedido_ativo(db, c, id))
     ext = Path(arquivo.filename or "").suffix.lower()
     if ext not in TIPOS_ANEXO:
         raise HTTPException(415, f"Comprovante precisa ser foto ou PDF (veio {ext or 'sem extensão'})")
@@ -155,6 +177,7 @@ def baixar_anexo(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get
 def apagar_anexo(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     # Exclusão lógica: o arquivo fica no disco (e no backup), comprovante de dinheiro não some de vez.
     a = obter(db, c, PedidoAnexo, id, "Comprovante")
+    _editavel(db.get(Pedido, a.pedido_id))
     a.excluido = True
     db.commit()
     return {"ok": True}
@@ -172,7 +195,7 @@ class PagamentoEntrada(BaseModel):
 def gravar_pagamento(pedido_id: uuid.UUID, id: uuid.UUID, dados: PagamentoEntrada, c: Ctx = Depends(ctx),
                      db: Session = Depends(get_db)):
     """Parcela recebida (sinal, parte, restante). Mesmo id = mesma parcela: reenvio da fila não duplica."""
-    p = _pedido_ativo(db, c, pedido_id)
+    p = _editavel(_pedido_ativo(db, c, pedido_id))
     if p.status == "cancelado":
         raise HTTPException(409, "Pedido cancelado não recebe pagamento")
     # Trava o pedido (Postgres): duas parcelas ao mesmo tempo não passam juntas do total.
@@ -206,9 +229,9 @@ def gravar_pagamento(pedido_id: uuid.UUID, id: uuid.UUID, dados: PagamentoEntrad
 @rotas.delete("/pagamentos/{id}")
 def apagar_pagamento(id: uuid.UUID, c: Ctx = Depends(ctx), db: Session = Depends(get_db)):
     x = obter(db, c, PedidoPagamento, id, "Pagamento")
+    p = _editavel(db.get(Pedido, x.pedido_id))
     x.excluido = True
     db.flush()
-    p = db.get(Pedido, x.pedido_id)
     if not servico.pagamentos(db, p):
         p.pago = False  # tirou a última parcela: volta a "a receber"
     servico.atualizar_pago(db, p)

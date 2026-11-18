@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String, Text, Uuid
+from sqlalchemy import ForeignKey, Integer, Numeric, String, Text, Uuid, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, DaEmpresa, UtcDateTime, agora
@@ -27,6 +27,8 @@ class Pedido(DaEmpresa, Base):
     frete_cobrado: Mapped[Decimal] = mapped_column(Num, default=0)
     custo_envio: Mapped[Decimal] = mapped_column(Num, default=0)
     pago: Mapped[bool] = mapped_column(default=False)
+    #: Venda fechada: não aceita mais edição nenhuma (valores, status, pagamentos, comprovantes).
+    bloqueado: Mapped[bool] = mapped_column(default=False, server_default=false())
     forma_pagamento: Mapped[str | None] = mapped_column(String(30))
     obs: Mapped[str | None] = mapped_column(Text)
     data: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)

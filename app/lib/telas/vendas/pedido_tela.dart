@@ -155,7 +155,24 @@ class _PedidoTelaState extends State<PedidoTela> {
     }
   }
 
-  Widget _menu(String status) {
+  /// Fecha a venda contra qualquer alteração (ou reabre, se o servidor deixar: só o dono).
+  Future<void> _bloquear(bool bloquear) async {
+    final texto = bloquear
+        ? 'Depois disso ninguém mais altera valores, status, pagamentos nem comprovantes desta venda.'
+        : 'A venda volta a aceitar alterações.';
+    if (!await confirmar(context, bloquear ? 'Bloquear venda?' : 'Desbloquear venda?', texto,
+            sim: bloquear ? 'Bloquear' : 'Desbloquear') ||
+        !mounted) {
+      return;
+    }
+    if (await salvar(context, 'POST', '/api/pedidos/${widget.id}/bloqueio', {'bloqueado': bloquear},
+            feito: bloquear ? 'Venda bloqueada' : 'Venda desbloqueada') &&
+        mounted) {
+      setState(() => _versao++);
+    }
+  }
+
+  Widget _menu(String status, bool bloqueado) {
     final anterior = etapaAnterior[status];
     PopupMenuItem<void> item(IconData icone, String texto, VoidCallback acao, {Color? cor}) => PopupMenuItem(
           onTap: acao,
@@ -164,12 +181,15 @@ class _PedidoTelaState extends State<PedidoTela> {
         );
     return PopupMenuButton<void>(
       tooltip: 'Mais opções',
-      itemBuilder: (_) => [
-        if (status == 'entregue' || status == 'cancelado') item(Icons.undo, 'Reabrir pedido', () => _reabrir(status)),
-        if (anterior != null) item(Icons.undo, 'Voltar para ${nomesStatusPedido[anterior]}', () => _status(anterior)),
-        if (status != 'cancelado') item(Icons.block, 'Cancelar pedido', () => _status('cancelado'), cor: vermelho),
-        item(Icons.delete_outline, 'Excluir pedido', _excluir, cor: vermelho),
-      ],
+      itemBuilder: (_) => bloqueado
+          ? [item(Icons.lock_open, 'Desbloquear venda', () => _bloquear(false))]
+          : [
+              if (status == 'entregue' || status == 'cancelado') item(Icons.undo, 'Reabrir pedido', () => _reabrir(status)),
+              if (anterior != null) item(Icons.undo, 'Voltar para ${nomesStatusPedido[anterior]}', () => _status(anterior)),
+              item(Icons.lock_outline, 'Bloquear venda', () => _bloquear(true)),
+              if (status != 'cancelado') item(Icons.block, 'Cancelar pedido', () => _status('cancelado'), cor: vermelho),
+              item(Icons.delete_outline, 'Excluir pedido', _excluir, cor: vermelho),
+            ],
     );
   }
 
@@ -254,7 +274,7 @@ class _PedidoTelaState extends State<PedidoTela> {
 
   /// "Recebido X de Y", a barra, as parcelas (tocar edita) e Receber / Cobrar no Pix.
   List<Widget> _pagamentos(Map p) {
-    final aberto = p['status'] != 'cancelado';
+    final aberto = p['status'] != 'cancelado' && p['bloqueado'] != true;
     final pags = lista(p['pagamentos']);
     final total = numOu(p['total']) ?? totalPedido(p);
     final recebido = recebidoPedido(p);
@@ -305,8 +325,9 @@ class _PedidoTelaState extends State<PedidoTela> {
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
             if (pag['anexo_id'] != null)
               const Tooltip(message: 'Com comprovante', child: Icon(Icons.receipt_long_outlined, size: 20)),
-            IconButton(
-                tooltip: 'Apagar pagamento', icon: const Icon(Icons.delete_outline), onPressed: () => _apagarPagamento(pag)),
+            if (aberto)
+              IconButton(
+                  tooltip: 'Apagar pagamento', icon: const Icon(Icons.delete_outline), onPressed: () => _apagarPagamento(pag)),
           ]),
         ),
       if (aberto)
@@ -326,7 +347,8 @@ class _PedidoTelaState extends State<PedidoTela> {
 
   Widget _corpo(Map p) {
     final status = '${p['status']}';
-    final proximos = proximasEtapas(status);
+    final bloqueada = p['bloqueado'] == true;
+    final proximos = bloqueada ? const <String>[] : proximasEtapas(status);
     Widget linha(String r, Object? v, {Color? cor, bool forte = false}) => v == null
         ? const SizedBox.shrink()
         : Padding(
@@ -346,14 +368,25 @@ class _PedidoTelaState extends State<PedidoTela> {
             Expanded(
               child: InkWell(
                 key: const Key('nome-pedido'),
-                onTap: status == 'cancelado' ? null : () => _editarValores(p),
+                onTap: status == 'cancelado' || bloqueada ? null : () => _editarValores(p),
                 child: Text(mapa(p['cliente'])['nome'] as String? ?? 'Sem cliente (toque para pôr)',
                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
               ),
             ),
             Selo(nomesStatusPedido[status] ?? status, cor: status == 'cancelado' ? vermelho : null),
-            _menu(status),
+            _menu(status, bloqueada),
           ]),
+          if (bloqueada)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(key: const Key('aviso-bloqueada'), children: [
+                const Icon(Icons.lock_outline, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Text('Venda bloqueada: nada aqui muda mais.',
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
+              ]),
+            ),
           if (lerData(p['entregue_em'] ?? p['data']) != null)
             Text(dataHora(lerData(p['entregue_em'] ?? p['data'])!)),
           if ('${mapa(p['cliente'])['telefone'] ?? ''}'.isNotEmpty && status != 'cancelado')
@@ -374,7 +407,7 @@ class _PedidoTelaState extends State<PedidoTela> {
               ),
             ),
           Secao('Itens',
-              acao: status == 'cancelado'
+              acao: status == 'cancelado' || bloqueada
                   ? null
                   : IconButton(
                       tooltip: 'Editar valores',
@@ -401,7 +434,11 @@ class _PedidoTelaState extends State<PedidoTela> {
           ] else
             linha('Total', totalPedido(p), forte: true),
           ..._pagamentos(p),
-          Comprovantes(pedidoId: widget.id, anexos: lista(p['anexos']), aoMudar: () => setState(() => _versao++)),
+          Comprovantes(
+              pedidoId: widget.id,
+              anexos: lista(p['anexos']),
+              somenteLeitura: bloqueada,
+              aoMudar: () => setState(() => _versao++)),
           if (proximos.isNotEmpty) ...[
             const Secao('Mudar status'),
             Wrap(spacing: 8, runSpacing: 8, children: [

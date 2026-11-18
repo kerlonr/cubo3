@@ -274,6 +274,8 @@ class LinhaPedido extends StatelessWidget {
           if (cliente != null && itens.isNotEmpty) Text(itens, maxLines: 2, overflow: TextOverflow.ellipsis),
           Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
             Text([if (data != null) dataCurta(data), nomesStatusPedido[p['status']] ?? '${p['status']}'].join(' · ')),
+            if (p['bloqueado'] == true)
+              const Tooltip(message: 'Venda bloqueada', child: Icon(Icons.lock_outline, size: 14)),
             if (seloPagamento(p) case final selo?) Selo(selo, cor: coresSeloPagamento[selo]),
             if (recebido > 0 && saldo > 0)
               Text('recebeu ${moeda(recebido)}', style: const TextStyle(fontSize: 12, fontFeatures: tabular)),

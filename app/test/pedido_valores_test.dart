@@ -4,8 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'apoio.dart';
 
-Map<String, Object?> pedido({List<Map> anexos = const []}) => {
+Map<String, Object?> pedido({List<Map> anexos = const [], bool bloqueado = false}) => {
       'id': 'p1',
+      'bloqueado': bloqueado,
       'status': 'entregue',
       'pago': true,
       'forma_pagamento': 'Pix',
@@ -139,5 +140,54 @@ void main() {
   testWidgets('pedido cancelado não mostra editar valores', (tester) async {
     await abrir(tester, {...pedido(), 'status': 'cancelado'});
     expect(find.byTooltip('Editar valores'), findsNothing);
+  });
+
+  testWidgets('venda bloqueada: nada de editar na tela, e o menu só oferece desbloquear', (tester) async {
+    final amb = await abrir(tester, {
+      ...pedido(anexos: [
+        {'id': 'a1', 'nome_original': 'pix.jpg', 'tipo': 'foto', 'tamanho': 10, 'url': '/api/anexos/a1'}
+      ], bloqueado: true),
+      'total': 44.9,
+      'recebido': 20,
+      'saldo': 24.9,
+      'pagamentos': [
+        {'id': 'g1', 'valor': 20, 'forma': 'Pix', 'data': '2026-11-15T12:00:00+00:00'}
+      ],
+    });
+    expect(find.byKey(const Key('aviso-bloqueada')), findsOneWidget);
+    for (final escondido in ['Receber', 'Editar valores', 'Cobrar no Pix', 'Apagar pagamento', 'Anexar comprovante (foto ou PDF)',
+      'Apagar comprovante', 'Entregue']) {
+      expect(find.byTooltip(escondido), findsNothing, reason: escondido);
+      expect(find.widgetWithText(FilledButton, escondido), findsNothing, reason: escondido);
+    }
+    // O que já existe continua à vista: o comprovante e a parcela recebida.
+    expect(find.byKey(const ValueKey('anexo-a1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('pagamento-g1')), findsOneWidget);
+    // Tocar no nome não abre mais a edição.
+    await tester.tap(find.byKey(const Key('nome-pedido')));
+    await tester.pumpAndSettle();
+    expect(find.text('Total do pedido'), findsNothing);
+
+    await tester.tap(find.byTooltip('Mais opções'));
+    await tester.pumpAndSettle();
+    expect(find.text('Excluir pedido'), findsNothing);
+    expect(find.text('Cancelar pedido'), findsNothing);
+    await tester.tap(find.text('Desbloquear venda'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Desbloquear'));
+    await tester.pumpAndSettle();
+    expect(amb.corpo('POST /api/pedidos/p1/bloqueio'), {'bloqueado': false});
+  });
+
+  testWidgets('bloquear pede confirmação e manda o pedido de bloqueio', (tester) async {
+    final amb = await abrir(tester, pedido());
+    await tester.tap(find.byTooltip('Mais opções'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bloquear venda'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('ninguém mais altera'), findsOneWidget);
+    await tester.tap(find.text('Bloquear'));
+    await tester.pumpAndSettle();
+    expect(amb.corpo('POST /api/pedidos/p1/bloqueio'), {'bloqueado': true});
   });
 }
