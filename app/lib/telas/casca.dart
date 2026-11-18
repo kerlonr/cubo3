@@ -95,28 +95,15 @@ class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
 
   late final AnimationController _troca;
 
-  /// Folha de ações aberta: o "+" vira "×" enquanto ela está na tela.
+  /// Bolhas do "+" à mostra.
   bool _acoesAbertas = false;
 
-  Future<void> _acoes() async {
-    setState(() => _acoesAbertas = true);
-    await abrirAcoesRapidas(context);
-    if (mounted) setState(() => _acoesAbertas = false);
-  }
+  void _alternarAcoes() => setState(() => _acoesAbertas = !_acoesAbertas);
 
-  /// "+" global. Gira 45° ao abrir a folha, o mesmo gesto do Material 3 para "fechar".
-  Widget _botaoNovo({double elevation = 6}) => FloatingActionButton(
-        heroTag: 'novo',
-        elevation: elevation,
-        tooltip: 'Novo',
-        onPressed: _acoes,
-        child: AnimatedRotation(
-          turns: _acoesAbertas ? 0.125 : 0,
-          duration: duracaoAnimacao(context, 220),
-          curve: Curves.easeOutBack,
-          child: const Icon(Icons.add),
-        ),
-      );
+  Future<void> _escolher(String acao) async {
+    setState(() => _acoesAbertas = false);
+    await abrirTela(context, telaDaAcao(acao));
+  }
 
   void _irParaPedida() {
     final i = abaPedida.value;
@@ -146,7 +133,7 @@ class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final corpo = Column(children: [
+    final conteudo = Column(children: [
       const FaixaAtualizacao(),
       Expanded(
         child: FadeTransition(
@@ -159,6 +146,24 @@ class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
         ),
       ),
     ]);
+    // Véu sob as bolhas: escurece o que está atrás e fecha ao tocar fora.
+    final corpo = Stack(children: [
+      conteudo,
+      Positioned.fill(
+        child: IgnorePointer(
+          ignoring: !_acoesAbertas,
+          child: AnimatedOpacity(
+            opacity: _acoesAbertas ? 1 : 0,
+            duration: duracaoAnimacao(context, 180),
+            child: GestureDetector(
+              key: const Key('veu'),
+              onTap: _alternarAcoes,
+              child: ColoredBox(color: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.45)),
+            ),
+          ),
+        ),
+      ),
+    ]);
     if (ClasseLargura.de(context) != ClasseLargura.compacto) {
       return Scaffold(
         body: Row(children: [
@@ -166,7 +171,24 @@ class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
             selectedIndex: aba,
             onDestinationSelected: irPara,
             labelType: NavigationRailLabelType.all,
-            leading: Padding(padding: const EdgeInsets.only(bottom: 16), child: _botaoNovo(elevation: 0)),
+            leading: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              // No trilho não há espaço para as bolhas: aqui as ações saem num menu ao lado.
+              child: MenuAnchor(
+                menuChildren: [
+                  for (final (icone, rotulo) in acoesRapidas)
+                    MenuItemButton(
+                        leadingIcon: Icon(icone), onPressed: () => _escolher(rotulo), child: Text(rotulo)),
+                ],
+                builder: (_, menu, _) => FloatingActionButton(
+                  heroTag: 'novo',
+                  elevation: 0,
+                  tooltip: 'Novo',
+                  onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+                  child: const Icon(Icons.add),
+                ),
+              ),
+            ),
             trailing: Expanded(
               child: Align(
                 alignment: Alignment.bottomCenter,
@@ -190,7 +212,9 @@ class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
     return Scaffold(
       body: corpo,
       // Na aba Impressora o "+" cobriria o envio do console e os controles; lá o "+" fica no topo.
-      floatingActionButton: aba == 1 ? null : _botaoNovo(),
+      floatingActionButton: aba == 1
+          ? null
+          : BotaoAcoes(aberto: _acoesAbertas, aoAlternar: _alternarAcoes, aoEscolher: _escolher),
       bottomNavigationBar: NavigationBar(
         selectedIndex: aba,
         onDestinationSelected: irPara,
@@ -223,7 +247,8 @@ const acoesRapidas = <(IconData, String)>[
   (Icons.category_outlined, 'Novo modelo'),
 ];
 
-Widget _telaDaAcao(String acao) => switch (acao) {
+/// Tela de cada ação do "+".
+Widget telaDaAcao(String acao) => switch (acao) {
       'Venda rápida' => const VendaRapidaTela(),
       'Novo pedido' => const VendaRapidaTela(orcamento: true),
       'Orçar peça' => const OrcarTela(),
@@ -232,60 +257,105 @@ Widget _telaDaAcao(String acao) => switch (acao) {
       _ => const ModeloForm(),
     };
 
-/// Botão "+": grade de ações, perto do polegar, em vez de procurar a tela certa.
-Future<void> abrirAcoesRapidas(BuildContext context) => showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      builder: (c) {
-        final t = Theme.of(c);
-        Future<void> abrir(String acao) {
-          Navigator.pop(c);
-          return abrirTela(context, _telaDaAcao(acao));
-        }
+/// "+" que abre as ações em bolhas logo acima dele: a tela de baixo continua à vista e um
+/// toque fora fecha. As bolhas sobem escalonadas, a primeira ação mais perto do polegar.
+class BotaoAcoes extends StatefulWidget {
+  const BotaoAcoes({super.key, required this.aberto, required this.aoAlternar, required this.aoEscolher});
+  final bool aberto;
+  final VoidCallback aoAlternar;
+  final void Function(String acao) aoEscolher;
 
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-            child: LayoutBuilder(builder: (_, caixa) {
-              // 3 colunas já num celular de 360 dp: as 6 ações cabem em duas linhas, sem rolar.
-              final colunas = (caixa.maxWidth / 104).floor().clamp(2, 6);
-              return Wrap(
-                alignment: WrapAlignment.center,
-                children: [
-                  for (final (i, (icone, rotulo)) in acoesRapidas.indexed)
-                    SizedBox(
-                      width: caixa.maxWidth / colunas,
-                      child: Entrada(
-                        ordem: i,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () => abrir(rotulo),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-                            child: Column(children: [
-                              CircleAvatar(
-                                radius: 26,
-                                backgroundColor: t.colorScheme.primaryContainer,
-                                foregroundColor: t.colorScheme.onPrimaryContainer,
-                                child: Icon(icone),
-                              ),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                height: 32,
-                                child: Text(rotulo,
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    style: const TextStyle(fontSize: 12, height: 1.2)),
-                              ),
-                            ]),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            }),
-          ),
-        );
-      },
+  @override
+  State<BotaoAcoes> createState() => _BotaoAcoesState();
+}
+
+class _BotaoAcoesState extends State<BotaoAcoes> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 260));
+
+  @override
+  void didUpdateWidget(BotaoAcoes velho) {
+    super.didUpdateWidget(velho);
+    if (widget.aberto == velho.aberto) return;
+    if (MediaQuery.maybeDisableAnimationsOf(context) == true) {
+      _c.value = widget.aberto ? 1 : 0;
+    } else if (widget.aberto) {
+      _c.forward();
+    } else {
+      _c.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  /// Bolha [i] (0 = a mais próxima do "+"): etiqueta à esquerda e botão pequeno à direita.
+  Widget _bolha(int i, IconData icone, String rotulo) {
+    final t = Theme.of(context);
+    final inicio = i / (acoesRapidas.length * 1.6);
+    final anima = CurvedAnimation(
+        parent: _c, curve: Interval(inicio, 1, curve: Curves.easeOutBack), reverseCurve: const Interval(0, 1));
+    return FadeTransition(
+      opacity: _c,
+      child: ScaleTransition(
+        scale: anima,
+        alignment: Alignment.centerRight,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Card(
+              elevation: 2,
+              margin: EdgeInsets.zero,
+              color: t.colorScheme.surfaceContainerHigh,
+              // A etiqueta também abre: alvo maior que a bolha sozinha.
+              child: InkWell(
+                onTap: () => widget.aoEscolher(rotulo),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  child: Text(rotulo, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FloatingActionButton.small(
+              heroTag: null,
+              tooltip: rotulo,
+              backgroundColor: t.colorScheme.primaryContainer,
+              foregroundColor: t.colorScheme.onPrimaryContainer,
+              onPressed: () => widget.aoEscolher(rotulo),
+              child: Icon(icone),
+            ),
+          ]),
+        ),
+      ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+      AnimatedBuilder(
+        animation: _c,
+        builder: (_, _) => _c.isDismissed
+            ? const SizedBox.shrink()
+            : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                for (final (i, (icone, rotulo)) in acoesRapidas.indexed.toList().reversed)
+                  _bolha(i, icone, rotulo),
+              ]),
+      ),
+      FloatingActionButton(
+        heroTag: 'novo',
+        tooltip: widget.aberto ? 'Fechar' : 'Novo',
+        onPressed: widget.aoAlternar,
+        child: AnimatedRotation(
+          turns: widget.aberto ? 0.125 : 0,
+          duration: duracaoAnimacao(context, 220),
+          curve: Curves.easeOutBack,
+          child: const Icon(Icons.add),
+        ),
+      ),
+    ]);
+  }
+}

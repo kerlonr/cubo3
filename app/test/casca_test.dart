@@ -62,7 +62,7 @@ void main() {
     ]);
   });
 
-  testWidgets('"+" junta as ações do dia a dia, gira ao abrir e leva para a tela certa', (tester) async {
+  testWidgets('"+" abre as ações em bolhas ao lado, com véu que fecha ao tocar fora', (tester) async {
     final amb = Ambiente({});
     await amb.preparar();
     await tamanhoTela(tester, 400, 1200);
@@ -73,15 +73,27 @@ void main() {
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
     for (final (_, acao) in acoesRapidas) {
-      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text(acao)), findsOneWidget, reason: acao);
+      expect(find.text(acao), findsOneWidget, reason: acao);
     }
-    expect(giro(), 0.125, reason: '"+" vira "×" enquanto a folha está aberta');
+    expect(find.byType(BottomSheet), findsNothing, reason: 'as ações saem em bolhas do próprio botão');
+    expect(giro(), 0.125, reason: '"+" vira "×" enquanto as bolhas estão abertas');
+    final veu = find.byKey(const Key('veu'));
+    expect(tester.widget<AnimatedOpacity>(find.ancestor(of: veu, matching: find.byType(AnimatedOpacity))).opacity, 1);
+
+    // Tocar fora fecha sem abrir nada.
+    await tester.tapAt(const Offset(200, 200));
+    await tester.pumpAndSettle();
+    expect(find.text('Venda rápida'), findsNothing);
+    expect(giro(), 0);
+    await tester.tap(find.byType(FloatingActionButton).first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Venda rápida'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Venda rápida'), findsOneWidget);
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    expect(giro(), 0, reason: 'folha fechada, o botão volta ao "+"');
+    expect(giro(), 0, reason: 'escolhida a ação, o botão volta ao "+"');
+    expect(find.text('Novo pedido'), findsNothing, reason: 'as bolhas somem depois de escolher');
   });
 
   testWidgets('aba Impressora mostra a impressora e só liga a câmera quando está na frente', (tester) async {
