@@ -25,7 +25,7 @@ class _CatalogoAbaState extends State<CatalogoAba> {
   String _ordem = 'mais_vendidos';
   int _periodo = 0;
   String _busca = '';
-  String? _filtro; // categoria ou "#tag"
+  String? _filtro; // categoria
   int _versao = 0;
   Timer? _espera;
 
@@ -102,20 +102,8 @@ class _CatalogoAbaState extends State<CatalogoAba> {
   }
 
   Widget _grade(List<Json> modelos) {
-    final filtros = <String>{
-      for (final m in modelos)
-        if ((m['categoria'] as String? ?? '').isNotEmpty) m['categoria'] as String,
-      for (final m in modelos)
-        for (final t in (m['tags'] as List? ?? const [])) '#$t',
-    }.toList()
-      ..sort();
-    final visiveis = [
-      for (final m in modelos)
-        if (_filtro == null ||
-            m['categoria'] == _filtro ||
-            (m['tags'] as List? ?? const []).map((t) => '#$t').contains(_filtro))
-          m
-    ];
+    final filtros = categoriasDe(modelos);
+    final visiveis = [for (final m in modelos) if (_filtro == null || m['categoria'] == _filtro) m];
     return LayoutBuilder(builder: (context, c) {
       final colunas = (c.maxWidth / 220).floor().clamp(2, 6);
       return CustomScrollView(slivers: [
@@ -125,13 +113,13 @@ class _CatalogoAbaState extends State<CatalogoAba> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Row(children: [
-                for (final f in filtros)
+                for (final f in [null, ...filtros])
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: Text(f),
+                    child: ChoiceChip(
+                      label: Text(f ?? 'Todos'),
                       selected: _filtro == f,
-                      onSelected: (s) => setState(() => _filtro = s ? f : null),
+                      onSelected: (_) => setState(() => _filtro = f),
                     ),
                   ),
               ]),
@@ -143,7 +131,7 @@ class _CatalogoAbaState extends State<CatalogoAba> {
             crossAxisCount: colunas,
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: 0.72,
+            childAspectRatio: 0.75,
             children: [for (final (i, m) in visiveis.indexed) Entrada(key: ValueKey(m['id']), ordem: i, child: _cartao(m))],
           ),
         ),
@@ -167,34 +155,28 @@ class _CatalogoAbaState extends State<CatalogoAba> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(m['nome'] as String, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
-              if (r.gramas > 0 || r.horas > 0)
-                Text(
-                    [
-                      if (r.gramas > 0) gramas(r.gramas),
-                      if (r.horas > 0) duracao(r.horas * 3600),
-                      if (r.pecas > 1) '${r.pecas} peças',
-                      if (r.insumos > 0) '+${r.insumos} ins.',
-                    ].join(' · '),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: fraco),
-              Text(preco == null ? 'Sem preço' : moeda(preco), style: const TextStyle(fontFeatures: tabular)),
-              // Wrap: em cartão estreito o "vendidos" desce inteiro em vez de partir o valor do lucro.
-              Wrap(spacing: 8, children: [
+              // Wrap: em cartão estreito o lucro desce inteiro em vez de cortar o preço.
+              Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Text(preco == null ? 'Sem preço' : moeda(preco),
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),
                 if (receitaIncompleta(mapa(m['receita'])))
                   const Selo('falta receita', cor: amarelo)
                 else if (lucro != null)
-                  Text('lucro ${moeda(lucro)}${preco != null && preco > 0 ? ' (${numero(lucro / preco * 100)}%)' : ''}',
-                      style: TextStyle(fontSize: 12, color: corResultado(lucro), fontFeatures: tabular)),
-                Tooltip(
-                  message: 'Vendidos',
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.shopping_bag_outlined, size: 12),
-                    const SizedBox(width: 2),
-                    Text(numero(num0(m['vendidos'])), style: const TextStyle(fontSize: 12, fontFeatures: tabular)),
-                  ]),
-                ),
+                  Tooltip(
+                    message: 'Lucro por unidade',
+                    child: Text('${lucro >= 0 ? '+' : ''}${moeda(lucro)}',
+                        style: TextStyle(fontSize: 12, color: corResultado(lucro), fontFeatures: tabular)),
+                  ),
               ]),
+              Text(
+                  [
+                    if (r.gramas > 0) gramas(r.gramas),
+                    if (r.horas > 0) duracao(r.horas * 3600),
+                    '${numero(num0(m['vendidos']))} vend.',
+                  ].join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: fraco),
             ]),
           ),
         ]),
@@ -208,3 +190,7 @@ bool receitaIncompleta(Map receita) {
   final pecas = lista(receita['filamentos']);
   return pecas.isEmpty || pecas.any((f) => num0(f['gramas']) <= 0) || num0(receita['horas']) == 0;
 }
+
+/// Categorias em uso, sem repetir e em ordem alfabética (filtro do catálogo e sugestões do formulário).
+List<String> categoriasDe(List modelos) =>
+    {for (final m in modelos) if ('${m['categoria'] ?? ''}'.trim().isNotEmpty) '${m['categoria']}'.trim()}.toList()..sort();

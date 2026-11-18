@@ -145,4 +145,55 @@ void main() {
     expect(find.text('falta receita'), findsOneWidget);
     expect(find.text('lucro R\$ 10,00'), findsNothing);
   });
+
+  testWidgets('filtro só por categoria: "Todos" volta a lista inteira e tags não viram filtro', (tester) async {
+    Map<String, Object?> m(String id, String nome, String? cat) =>
+        {'id': id, 'nome': nome, 'preco_venda': 10, 'capa_url': null, 'categoria': cat, 'tags': ['velha']};
+    final amb = Ambiente({
+      'GET /api/modelos': (_) => [m('a', 'Fidget', 'Chaveiro'), m('b', 'Porta Pilha', 'Case'), m('c', 'Placa', 'Chaveiro')],
+    });
+    await amb.preparar();
+    await tamanhoTela(tester, 500, 1400);
+    await tester.pumpWidget(amb.tela(const CatalogoAba()));
+    await tester.pumpAndSettle();
+    expect(find.text('#velha'), findsNothing);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Chaveiro'));
+    await tester.pumpAndSettle();
+    expect(find.text('Porta Pilha'), findsNothing);
+    expect(find.text('Placa'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Todos'));
+    await tester.pumpAndSettle();
+    expect(find.text('Porta Pilha'), findsOneWidget);
+  });
+
+  testWidgets('formulário sugere as categorias já usadas e mantém as tags antigas ao salvar', (tester) async {
+    final amb = ambienteModelo()
+      ..rotas['GET /api/modelos'] = (_) => [
+            {'id': 'x', 'nome': 'A', 'categoria': 'Chaveiro'},
+            {'id': 'y', 'nome': 'B', 'categoria': ' Case '},
+          ];
+    await amb.preparar();
+    await tamanhoTela(tester, 500, 2000);
+    await tester.pumpWidget(amb.tela(const ModeloForm(dados: {
+      'id': 'm1',
+      'nome': 'Fidget',
+      'tags': ['antiga'],
+      'receita': {
+        'filamentos': [
+          {'filamento_id': 'f1', 'gramas': 33}
+        ],
+        'horas': 3
+      }
+    })));
+    await tester.pumpAndSettle();
+    expect(find.text('Tags'), findsNothing);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Chaveiro'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    final corpo = amb.corpo('PUT /api/modelos/m1');
+    expect(corpo['categoria'], 'Chaveiro');
+    expect(corpo['tags'], ['antiga']);
+    expect(categoriasDe([{'categoria': 'Case'}, {'categoria': ' Case '}, {'categoria': ''}, {}]), ['Case']);
+  });
 }

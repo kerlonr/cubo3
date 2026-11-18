@@ -10,6 +10,7 @@ import '../../widgets/campos.dart';
 import '../../widgets/estado_tela.dart';
 import '../../widgets/seletores.dart';
 import '../orcar/importar.dart';
+import 'catalogo_aba.dart' show categoriasDe;
 import 'insumos_receita.dart';
 
 /// Cadastros que o custo ao vivo precisa (cacheados para funcionar sem internet).
@@ -123,7 +124,6 @@ class _ModeloFormState extends State<ModeloForm> {
   late final _preco = ctrlDinheiro(numOu(d['preco_venda']));
   late final _descricao = TextEditingController(text: d['descricao'] as String?);
   late final _categoria = TextEditingController(text: d['categoria'] as String?);
-  late final _tags = TextEditingController(text: (d['tags'] as List? ?? const []).join(', '));
   late final _links = TextEditingController(
       text: [for (final l in lista(d['links'])) (l['titulo'] ?? '') == '' ? l['url'] : '${l['titulo']} | ${l['url']}']
           .join('\n'));
@@ -172,7 +172,8 @@ class _ModeloFormState extends State<ModeloForm> {
       'preco_venda': lerNumero(_preco.text),
       'descricao': _descricao.text.trim().isEmpty ? null : _descricao.text.trim(),
       'categoria': _categoria.text.trim().isEmpty ? null : _categoria.text.trim(),
-      'tags': [for (final t in _tags.text.split(',')) if (t.trim().isNotEmpty) t.trim()],
+      // Tags saíram da tela (a categoria já classifica); as antigas continuam salvas.
+      'tags': d['tags'] ?? const [],
       'links': links,
       'receita': r,
       'impressora_id': _impressora,
@@ -202,7 +203,7 @@ class _ModeloFormState extends State<ModeloForm> {
       appBar: AppBar(title: Text(widget.dados?['id'] == null ? 'Novo modelo' : 'Editar modelo')),
       bottomNavigationBar: BotaoSalvarRodape(aoTocar: _salvar),
       body: EstadoTela<Map>(
-        carregar: () => buscarVarios(context, caminhosCusto),
+        carregar: () => buscarVarios(context, {...caminhosCusto, 'modelos': '/api/modelos'}),
         construir: (context, cad) {
           final filamentos = lista(cad['filamentos']);
           final impressoras = lista(cad['impressoras']);
@@ -225,6 +226,7 @@ class _ModeloFormState extends State<ModeloForm> {
           final gramasTotal = _pecas.fold(0.0, (s, p) => s + p.gramasValor);
           return CorpoFormulario(chave: _form, children: [
             CampoTexto(_nome, 'Nome', key: const Key('nome'), obrigatorio: true, dica: 'Fidget switch chaveiro...'),
+            _campoCategoria(categoriasDe(lista(cad['modelos']))),
             const Secao('Peças impressas'),
             Wrap(spacing: 8, runSpacing: 8, children: [
               Tooltip(
@@ -331,14 +333,28 @@ class _ModeloFormState extends State<ModeloForm> {
             ]),
             MaisDetalhes(children: [
               CampoTexto(_descricao, 'Descrição', linhas: 3),
-              CampoTexto(_categoria, 'Categoria', dica: 'Chaveiros, Fidget...'),
-              CampoTexto(_tags, 'Tags', dica: 'chaveiro, fidget (vírgula entre tags)'),
               CampoTexto(_links, 'Links', dica: 'título | endereço (um por linha)', linhas: 3, teclado: TextInputType.multiline),
             ]),
           ]);
         },
       ),
     );
+  }
+
+  /// Categoria com as já usadas para tocar: evita "Chaveiro" e "Chaveiros" virarem dois filtros.
+  Widget _campoCategoria(List<String> usadas) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      CampoTexto(_categoria, 'Categoria', key: const Key('categoria'), dica: 'Chaveiro, Case, Natal...', aoMudar: _mudou),
+      if (usadas.isNotEmpty)
+        Wrap(spacing: 8, children: [
+          for (final c in usadas)
+            ChoiceChip(
+              label: Text(c),
+              selected: _categoria.text.trim() == c,
+              onSelected: (s) => setState(() => _categoria.text = s ? c : ''),
+            ),
+        ]),
+    ]);
   }
 
   Widget _peca(int i, List filamentos, List<Json> klipper) {
