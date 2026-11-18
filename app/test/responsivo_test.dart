@@ -227,6 +227,7 @@ Ambiente cheio() => Ambiente({
 /// Abas abrem dentro da casca (com a navegação); o resto, sozinho.
 const abas = {
   'inicio': 0,
+  'acoes_rapidas': 0,
   'inicio_vazio': 0,
   'impressora': 1,
   'impressora_controle': 1,
@@ -301,6 +302,10 @@ void main() {
             await tester.pumpWidget(amb.app());
             await tester.pumpAndSettle();
             tester.state<CascaState>(find.byType(Casca)).irPara(abas[nome]!);
+            if (nome == 'acoes_rapidas') {
+              await tester.pumpAndSettle();
+              await tester.tap(find.byType(FloatingActionButton));
+            }
             if (nome.startsWith('impressora_')) {
               await tester.pumpAndSettle();
               final rotulo = {'controle': 'Controle', 'arquivos': 'Arquivos', 'macros': 'Macros', 'console': 'Console'};

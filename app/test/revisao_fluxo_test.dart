@@ -41,7 +41,9 @@ void main() {
 
     await tester.tap(find.text('Vendas'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Venda rápida'));
+    await tester.tap(find.byType(FloatingActionButton)); // "+" global: a venda rápida mora nele
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Venda rápida'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('modelo0')));
     await tester.pumpAndSettle();

@@ -10,12 +10,16 @@ import '../api/fila.dart';
 import '../atualizacao.dart';
 import '../widgets/adaptativo.dart';
 
+import '../widgets/animacoes.dart';
+
 import 'catalogo/catalogo_aba.dart';
 import 'catalogo/modelo_form.dart';
+import 'estoque/carretel_form.dart';
 import 'impressoes/confirmar_tela.dart';
 import 'impressora/impressora_aba.dart';
 import 'inicio/inicio_aba.dart';
 import 'orcar/orcar_tela.dart';
+import 'mais/financeiro_tela.dart';
 import 'mais/mais_tela.dart';
 import 'vendas/venda_rapida_tela.dart';
 import 'vendas/vendas_aba.dart';
@@ -91,6 +95,29 @@ class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
 
   late final AnimationController _troca;
 
+  /// Folha de ações aberta: o "+" vira "×" enquanto ela está na tela.
+  bool _acoesAbertas = false;
+
+  Future<void> _acoes() async {
+    setState(() => _acoesAbertas = true);
+    await abrirAcoesRapidas(context);
+    if (mounted) setState(() => _acoesAbertas = false);
+  }
+
+  /// "+" global. Gira 45° ao abrir a folha, o mesmo gesto do Material 3 para "fechar".
+  Widget _botaoNovo({double elevation = 6}) => FloatingActionButton(
+        heroTag: 'novo',
+        elevation: elevation,
+        tooltip: 'Novo',
+        onPressed: _acoes,
+        child: AnimatedRotation(
+          turns: _acoesAbertas ? 0.125 : 0,
+          duration: duracaoAnimacao(context, 220),
+          curve: Curves.easeOutBack,
+          child: const Icon(Icons.add),
+        ),
+      );
+
   void _irParaPedida() {
     final i = abaPedida.value;
     if (i == null || !mounted) return;
@@ -139,16 +166,7 @@ class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
             selectedIndex: aba,
             onDestinationSelected: irPara,
             labelType: NavigationRailLabelType.all,
-            leading: Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: FloatingActionButton(
-                heroTag: 'mais-acoes',
-                elevation: 0,
-                tooltip: 'Novo',
-                onPressed: () => abrirAcoesRapidas(context),
-                child: const Icon(Icons.add),
-              ),
-            ),
+            leading: Padding(padding: const EdgeInsets.only(bottom: 16), child: _botaoNovo(elevation: 0)),
             trailing: Expanded(
               child: Align(
                 alignment: Alignment.bottomCenter,
@@ -172,13 +190,7 @@ class CascaState extends State<Casca> with SingleTickerProviderStateMixin {
     return Scaffold(
       body: corpo,
       // Na aba Impressora o "+" cobriria o envio do console e os controles; lá o "+" fica no topo.
-      floatingActionButton: aba == 1
-          ? null
-          : FloatingActionButton(
-              tooltip: 'Novo',
-              onPressed: () => abrirAcoesRapidas(context),
-              child: const Icon(Icons.add),
-            ),
+      floatingActionButton: aba == 1 ? null : _botaoNovo(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: aba,
         onDestinationSelected: irPara,
@@ -200,31 +212,80 @@ Future<void> abrirTela(BuildContext context, Widget tela) async {
 void abrirMais(BuildContext context) =>
     Navigator.push(context, MaterialPageRoute(builder: (_) => const MaisTela()));
 
-/// Botão "+": Orçar peça, Novo pedido, Novo modelo.
+/// Tudo que se lança no dia a dia, a um toque do "+": vender, orçar, gastar, repor e cadastrar.
+/// A ordem é a de uso, da mais comum para a mais rara.
+const acoesRapidas = <(IconData, String)>[
+  (Icons.point_of_sale_outlined, 'Venda rápida'),
+  (Icons.note_add_outlined, 'Novo pedido'),
+  (Icons.calculate_outlined, 'Orçar peça'),
+  (Icons.payments_outlined, 'Lançar gasto'),
+  (Icons.album_outlined, 'Comprar filamento'),
+  (Icons.category_outlined, 'Novo modelo'),
+];
+
+Widget _telaDaAcao(String acao) => switch (acao) {
+      'Venda rápida' => const VendaRapidaTela(),
+      'Novo pedido' => const VendaRapidaTela(orcamento: true),
+      'Orçar peça' => const OrcarTela(),
+      'Lançar gasto' => const DespesaForm(),
+      'Comprar filamento' => const CarretelForm(),
+      _ => const ModeloForm(),
+    };
+
+/// Botão "+": grade de ações, perto do polegar, em vez de procurar a tela certa.
 Future<void> abrirAcoesRapidas(BuildContext context) => showModalBottomSheet(
       context: context,
       showDragHandle: true,
       builder: (c) {
-        Future<void> abrir(Widget tela) {
+        final t = Theme.of(c);
+        Future<void> abrir(String acao) {
           Navigator.pop(c);
-          return abrirTela(context, tela);
+          return abrirTela(context, _telaDaAcao(acao));
         }
 
         return SafeArea(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            ListTile(
-                leading: const Icon(Icons.calculate_outlined),
-                title: const Text('Orçar peça'),
-                onTap: () => abrir(const OrcarTela())),
-            ListTile(
-                leading: const Icon(Icons.note_add_outlined),
-                title: const Text('Novo pedido'),
-                onTap: () => abrir(const VendaRapidaTela(orcamento: true))),
-            ListTile(
-                leading: const Icon(Icons.category_outlined),
-                title: const Text('Novo modelo'),
-                onTap: () => abrir(const ModeloForm())),
-          ]),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+            child: LayoutBuilder(builder: (_, caixa) {
+              // 3 colunas já num celular de 360 dp: as 6 ações cabem em duas linhas, sem rolar.
+              final colunas = (caixa.maxWidth / 104).floor().clamp(2, 6);
+              return Wrap(
+                alignment: WrapAlignment.center,
+                children: [
+                  for (final (i, (icone, rotulo)) in acoesRapidas.indexed)
+                    SizedBox(
+                      width: caixa.maxWidth / colunas,
+                      child: Entrada(
+                        ordem: i,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => abrir(rotulo),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+                            child: Column(children: [
+                              CircleAvatar(
+                                radius: 26,
+                                backgroundColor: t.colorScheme.primaryContainer,
+                                foregroundColor: t.colorScheme.onPrimaryContainer,
+                                child: Icon(icone),
+                              ),
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                height: 32,
+                                child: Text(rotulo,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    style: const TextStyle(fontSize: 12, height: 1.2)),
+                              ),
+                            ]),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            }),
+          ),
         );
       },
     );

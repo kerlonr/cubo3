@@ -62,9 +62,6 @@ class _VendasAbaState extends State<VendasAba> {
     return Scaffold(
       appBar: AppBar(title: const Text('Vendas'), actions: [
         IconButton(tooltip: 'Clientes', icon: const Icon(Icons.people_outline), onPressed: () => _abrir(const ClientesTela())),
-        IconButton(
-            tooltip: 'Novo pedido', icon: const Icon(Icons.note_add_outlined), onPressed: () => _abrir(const VendaRapidaTela(orcamento: true))),
-        IconButton(tooltip: 'Venda rápida', icon: const Icon(Icons.add), onPressed: () => _abrir(const VendaRapidaTela())),
       ]),
       body: Column(children: [
         SingleChildScrollView(

@@ -62,17 +62,26 @@ void main() {
     ]);
   });
 
-  testWidgets('"+" mostra Orçar peça, Novo pedido e Novo modelo', (tester) async {
+  testWidgets('"+" junta as ações do dia a dia, gira ao abrir e leva para a tela certa', (tester) async {
     final amb = Ambiente({});
     await amb.preparar();
-    await tamanhoTela(tester, 400);
+    await tamanhoTela(tester, 400, 1200);
     await tester.pumpWidget(amb.app());
     await tester.pumpAndSettle();
+    double giro() => tester.widget<AnimatedRotation>(find.byType(AnimatedRotation)).turns;
+    expect(giro(), 0);
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
-    for (final acao in ['Orçar peça', 'Novo pedido', 'Novo modelo']) {
-      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text(acao)), findsOneWidget);
+    for (final (_, acao) in acoesRapidas) {
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text(acao)), findsOneWidget, reason: acao);
     }
+    expect(giro(), 0.125, reason: '"+" vira "×" enquanto a folha está aberta');
+    await tester.tap(find.text('Venda rápida'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Venda rápida'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(giro(), 0, reason: 'folha fechada, o botão volta ao "+"');
   });
 
   testWidgets('aba Impressora mostra a impressora e só liga a câmera quando está na frente', (tester) async {
